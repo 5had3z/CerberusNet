@@ -31,5 +31,9 @@
 *.out
 *.app
 
+# Build
+/build/*
+
 # Misc
 *.code-workspace
+c_cpp_properties.json

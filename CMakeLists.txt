@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-project(stereo_image_processing LANGUAGES CXX)
+project(stereo_image_processing LANGUAGES CXX VERSION 0.01)
 
 # MANUALLY SET PATHS IF REQUIRED, example: "$ENV{HOME}/OpenCV-3.4.6"
 # set(OPENCV_ROOT "")
@@ -74,26 +74,31 @@ if (NOT ${VisionWorks_FOUND})
     MESSAGE(FATAL_ERROR "-- Unable to find VisionWorks. Make sure its been downloaded and compiled")
 endif()
 
-target_link_libraries(${PROJECT_NAME}
-        -lnppc -lnppicc -lnppig
-        ${VisionWorks_LIBRARIES}
-        ${OpenCV_LIBS})
+find_package(CUDAToolkit REQUIRED nppc nppicc nppig)
+if (NOT ${CUDAToolkit_FOUND})
+    MESSAGE(FATAL_ERROR "-- Unable to find CUDAToolkit. Make sure its been downloaded and compiled")
+endif()
 
-include_directories(${CUDA_INCLUDE_DIRS}
-                    ${OpenCV_INCLUDE_DIR} 
-                    ${TRT_INCLUDE_DIR}
-                    ${VisionWorks_INCLUDE_DIRS})
+# Add sub libs as subdir
+add_subdirectory(${PROJECT_SOURCE_DIR}/src/lib ${PROJECT_BINARY_DIR}/lib)
 
-link_directories(${OpenCV_LIBS_DIR} 
-                 ${CUDA_TOOLKIT_ROOT_DIR}/lib64)
+include_directories(
+  ${CUDA_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIR} 
+  ${TRT_INCLUDE_DIR}
+  ${VisionWorks_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src/lib
+)
 
-file(GLOB_RECURSE CXX_SRCS *.cpp *.hpp)
-file(GLOB CU_SRCS *.cu)
+link_directories (
+  ${OpenCV_LIBS_DIR} 
+  ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+)
 
-# Workaround to compile cuda as c++14, because the nvcc cuda compiler doesn't support c++17
-set(TMP_FLAGS ${CMAKE_CXX_FLAGS})
-set(CMAKE_CXX_FLAGS "-std=c++14 -Ofast -Wall -Wfatal-errors")
-# SET(CUDA_SEPARABLE_COMPILATION ON) #  Required when compiling CUDA Kernels with Dyncamic Parallelism
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=compute_${CUDA_COMPUTE} -code=sm_${CUDA_COMPUTE}") # -rdc=true
-CUDA_COMPILE(CU_OBJS ${CU_SRCS})
-set(CMAKE_CXX_FLAGS ${TMP_FLAGS})
+add_executable (${PROJECT_NAME} src/main.cpp)
+
+target_link_libraries (
+  ${PROJECT_NAME}
+  ${PROJECT_NAME}_lib 
+  ${OpenCV_LIBS}
+)
