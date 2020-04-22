@@ -22,6 +22,8 @@ int main(int argc, char** argv)
         auto time = std::chrono::system_clock::now();
         cap >> cap_frame;
         processor.ProcessFrame(cap_frame);
+
+        processor.DisplayFrame();
         
         std::this_thread::sleep_until(time + std::chrono::milliseconds(33));
     }
