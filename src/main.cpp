@@ -14,7 +14,7 @@ int main(int argc, char** argv)
 
     std::cout << "Opened frame!\n";
     cv::Mat cap_frame;
-    PROCESSOR_NVX processor(1920, 1080);
+    PROCESSOR_DISPARITY_FULL processor(1920, 1080);
     std::cout << "Built Processor!\n";
 
     while (cap.isOpened())
@@ -22,6 +22,10 @@ int main(int argc, char** argv)
         auto time = std::chrono::system_clock::now();
         cap >> cap_frame;
         processor.ProcessFrame(cap_frame);
+
+        std::cout << "time delay: "
+                    << std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::system_clock::now()-time).count()
+                    << "\n";
 
         processor.DisplayFrame();
         

@@ -7,15 +7,14 @@
 #include <NVX/nvx_opencv_interop.hpp>
 #include <iostream>
 
-#define VX_CHECK_STATUS(s)                                                                                             \
-  do                                                                                                                   \
-  {                                                                                                                    \
-    const auto status = (s);                                                                                           \
-    if(status != VX_SUCCESS)                                                                                           \
-    {                                                                                                                  \
-      std::cout << "NVX STATUS ERROR: " << __FILE__ << "\tline: " << __LINE__ << "\tERROR: " <<  status;                                                                               \
-    }                                                                                                                  \
-    assert(status == VX_SUCCESS);                                                                                      \
+#define VX_CHECK_STATUS(s)                                                                                  \
+  	do                                                                                                      \
+  	{                                                                                                       \
+    	const auto status = (s);                                                                            \
+    	if(status != VX_SUCCESS){                                                                          	\
+      	std::cout << "NVX STATUS ERROR: " << __FILE__ << "\tline: " << __LINE__ << "\tERROR: " <<  status;	\
+    	}                                                                                                   \
+    assert(status == VX_SUCCESS);                                                                           \
   } while(false)
 
 #define VX_CHECK_REFERENCE(s)  VX_CHECK_STATUS(vxGetStatus((vx_reference)(s)));
@@ -147,73 +146,71 @@ void PROCESSOR_NVX::DisplayFrame()
 }
 
 PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
-  PROCESSOR_NVX(width, height)
+	PROCESSOR_NVX(width, height)
 {
-  //  Disparity range to look for
-  constexpr vx_uint32 min_disparity = 0;
-  constexpr vx_uint32 max_disparity = 128;
-  constexpr vx_uint32 full_D = max_disparity - min_disparity;
+	//  Disparity range to look for
+	constexpr vx_uint32 min_disparity = 0;
+	constexpr vx_uint32 max_disparity = 256;
+	constexpr vx_uint32 full_D = max_disparity - min_disparity;
 
-  //  Sum Absolute Difference Window
-  constexpr vx_uint32 sad_win_size = 5;
+	//  Sum Absolute Difference Window
+	constexpr vx_uint32 sad_win_size = 3;
 
-  //  Hamming Cost Window
-  constexpr vx_uint32 hc_win_size = 1;
+	//  Hamming Cost Window
+	constexpr vx_uint32 hc_win_size = 1;
 
-  // Census Transform Window Size
-  constexpr vx_int32 ct_win_size = 5;
+	// Census Transform Window Size
+	constexpr vx_int32 ct_win_size = 0;
 
-  //  Divisors at each level
-  const int D_divisors[pyr_levels] = { 4, 2, 1 };
+	//  Divisors at each level
+	const int D_divisors[pyr_levels] = { 8, 4, 2 };
 
-  //  BT-cost clip value
-  constexpr vx_int32 bt_clip_value = 31;
+	//  BT-cost clip value
+	constexpr vx_int32 bt_clip_value = 31;
 
-  // discontinuity penalties
-  constexpr vx_int32 P1 = 8;
-  constexpr vx_int32 P2 = 109;
+	// discontinuity penalties
+	constexpr vx_int32 P1 = 8;
+	constexpr vx_int32 P2 = 109;
 
-  vx_enum scanlines_mask = 85;
-  constexpr vx_int32 uniqueness_ratio = 0;
-  constexpr vx_int32 max_diff = 320000;
+	vx_enum scanlines_mask = 85;
+	constexpr vx_int32 uniqueness_ratio = 0;
+	constexpr vx_int32 max_diff = 320000;
 
-  // Allocate full buffers
-  {
-      m_left_gray = vxCreateVirtualImage(m_graph, width, height, VX_DF_IMAGE_U8);
-      VX_CHECK_REFERENCE(m_left_gray);
+	// Allocate full buffers
+	{
+		m_disparity = vxCreateImage(m_context, width, height, VX_DF_IMAGE_U8);
+        VX_CHECK_REFERENCE(m_disparity);
 
-      m_right_gray = vxCreateVirtualImage(m_graph, width, height, VX_DF_IMAGE_U8);
-      VX_CHECK_REFERENCE(m_right_gray);
+		m_left_gray = vxCreateVirtualImage(m_graph, width, height, VX_DF_IMAGE_U8);
+		VX_CHECK_REFERENCE(m_left_gray);
 
-      full_convolved_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_U8);
-      VX_CHECK_REFERENCE(full_convolved_cost_);
+		m_right_gray = vxCreateVirtualImage(m_graph, width, height, VX_DF_IMAGE_U8);
+		VX_CHECK_REFERENCE(m_right_gray);
 
-      if (sad_win_size > 1)
-      {
-          full_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_U8);
-          VX_CHECK_REFERENCE(full_cost_);
-      }
+		full_convolved_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_U8);
+		VX_CHECK_REFERENCE(full_convolved_cost_);
 
-      full_aggregated_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_S16);
-      VX_CHECK_REFERENCE(full_aggregated_cost_);
+		if (sad_win_size > 1) {
+			full_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_U8);
+			VX_CHECK_REFERENCE(full_cost_);
+		}
 
-      for (int i = 0; i < pyr_levels; i++)
-      {
-          int divisor = 1 << i;
-          disparity_short_[i] = vxCreateVirtualImage(m_graph,
-                                                      width / divisor,
-                                                      height / divisor,
-                                                      VX_DF_IMAGE_S16);
-          VX_CHECK_REFERENCE(disparity_short_[i]);
-      }
-  }
+		full_aggregated_cost_ = vxCreateVirtualImage(m_graph, width * full_D / 4, height, VX_DF_IMAGE_S16);
+		VX_CHECK_REFERENCE(full_aggregated_cost_);
 
-  left_cvt_color_node_ = vxColorConvertNode(m_graph, m_rectified_left, m_left_gray);
-  VX_CHECK_REFERENCE(left_cvt_color_node_);
+		for (int i = 0; i < pyr_levels; i++)
+		{
+			int divisor = 1 << i;
+			disparity_short_[i] = vxCreateVirtualImage(m_graph, width / divisor, height / divisor, VX_DF_IMAGE_S16);
+			VX_CHECK_REFERENCE(disparity_short_[i]);
+		}
+	}
 
-  right_cvt_color_node_ = vxColorConvertNode(m_graph, m_rectified_right, m_right_gray);
-  VX_CHECK_REFERENCE(right_cvt_color_node_);
+	left_cvt_color_node_ = vxColorConvertNode(m_graph, m_rectified_left, m_left_gray);
+	VX_CHECK_REFERENCE(left_cvt_color_node_);
 
+	right_cvt_color_node_ = vxColorConvertNode(m_graph, m_rectified_right, m_right_gray);
+	VX_CHECK_REFERENCE(right_cvt_color_node_);
 
     for (int i = pyr_levels - 1; i >= 0; i--)
     {
@@ -223,7 +220,7 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
         int pyr_height = height / divisor;
         int D = full_D / D_divisors[i];
 
-        vx_image left_gray = vxCreateVirtualImage(m_graph, width, pyr_height, VX_DF_IMAGE_U8);
+        vx_image left_gray = vxCreateVirtualImage(m_graph, pyr_width, pyr_height, VX_DF_IMAGE_U8);
         VX_CHECK_REFERENCE(left_gray);
 
         vx_image right_gray = vxCreateVirtualImage(m_graph, pyr_width, pyr_height, VX_DF_IMAGE_U8);
@@ -237,8 +234,7 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
 
         // apply census transform, if requested
         vx_image left_census = NULL, right_census = NULL;
-        if (ct_win_size > 1)
-        {
+        if (ct_win_size > 1) {
             left_census =  vxCreateVirtualImage(m_graph, pyr_width, pyr_height, VX_DF_IMAGE_U32);
             VX_CHECK_REFERENCE(left_census);
             right_census = vxCreateVirtualImage(m_graph, pyr_width, pyr_height, VX_DF_IMAGE_U32);
@@ -254,23 +250,20 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
         convolved_cost_[i] = vxCreateImageFromROI(full_convolved_cost_, &cost_rect);
         VX_CHECK_REFERENCE(convolved_cost_[i]);
 
-        if (sad_win_size > 1)
-        {
+        if (sad_win_size > 1) {
             cost_[i] = vxCreateImageFromROI(full_cost_, &cost_rect);
             VX_CHECK_REFERENCE(cost_[i]);
 
             // census transformed images should be compared by hamming cost
             vx_node compute_cost_node = NULL;
-            if (ct_win_size > 1)
-            {
+            if (ct_win_size > 1) {
                 compute_cost_node = nvxComputeCostHammingNode
                     (m_graph, left_census, right_census,
                       cost_[i],
                       min_disparity / D_divisors[i], max_disparity / D_divisors[i],
                       hc_win_size);
             }
-            else
-            {
+            else {
                 compute_cost_node = nvxComputeModifiedCostBTNode
                     (m_graph, left_gray, right_gray,
                       cost_[i],
@@ -307,8 +300,7 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
             VX_CHECK_REFERENCE(compute_cost_node);
         }
 
-        if (i < pyr_levels - 1)
-        {
+        if (i < pyr_levels - 1) {
             vx_node cost_prior_node = nvxPSGMCostPriorNode
                 (m_graph, disparity_short_[i+1],
                   convolved_cost_[i],
@@ -333,8 +325,7 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
               uniqueness_ratio, max_diff);
         VX_CHECK_REFERENCE(compute_disparity_node);
 
-        if (i < pyr_levels - 1)
-        {
+        if (i < pyr_levels - 1) {
             vx_node disparity_merge_node = nvxPSGMDisparityMergeNode
                 (m_graph,
                   disparity_short_[i+1],
