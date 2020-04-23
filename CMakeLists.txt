@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 project(stereo_image_processing LANGUAGES CXX VERSION 0.01)
 
 # MANUALLY SET PATHS IF REQUIRED, example: "$ENV{HOME}/OpenCV-3.4.6"
@@ -68,15 +68,20 @@ else()
   MESSAGE(STATUS "Found TensorRT libs at ${TRT_LIBRARY}")
 endif()
 
-#   VisionWorks and NPP Management
+#   VisionWorks, VPI and NPP Management
 find_package(VisionWorks REQUIRED)
 if (NOT ${VisionWorks_FOUND})
-    MESSAGE(FATAL_ERROR "-- Unable to find VisionWorks. Make sure its been downloaded and compiled")
+    MESSAGE(FATAL_ERROR "-- Unable to find VisionWorks. Make sure its been downloaded via nVIDIA SDK Manager and compiled")
 endif()
 
 find_package(CUDAToolkit REQUIRED nppc nppicc nppig)
 if (NOT ${CUDAToolkit_FOUND})
-    MESSAGE(FATAL_ERROR "-- Unable to find CUDAToolkit. Make sure its been downloaded and compiled")
+    MESSAGE(FATAL_ERROR "-- Unable to find CUDAToolkit. Make sure you have CUDA installed")
+endif()
+
+find_package(vpi REQUIRED)
+if (NOT ${vpi_FOUND})
+    MESSAGE(FATAL_ERROR "-- Unable to find Vision Programming Interface (VPI). Make sure its been downloaded via nVIDIA SDK Manager")
 endif()
 
 # Add sub libs as subdir

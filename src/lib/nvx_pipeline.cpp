@@ -163,14 +163,14 @@ PROCESSOR_DISPARITY_FULL::PROCESSOR_DISPARITY_FULL(int width, int height) :
 	constexpr vx_int32 ct_win_size = 0;
 
 	//  Divisors at each level
-	const int D_divisors[pyr_levels] = { 8, 4, 2 };
+	const int D_divisors[pyr_levels] = { 4, 2, 2, 1 };
 
 	//  BT-cost clip value
 	constexpr vx_int32 bt_clip_value = 31;
 
 	// discontinuity penalties
-	constexpr vx_int32 P1 = 8;
-	constexpr vx_int32 P2 = 109;
+	constexpr vx_int32 P1 = 32;
+	constexpr vx_int32 P2 = 218;
 
 	vx_enum scanlines_mask = 85;
 	constexpr vx_int32 uniqueness_ratio = 0;

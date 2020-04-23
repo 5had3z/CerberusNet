@@ -29,7 +29,7 @@ public:
 class PROCESSOR_DISPARITY_FULL : public PROCESSOR_NVX
 {
 private:
-    static const int pyr_levels = 3;
+    static const int pyr_levels = 4;
     vx_node left_cvt_color_node_;
     vx_node right_cvt_color_node_;
 

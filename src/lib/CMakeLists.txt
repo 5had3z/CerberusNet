@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
 file(GLOB_RECURSE CXX_SRCS *.cpp *.hpp)
 file(GLOB CU_SRCS *.cu)
@@ -30,6 +30,7 @@ target_link_libraries( ${PROJECT_NAME}_lib
     cudart
     cudnn
     cublas
+    vpi
     ${OpenCV_LIBS}
     ${VisionWorks_LIBRARIES}
     ${TRT_LIBRARY_INFER}
