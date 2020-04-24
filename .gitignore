@@ -37,3 +37,4 @@
 # Misc
 *.code-workspace
 c_cpp_properties.json
+*.pyc

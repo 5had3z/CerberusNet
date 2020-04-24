@@ -16,4 +16,8 @@ This project utlizes many libraries that are included with Jetpack 4.4 which inc
  - CMake 3.8
 
 ### On the Python Side of Things:
-Yeah, I'll get to this when I start training stuff alright, probably the usual suspects anyway.
+The usual suspects for the most part:
+ - Pytorch 1.5
+ - Onnx 1.6.0
+ - Numpy 1.18.3
+ - Matplotlib
