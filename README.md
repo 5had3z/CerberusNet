@@ -21,3 +21,4 @@ The usual suspects for the most part:
  - Onnx 1.6.0
  - Numpy 1.18.3
  - Matplotlib
+ - cityscapesScripts

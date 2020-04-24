@@ -18,22 +18,28 @@ import matplotlib.pyplot as plt
 imgextension = '.png'
 
 class MonoDataset():
-    def __init__(self, directories, id_vector, transform=torchvision.transforms.ToTensor()):
+    def __init__(self, directories, id_vector=None, transform=torchvision.transforms.ToTensor()):
         images = []
         labels = []
 
         #Get all file names
-        for image in os.listdir(directories['images']):
-            if image.endswith(imgextension):
-                images.append(image)
+        for dirName, subdirList, fileList in os.walk(directories['images']):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    images.append(dirName + '/' + filename)
 
-        for label in os.listdir(directories['labels']):
-            if label.endswith(imgextension):
-                labels.append(label)
+        for dirName, subdirList, fileList in os.walk(directories['labels']):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    labels.append(dirName + '/' + filename)
         
         #Create dataset from specified ids
-        self.images = [images[i] for i in id_vector]
-        self.labels = [labels[i] for i in id_vector]
+        if id_vector is not None:
+            self.images = [images[i] for i in id_vector]
+            self.labels = [labels[i] for i in id_vector]
+        else:
+            self.images = images
+            self.labels = labels
 
         self.img_dir = directories['images']
         self.lbl_dir = directories['labels']
@@ -64,21 +70,25 @@ class StereoDataset():
         labels = []
 
         #Get all file names
-        for image in os.listdir(directories['left_images']):
-            if image.endswith(imgextension):
-                images.append([image])
+        for dirName, subdirList, fileList in os.walk(directories['left_images']):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    images.append([dirName + '/' + filename])
 
-        for idx, image in enumerate(os.listdir(directories['right_images'])):
-            if image.endswith(imgextension):
-                images[idx].append(image)
+        for idx, (dirName, subdirList, fileList) in enumerate(os.walk(directories['right_images'])):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    images[idx].append(dirName + '/' + filename)
+        
+        for dirName, subdirList, fileList in os.walk(directories['left_labels']):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    labels.append([dirName + '/' + filename])
 
-        for label in os.listdir(directories['left_labels']):
-            if label.endswith(imgextension):
-                labels.append([label])
-            
-        for idx, label in enumerate(os.listdir(directories['right_labels'])):
-            if label.endswith(imgextension):
-                labels[idx].append(label)
+        for idx, (dirName, subdirList, fileList) in enumerate(os.walk(directories['disparity'])):
+            for filename in fileList:
+                if filename.endswith(imgextension):
+                    labels[idx].append(dirName + '/' + filename)
         
         #Create dataset from specified ids
         if id_vector is not None:
@@ -133,3 +143,26 @@ def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
     test_ids  = image_ids[n_train+n_val:-1]
 
     return train_ids, val_ids, test_ids
+
+if __name__ == '__main__':
+    print("Testing Folder Traversal and Image Extraction!")
+
+    mono_training_data = {
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+    }
+
+    stereo_training_data = {
+        'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
+        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit_trainvaltest/rightImg8bit/train',
+        'left_labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train',
+        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+    }
+
+    test_mono = MonoDataset(mono_training_data)
+    test_stereo = StereoDataset(stereo_training_data)
+    
+    print(len(test_mono.images))
+    print(len(test_mono.labels))
+    print(len(test_stereo.images))
+    print(len(test_stereo.labels))
