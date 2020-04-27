@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+﻿#!/usr/bin/env python3
 
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
@@ -22,7 +22,11 @@ class ModelTrainer():
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self._device = torch.device("cuda")
+            torch.cuda.set_device(0)
+        else:
+            self._device = torch.device("cpu")
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
@@ -50,7 +54,7 @@ class ModelTrainer():
             Accuracy=[]
             )
         
-        self._save_dir = Path.cwd() / "Models"
+        self._save_dir = Path.cwd() / "torch_models"
         if not os.path.isdir(self._save_dir):
             os.makedirs(self._save_dir)
         
@@ -110,9 +114,10 @@ class ModelTrainer():
             epoch_start_time = time.time()
             self.epoch = epoch
             # Calculate the training loss, training duration for each epoch, and testing loss and accuracy
+            print("Epoch: ", epoch, "\nTraining Model")
             self._train_epoch()
+            print("Validating Model")
             self._validate_model()
-            self._test_model()
 
             epoch_end_time = time.time()
         
@@ -144,11 +149,11 @@ class ModelTrainer():
             
             outputs = self._model(data)
 
-            accuracy_pass = self._calculate_accuracy(outputs[0], target)
-            accuracy_data = accuracy_pass/(batch_idx+1) + accuracy_data*batch_idx/(batch_idx+1)
-
             loss = self._loss_function(outputs[0], target)
             loss_data = loss.item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
+
+            accuracy_pass = self._calculate_accuracy(outputs[0], target)
+            accuracy_data = accuracy_pass/(batch_idx+1) + accuracy_data*batch_idx/(batch_idx+1)
             
             loss.backward()
             self._optimizer.step()    
@@ -170,11 +175,10 @@ class ModelTrainer():
 
                 outputs = self._model(data)
                 
+                loss_data = self._loss_function(outputs[0], target).item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
+
                 accuracy_pass = self._calculate_accuracy(outputs[0], target)
                 accuracy_data = accuracy_pass/(batch_idx+1) + accuracy_data*batch_idx/(batch_idx+1)
-                
-                loss = self._loss_function(outputs[0], target)
-                loss_data = loss.item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
 
         self.validation_data["Loss"].append(loss_data)
         self.validation_data["Accuracy"].append(accuracy_data)
@@ -234,3 +238,9 @@ class ModelTrainer():
         """
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = new_learning_rate
+
+    def _calculate_accuracy(self, output, target):
+        """
+        To be implemented by child class depending on accuracy metric
+        """
+        raise NotImplementedError("This isn't implemented buddy")

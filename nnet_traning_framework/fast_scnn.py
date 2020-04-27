@@ -174,7 +174,7 @@ class GlobalFeatureExtractor(nn.Module):
     def _make_layer(self, block, inplanes, planes, blocks, t=6, stride=1):
         layers = []
         layers.append(block(inplanes, planes, t, stride))
-        for i in range(1, blocks):
+        for _ in range(1, blocks):
             layers.append(block(planes, planes, t, 1))
         return nn.Sequential(*layers)
 

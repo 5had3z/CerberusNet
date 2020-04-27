@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
@@ -23,14 +23,14 @@ class MonoDataset():
         labels = []
 
         #Get all file names
-        for dirName, subdirList, fileList in os.walk(directories['images']):
+        for dirName, _, fileList in os.walk(directories['images']):
             for filename in fileList:
                 if filename.endswith(imgextension):
                     images.append(dirName + '/' + filename)
 
-        for dirName, subdirList, fileList in os.walk(directories['labels']):
+        for dirName, _, fileList in os.walk(directories['labels']):
             for filename in fileList:
-                if filename.endswith(imgextension):
+                if filename.endswith('gtFine_labelIds' + imgextension):
                     labels.append(dirName + '/' + filename)
         
         #Create dataset from specified ids
@@ -53,14 +53,14 @@ class MonoDataset():
         Returns an Image and Label Pair
         '''
         #Read image and labels
-        image = Image.open(self.img_dir / self.images[idx])
-        mask = Image.open(self.lbl_dir / self.labels[idx])
+        image = Image.open(self.images[idx])
+        mask = Image.open(self.labels[idx])
 
         #   Apply Defined Transformations
         image = self.transform(image)
         mask = self.transform(mask)
 
-        mask = (mask*255).long().squeeze(0)
+        mask = (mask * 255).long().squeeze(0)
 
         return image, mask
 
@@ -70,22 +70,22 @@ class StereoDataset():
         labels = []
 
         #Get all file names
-        for dirName, subdirList, fileList in os.walk(directories['left_images']):
+        for dirName, _, fileList in os.walk(directories['left_images']):
             for filename in fileList:
                 if filename.endswith(imgextension):
                     images.append([dirName + '/' + filename])
 
-        for idx, (dirName, subdirList, fileList) in enumerate(os.walk(directories['right_images'])):
+        for idx, (dirName, _, fileList) in enumerate(os.walk(directories['right_images'])):
             for filename in fileList:
                 if filename.endswith(imgextension):
                     images[idx].append(dirName + '/' + filename)
         
-        for dirName, subdirList, fileList in os.walk(directories['left_labels']):
+        for dirName, _, fileList in os.walk(directories['left_labels']):
             for filename in fileList:
-                if filename.endswith(imgextension):
+                if filename.endswith('gtFine_labelIds' + imgextension):
                     labels.append([dirName + '/' + filename])
 
-        for idx, (dirName, subdirList, fileList) in enumerate(os.walk(directories['disparity'])):
+        for idx, (dirName, _, fileList) in enumerate(os.walk(directories['disparity'])):
             for filename in fileList:
                 if filename.endswith(imgextension):
                     labels[idx].append(dirName + '/' + filename)
@@ -148,8 +148,8 @@ if __name__ == '__main__':
     print("Testing Folder Traversal and Image Extraction!")
 
     mono_training_data = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/test',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/test'
     }
 
     stereo_training_data = {
@@ -166,3 +166,17 @@ if __name__ == '__main__':
     print(len(test_mono.labels))
     print(len(test_stereo.images))
     print(len(test_stereo.labels))
+
+    import multiprocessing
+    import matplotlib.pyplot as plt
+    from torch.utils.data import DataLoader
+
+    testLoader = DataLoader(test_mono, batch_size=2, shuffle=False, num_workers=multiprocessing.cpu_count())
+    image, mask = next(iter(testLoader))
+
+    for i in range(2):
+        plt.subplot(121)
+        plt.imshow(np.moveaxis(image[i,:,:,:].numpy(),0,2))
+        plt.subplot(122)
+        plt.imshow(mask[i,:,:])
+        plt.show()
