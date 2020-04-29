@@ -229,6 +229,8 @@ def Init_Training_MonoFSCNN():
 
     return modeltrainer
 
+from chat_test_model import TestModel
+
 if __name__ == "__main__":
     if platform.system() == 'Windows':
         n_workers = 0
@@ -236,18 +238,18 @@ if __name__ == "__main__":
         n_workers = multiprocessing.cpu_count()
 
     training_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     validation_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/val',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/val'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
     }
 
     testing_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/test',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/test'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/test'
     }
 
     datasets = dict(
@@ -263,10 +265,12 @@ if __name__ == "__main__":
     )
 
     filename = "Pretrained"
+    # fastModel = TestModel(19)
     fastModel = FastSCNN(19)
-    fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth'))
-    optimizer = torch.optim.SGD(fastModel.parameters(), 0.05)
-    lossfn = torch.nn.CrossEntropyLoss()
+    # fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth'))
+    optimizer = torch.optim.SGD(fastModel.parameters(), lr=0.05)
+    # lossfn = MixSoftmaxCrossEntropyOHEMLoss()
+    lossfn = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, savefile=filename, checkpoints=True)
     # modeltrainer.visualize_output()

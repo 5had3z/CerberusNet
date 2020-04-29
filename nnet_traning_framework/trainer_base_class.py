@@ -24,7 +24,7 @@ class ModelTrainer():
         '''
         if torch.cuda.is_available():
             self._device = torch.device("cuda")
-            torch.cuda.set_device(0)
+            # torch.cuda.set_device(0)
         else:
             self._device = torch.device("cpu")
 
@@ -138,28 +138,25 @@ class ModelTrainer():
         self._model.train()
 
         loss_data = 0.0
-        accuracy_data = 0.0
     
         for batch_idx, (data, target) in enumerate(self._training_loader):   
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            self._optimizer.zero_grad()
             data = data.to(self._device)
             target = target.to(self._device)
             
             outputs = self._model(data)
 
             loss = self._loss_function(outputs[0], target)
-            loss_data = loss.item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
 
-            accuracy_pass = self._calculate_accuracy(outputs[0], target)
-            accuracy_data = accuracy_pass/(batch_idx+1) + accuracy_data*batch_idx/(batch_idx+1)
-            
+            self._optimizer.zero_grad()
             loss.backward()
-            self._optimizer.step()    
+            self._optimizer.step()
+
+            loss_data = loss.item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
+            print("Training: ", batch_idx)
         
         self.training_data["Loss"].append(loss_data)
-        self.training_data["Accuracy"].append(accuracy_data)
 
     def _validate_model(self):
         with torch.no_grad():

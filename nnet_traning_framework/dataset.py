@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 imgextension = '.png'
 
-class MonoDataset():
+class MonoDataset(torch.utils.data.Dataset):
     def __init__(self, directories, id_vector=None, transform=torchvision.transforms.ToTensor()):
         images = []
         labels = []
@@ -45,26 +45,57 @@ class MonoDataset():
         self.lbl_dir = directories['labels']
         self.transform = transform
 
-    def __len__(self):
-        return len(self.images)
+        self.valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+                              23, 24, 25, 26, 27, 28, 31, 32, 33]
+        self._key = np.array([-1, -1, -1, -1, -1, -1,
+                              -1, -1, 0, 1, -1, -1,
+                              2, 3, 4, -1, -1, -1,
+                              5, -1, 6, 7, 8, 9,
+                              10, 11, 12, 13, 14, 15,
+                              -1, -1, 16, 17, 18])
+        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __getitem__(self, idx):
         '''
         Returns an Image and Label Pair
         '''
         #Read image and labels
-        image = Image.open(self.images[idx])
+        image = Image.open(self.images[idx]).convert('RGB')
         mask = Image.open(self.labels[idx])
 
+        image, mask = self._sync_transform(image, mask)
         #   Apply Defined Transformations
-        image = self.transform(image)
-        mask = self.transform(mask)
-
-        mask = (mask * 255).long().squeeze(0)
+        if self.transform is not None:
+            image = self.transform(image)
 
         return image, mask
 
-class StereoDataset():
+    def _sync_transform(self, img, mask):
+        # random mirror
+        if random.random() < 0.5:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
+
+        return self._img_transform(img), self._mask_transform(mask)
+
+    def _class_to_index(self, mask):
+        values = np.unique(mask)
+        for value in values:
+            assert (value in self._mapping)
+        index = np.digitize(mask.ravel(), self._mapping, right=True)
+        return self._key[index].reshape(mask.shape)
+
+    def _img_transform(self, img):
+        return np.array(img)
+
+    def _mask_transform(self, mask):
+        target = self._class_to_index(np.array(mask).astype('int32'))
+        return torch.LongTensor(np.array(target).astype('int32'))
+
+    def __len__(self):
+        return len(self.images)
+
+class StereoDataset(torch.utils.data.Dataset):
     def __init__(self, directories, id_vector=None, transform=torchvision.transforms.ToTensor()):
         images = []
         labels = []
@@ -148,15 +179,15 @@ if __name__ == '__main__':
     print("Testing Folder Traversal and Image Extraction!")
 
     mono_training_data = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/test',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/test'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     stereo_training_data = {
-        'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit_trainvaltest/rightImg8bit/train',
-        'left_labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+        'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
+        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
+        'left_labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
+        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
     }
 
     test_mono = MonoDataset(mono_training_data)
@@ -174,9 +205,19 @@ if __name__ == '__main__':
     testLoader = DataLoader(test_mono, batch_size=2, shuffle=False, num_workers=multiprocessing.cpu_count())
     image, mask = next(iter(testLoader))
 
+    image = image.numpy()
+    mask = mask.numpy()
+
     for i in range(2):
+        classes = {}
+        for j in range(mask.shape[1]):
+            for k in range(mask.shape[2]):
+                class_id = mask[i,j,k]
+                classes[class_id] = class_id
+
         plt.subplot(121)
-        plt.imshow(np.moveaxis(image[i,:,:,:].numpy(),0,2))
+        img_cpy = image[i,:,:,:]
+        plt.imshow(np.moveaxis(img_cpy,0,2))
         plt.subplot(122)
         plt.imshow(mask[i,:,:])
         plt.show()
