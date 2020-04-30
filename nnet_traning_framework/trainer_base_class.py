@@ -16,17 +16,15 @@ import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 
+from metrics import SegmentationMetric
+
 class ModelTrainer():
     def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        if torch.cuda.is_available():
-            self._device = torch.device("cuda")
-            # torch.cuda.set_device(0)
-        else:
-            self._device = torch.device("cpu")
+        self._device = torch.device( "cuda" if torch.cuda.is_available() else "cpu" )
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
@@ -40,6 +38,8 @@ class ModelTrainer():
         self.epoch = 0
         self.best_acc = 0.0
 
+        self._metric = SegmentationMetric(19)
+
         self._checkpoints = checkpoints
 
         self.training_data = dict(
@@ -48,9 +48,6 @@ class ModelTrainer():
             )
         self.validation_data = dict(
             Loss=[],
-            Accuracy=[]
-            )
-        self.testing_data = dict(
             Accuracy=[]
             )
         
@@ -84,9 +81,8 @@ class ModelTrainer():
             self.epoch = check_point['epoch']
             self.training_data = check_point['training_data']
             self.validation_data = check_point['validation_data']
-            self.testing_data = check_point['testing_data']
-            self.best_acc = max(self.testing_data["Accuracy"])
-            sys.stdout.write("\nCheckpoint loaded, starting from epoch:" + str(self.epoch))
+            self.best_acc = max(self.validation_data["Accuracy"])
+            sys.stdout.write("\nCheckpoint loaded, starting from epoch:" + str(self.epoch) + "\n")
         else:
             #Raise Error if it does not exist
             sys.stdout.write("\nCheckpoint Does Not Exist\nStarting From Scratch!")
@@ -101,50 +97,51 @@ class ModelTrainer():
             'model_state_dict':         self._model.state_dict(),
             'optimizer_state_dict':     self._optimizer.state_dict(), 
             'training_data':            self.training_data,
-            'validation_data':          self.validation_data,
-            'testing_data':             self.testing_data,
+            'validation_data':          self.validation_data
         }, self._path)
-        self.best_acc = max(self.testing_data["Accuracy"])
+        self.best_acc = max(self.validation_data["Accuracy"])
 
     def train_model(self, n_epochs):
         train_start_time = time.time()
 
-        for epoch in range(self.epoch, self.epoch + n_epochs):
-
+        max_epoch = self.epoch + n_epochs
+        while self.epoch < max_epoch:
+            self.epoch += 1
             epoch_start_time = time.time()
-            self.epoch = epoch
-            # Calculate the training loss, training duration for each epoch, and testing loss and accuracy
-            print("Epoch: ", epoch, "\nTraining Model")
-            self._train_epoch()
-            print("Validating Model")
-            self._validate_model()
+
+            # Calculate the training loss, training duration for each epoch, and validation accuracy
+            self._train_epoch(max_epoch)
+            self._validate_model(max_epoch)
 
             epoch_end_time = time.time()
         
-            if (self.best_acc < self.testing_data["Accuracy"][-1] or True) and self._checkpoints:
+            if (self.best_acc < self.validation_data["Accuracy"][-1] or True) and self._checkpoints:
                 self.save_checkpoint()
         
             sys.stdout.flush()
-            sys.stdout.write('\rEpoch: '+ str(epoch)+ ' Training Loss: '+ str(self.training_data["Loss"][-1])+
-                  ' Testing Accuracy:'+ str(self.testing_data["Accuracy"][-1])+ ' Time: '+
-                  str(epoch_end_time - epoch_start_time)+ 's')
-            
+            sys.stdout.write('\rEpoch: '+ str(self.epoch)+
+                    ' Training Loss: '+ str(self.training_data["Loss"][-1])+
+                    ' Testing Accuracy:'+ str(self.training_data["Accuracy"][-1])+
+                    ' Time: '+ str(epoch_end_time - epoch_start_time)+ 's')
     
         train_end_time = time.time()
 
         print('\nTotal Traning Time:\t', train_end_time - train_start_time)
 
-    def _train_epoch(self):
+    def _train_epoch(self, max_epoch):
         self._model.train()
 
-        loss_data = 0.0
-    
+        loss_epoch = 0.0
+
+        start_time = time.time()
+
         for batch_idx, (data, target) in enumerate(self._training_loader):   
-            # Computer loss, use the optimizer object to zero all of the gradients
-            # Then backpropagate and step the optimizer
+            # Put both image and target onto device
             data = data.to(self._device)
             target = target.to(self._device)
             
+            # Computer loss, use the optimizer object to zero all of the gradients
+            # Then backpropagate and step the optimizer
             outputs = self._model(data)
 
             loss = self._loss_function(outputs[0], target)
@@ -153,38 +150,61 @@ class ModelTrainer():
             loss.backward()
             self._optimizer.step()
 
-            loss_data = loss.item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
-            print("Training: ", batch_idx)
-        
-        self.training_data["Loss"].append(loss_data)
+            self._metric.add_sample(
+                torch.argmax(outputs[0],dim=1,keepdim=True).cpu().data.numpy(),
+                target.cpu().data.numpy()
+            )
 
-    def _validate_model(self):
+            loss_epoch = loss.item()/(batch_idx+1) + loss_epoch*batch_idx/(batch_idx+1)
+            if batch_idx % 10 == 0:
+                time_elapsed = time.time() - start_time
+                time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
+                print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %4.4f sec || Est Time Remain: %4.4f sec' % (
+                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                        self._learning_rate, loss.item(), time_elapsed, time_remain))
+        
+        _, accuracy = self._metric.get_statistics()
+        self.training_data["Loss"].append(loss_epoch)
+        self.training_data["Accuracy"].append(accuracy)
+
+    def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()
 
-            loss_data = 0.0
-            accuracy_data = 0.0
+            loss_epoch = 0.0
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):   
-                # Caculate the loss and accuracy for the predictions
+            start_time = time.time()
+
+            for batch_idx, (data, target) in enumerate(self._validation_loader):
+                # Put both image and target onto device
                 data = data.to(self._device)
                 target = target.to(self._device)
 
                 outputs = self._model(data)
                 
-                loss_data = self._loss_function(outputs[0], target).item()/(batch_idx+1) + loss_data*batch_idx/(batch_idx+1)
+                # Caculate the loss and accuracy for the predictions
+                loss = self._loss_function(outputs[0], target)
+                loss_epoch = loss.item()/(batch_idx+1) + loss_epoch*batch_idx/(batch_idx+1)
 
-                accuracy_pass = self._calculate_accuracy(outputs[0], target)
-                accuracy_data = accuracy_pass/(batch_idx+1) + accuracy_data*batch_idx/(batch_idx+1)
+                self._metric.add_sample(
+                    torch.argmax(outputs[0],dim=1,keepdim=True).cpu().data.numpy(),
+                    target.numpy()
+                )
 
-        self.validation_data["Loss"].append(loss_data)
-        self.validation_data["Accuracy"].append(accuracy_data)
+                if batch_idx % 10 == 0:
+                    time_elapsed = time.time() - start_time
+                    time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
+                    print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %4.4f sec || Est Time Remain: %4.4f sec' % (
+                            self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
+                            0.0, loss.item(), time_elapsed, time_remain))
+
+        _, accuracy = self._metric.get_statistics()
+        self.validation_data["Loss"].append(loss_epoch)
+        self.validation_data["Accuracy"].append(accuracy)
 
     def _test_model(self):
         with torch.no_grad():
             self._model.eval()
-
-            accuracy = 0.0
 
             for batch_idx, (data, target) in enumerate(self._testing_loader):   
                 # Caculate the loss and accuracy for the predictions
@@ -192,18 +212,13 @@ class ModelTrainer():
                 target = target.to(self._device)
 
                 outputs = self._model(data)
-            
-                accuracy_pass = self._calculate_accuracy(outputs[0], target)
-                accuracy = accuracy_pass/(batch_idx+1) + accuracy*batch_idx/(batch_idx+1)
-
-            self.testing_data["Accuracy"].append(accuracy)
 
     def plot_data(self):
         """
         This plots all the training statistics
         """
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._modelname + ' Training, Validation and Testing Results')
+        plt.suptitle(self._modelname + ' Training and Validation Results')
 
         plt.subplot(1,2,1)
         plt.plot(self.training_data["Loss"])
@@ -216,8 +231,7 @@ class ModelTrainer():
         plt.subplot(1,2,2)
         plt.plot(self.training_data["Accuracy"])
         plt.plot(self.validation_data["Accuracy"])
-        plt.plot(self.testing_data["Accuracy"])
-        plt.legend(["Training", "Validation", "Testing"])
+        plt.legend(["Training", "Validation"])
         plt.title('Accuracy over Epochs')
         plt.ylabel('% Accuracy')
         plt.xlabel('Epoch #')
@@ -236,8 +250,3 @@ class ModelTrainer():
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = new_learning_rate
 
-    def _calculate_accuracy(self, output, target):
-        """
-        To be implemented by child class depending on accuracy metric
-        """
-        raise NotImplementedError("This isn't implemented buddy")

@@ -31,38 +31,6 @@ class MonoSegmentationTrainer(ModelTrainer):
         '''
         super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
 
-    def _calculate_accuracy(self, fx, y):
-        preds = torch.argmax(fx,dim=1,keepdim=True).cpu().detach().long()
-        target = y.cpu().long()
-        return self._intersectionAndUnion(preds, target, 19)
-
-    def _intersectionAndUnion(self, prediction, target, numClass):
-        """
-        This function takes the prediction and label of a single image,
-        returns intersection and union areas for each class
-        To compute over many images do:
-        for i in range(Nimages):
-            (area_intersection[:,i], area_union[:,i]) = intersectionAndUnion(imPred[i], imLab[i])
-        IoU = 1.0 * np.sum(area_intersection, axis=1) / np.sum(np.spacing(1)+area_union, axis=1)
-        """
-        # Remove classes from unlabeled pixels in gt image.
-        # We should not penalize detections in unlabeled portions of the image.
-        prediction = prediction * (target > 0).type(prediction.dtype)
-
-        # Compute area intersection:
-        intersection = prediction * (prediction == target)
-        (area_intersection, _) = np.histogram(intersection, bins=numClass, range=(1, numClass))
-
-        # Compute area union:
-        (area_pred, _) = np.histogram(prediction, bins=numClass, range=(1, numClass))
-        (area_lab, _) = np.histogram(target, bins=numClass, range=(1, numClass))
-        area_union = area_pred + area_lab - area_intersection
-        acc = np.divide(area_intersection, area_union, out=np.zeros_like(area_intersection), where=area_union!=0)
-        print(area_intersection)
-        print(area_union)
-        print(acc)
-        return acc
-
     def visualize_output(self):
         """
         Forward pass over a testing batch and displays the output
@@ -138,18 +106,18 @@ def Init_Training_MonoFSCNN():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     training_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/train'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     validation_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/val',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/val'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
     }
 
     testing_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_trainvaltest/leftImg8bit/test',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine_trainvaltest/gtFine/test'
+        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test',
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/test'
     }
 
     datasets = dict(
@@ -159,9 +127,9 @@ def Init_Training_MonoFSCNN():
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=2, shuffle=False, num_workers=n_workers),
-        Validation=DataLoader(datasets["Validation"], batch_size=2, shuffle=False, num_workers=n_workers),
-        Testing=DataLoader(datasets["Testing"], batch_size=2, shuffle=False, num_workers=n_workers)
+        Training=DataLoader(datasets["Training"], batch_size=3, shuffle=False, num_workers=n_workers),
+        Validation=DataLoader(datasets["Validation"], batch_size=3, shuffle=False, num_workers=n_workers),
+        Testing=DataLoader(datasets["Testing"], batch_size=3, shuffle=False, num_workers=n_workers)
     )
 
     model_type = int(input(
@@ -259,9 +227,9 @@ if __name__ == "__main__":
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=2, shuffle=False, num_workers=n_workers),
-        Validation=DataLoader(datasets["Validation"], batch_size=2, shuffle=False, num_workers=n_workers),
-        Testing=DataLoader(datasets["Testing"], batch_size=2, shuffle=False, num_workers=n_workers)
+        Training=DataLoader(datasets["Training"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True),
+        Validation=DataLoader(datasets["Validation"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True),
+        Testing=DataLoader(datasets["Testing"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True)
     )
 
     filename = "Pretrained"
@@ -274,4 +242,4 @@ if __name__ == "__main__":
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, savefile=filename, checkpoints=True)
     # modeltrainer.visualize_output()
-    modeltrainer.train_model(5)
+    modeltrainer.train_model(1)
