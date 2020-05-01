@@ -35,14 +35,14 @@ class FastSCNN(nn.Module):
         x = self.global_feature_extractor(higher_res_features)
         x = self.feature_fusion(higher_res_features, x)
         x = self.classifier(x)
-        outputs = []
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        outputs.append(x)
-        if self.aux:
-            auxout = self.auxlayer(higher_res_features)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
-        return tuple(outputs)
+        return x
+        # outputs = [x]
+        # if self.aux:
+        #     auxout = self.auxlayer(higher_res_features)
+        #     auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
+        #     outputs.append(auxout)
+        # return tuple(outputs)
 
 
 class _ConvBNReLU(nn.Module):

@@ -12,9 +12,9 @@ class TestModel(nn.Module):
         self.model = nn.Sequential(
             nn.Conv2d(3, 16, 3),
             nn.ReLU(),
-            nn.Conv2d(16, 64, 5),
+            nn.Conv2d(16, 32, 5),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, num_classes, 3),
+            nn.ConvTranspose2d(32, num_classes, 3),
             nn.Sigmoid()
         )
 
