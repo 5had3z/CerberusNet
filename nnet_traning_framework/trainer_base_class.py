@@ -48,6 +48,8 @@ class ModelTrainer():
         else:
             self._modelname = str(datetime.now()).replace(" ", "_")
             self._path = Path.cwd() / "torch_models" / self._modelname
+
+        self._metric = SegmentationMetric(19, filename=self._modelname)
             
         if self._checkpoints:
             self.load_checkpoint()
@@ -56,8 +58,6 @@ class ModelTrainer():
                 sys.stdout.write("\nWarning: Checkpoint Already Exists!")
             else:
                 sys.stdout.write("\nStarting From Scratch!")
-
-        self._metric = SegmentationMetric(19, filename=self._modelname)
 
     def load_checkpoint(self):
         '''

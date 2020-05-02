@@ -27,16 +27,11 @@ class SegmentationMetric(object):
                 filename = filename + '.hdf5'
             self._path = Path.cwd() / "torch_models" / filename
             if not os.path.isfile(self._path):
-                with h5py.File(self._path, 'w') as hf:
+                with h5py.File(self._path, 'a') as hf:
                     tmp = hf.create_group('training')
-                    tmp.create_dataset('tmp', data=0)
+                    tmp.create_dataset('tmp', data=5)
                     tmp = hf.create_group('validation')
-                    tmp.create_dataset('tmp', data=0)
-                    cache = hf.create_group('cache')
-                    tmp = cache.create_group('training')
-                    tmp.create_dataset('tmp', data=0)
-                    tmp = cache.create_group('validation')
-                    tmp.create_dataset('tmp', data=0)
+                    tmp.create_dataset('tmp', data=5)
                     print("Training Statitsics created at ", self._path)
         else:
             self._path = None
@@ -46,12 +41,16 @@ class SegmentationMetric(object):
         Return Number of Epochs Recorded
         """
         with h5py.File(self._path, 'r') as hf:
-            return len(list(hf.keys())) + 1
+            n_epochs = len(list(hf['training']))-1
+            if 'cache' in list(hf):
+                if 'training' in list(hf['cache']):
+                    n_epochs += len(list(hf['cache/training']))
+            return  n_epochs
     
     def __del__(self):
         with h5py.File(self._path, 'a') as hf:
-            for data in list(hf['cache']):
-                del hf['cache'+data]
+            if 'cache' in list(hf):
+                del hf['cache']
 
     def add_sample(self, preds, labels, loss=None):
         """
@@ -86,13 +85,13 @@ class SegmentationMetric(object):
         """             
         if self._path is not None:
             summary_stats = np.asarray(self.get_epoch_statistics())
-            with h5py.File(self._path, 'w') as hf:
+            with h5py.File(self._path, 'a') as hf:
                 # Clear any Cached data from previous first into main
-                if list(hf['cache']) > 0:
+                if len(list(hf['cache'])) > 0:
                     self._flush_to_main()
                 
-                group_name = 'Epoch_' + str(len(list(hf.keys())) + 1)
-                top_group = hf[self.mode].create_group(group_name)
+                group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
+                top_group = hf.create_group(group_name)
                 top_group.create_dataset('PixelAcc', data=np.asarray(self.metric_data["Batch_PixelAcc"]))
                 top_group.create_dataset('mIoU', data=np.asarray(self.metric_data["Batch_mIoU"]))
                 top_group.create_dataset('Loss', data=np.asarray(self.metric_data["Batch_Loss"]))
@@ -132,13 +131,14 @@ class SegmentationMetric(object):
         mIoU = 0
         PixelAcc = 0
         if self._path is not None:
-            with h5py.File(self._path, 'r') as hf:
+            with h5py.File(self._path, 'a') as hf:
                 for data in hf['validation']:
-                    summary_data = data['Summary'][:]
-                    if summary_data[0] > PixelAcc:
-                        PixelAcc = summary_data[0]
-                    if summary_data[1] > mIoU:
-                        mIoU = summary_data[1]
+                    if data != 'tmp':
+                        summary_data = hf['validation/'+data+'/Summary'][:]
+                        if summary_data[0] > PixelAcc:
+                            PixelAcc = summary_data[0]
+                        if summary_data[1] > mIoU:
+                            mIoU = summary_data[1]
         else:
             print("No File Specified for Segmentation Metric Manager")
         return mIoU, PixelAcc
@@ -225,9 +225,14 @@ class SegmentationMetric(object):
         """
         if self._path is not None:
             summary_stats = np.asarray(self.get_epoch_statistics())
-            with h5py.File(self._path, 'w') as hf:
-                group_name = 'Epoch_' + str(len(list(hf.keys())) + 1)
-                top_group = hf['cache/'+self.mode].create_group(group_name)
+            with h5py.File(self._path, 'a') as hf:
+                n_cached = 0
+                if 'cache' in list(hf):
+                    if self.mode in list(hf['cache']):
+                        n_cached = len(list(hf['cache/'+self.mode]))
+
+                group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
+                top_group = hf.create_group(group_name)
                 top_group.create_dataset('PixelAcc', data=np.asarray(self.metric_data["Batch_PixelAcc"]))
                 top_group.create_dataset('mIoU', data=np.asarray(self.metric_data["Batch_mIoU"]))
                 top_group.create_dataset('Loss', data=np.asarray(self.metric_data["Batch_Loss"]))
@@ -240,12 +245,10 @@ class SegmentationMetric(object):
         Moves data from cache to main storage area
         """
         with h5py.File(self._path, 'a') as hf:
-            for data in list(hf['cache/training']):
-                hf.copy('cache/training/'+data,'training/'+data)
-                del hf['cache/training/'+data]
-            for data in list(hf['cache/validation']):
-                hf.copy('cache/validation/'+data,'validation/'+data)
-                del hf['cache/validation/'+data]
+            for mode in list(hf['cache']):
+                for data in list(hf['cache/'+mode]):
+                        hf.copy('cache/'+mode+'/'+data, mode+'/'+data)
+                        del hf['cache/'+mode+'/'+data]
 
 class BoundaryBoxMetric(object):
     def __init__(self):
