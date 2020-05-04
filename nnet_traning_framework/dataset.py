@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 imgextension = '.png'
 
 class MonoDataset(torch.utils.data.Dataset):
-    def __init__(self, directories, id_vector=None, transform=torchvision.transforms.ToTensor()):
+    def __init__(self, directories, output_size=(512,256), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
         images = []
         labels = []
 
@@ -26,12 +26,15 @@ class MonoDataset(torch.utils.data.Dataset):
         for dirName, _, fileList in os.walk(directories['images']):
             for filename in fileList:
                 if filename.endswith(imgextension):
-                    images.append(dirName + '/' + filename)
-
-        for dirName, _, fileList in os.walk(directories['labels']):
-            for filename in fileList:
-                if filename.endswith('gtFine_labelIds' + imgextension):
-                    labels.append(dirName + '/' + filename)
+                    imgpath = os.path.join(dirName, filename)
+                    foldername = os.path.basename(os.path.dirname(imgpath))
+                    lblname = filename.replace('leftImg8bit', 'gtFine_labelIds')
+                    lblpath = os.path.join(directories['labels'], foldername, lblname)
+                    if os.path.isfile(lblpath):
+                        images.append(imgpath)
+                        labels.append(lblpath)
+                    else:
+                        print("Could not corresponding label to image: ", imgpath)
         
         #Create dataset from specified ids
         if id_vector is not None:
@@ -44,6 +47,8 @@ class MonoDataset(torch.utils.data.Dataset):
         self.img_dir = directories['images']
         self.lbl_dir = directories['labels']
         self.transform = transform
+
+        self.output_size = output_size
 
         self.valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
                               23, 24, 25, 26, 27, 28, 31, 32, 33]
@@ -75,7 +80,16 @@ class MonoDataset(torch.utils.data.Dataset):
         if random.random() < 0.5:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
             mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
+        
+        crop_h, crop_w = mask.size[0]/2, mask.size[1]/2
+        crop_x, crop_y = random.randint(0, mask.size[1] - crop_w), random.randint(0, mask.size[0] - crop_h)
 
+        img = img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        mask = mask.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+
+        img = img.resize(self.output_size, Image.BILINEAR)
+        mask = mask.resize(self.output_size, Image.NEAREST)
+        
         return self._img_transform(img), self._mask_transform(mask)
 
     def _class_to_index(self, mask):
@@ -202,13 +216,14 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
 
-    testLoader = DataLoader(test_mono, batch_size=2, shuffle=False, num_workers=multiprocessing.cpu_count())
+    batch_size = 16
+    testLoader = DataLoader(test_mono, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
     image, mask = next(iter(testLoader))
 
     image = image.numpy()
     mask = mask.numpy()
 
-    for i in range(2):
+    for i in range(batch_size):
         classes = {}
         for j in range(mask.shape[1]):
             for k in range(mask.shape[2]):
