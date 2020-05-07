@@ -18,7 +18,7 @@ import torchvision.transforms as transforms
 from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
 
 from fast_scnn import FastSCNN, Classifer
-from dataset import MonoDataset, id_vec_generator
+from dataset import CityScapesDataset, id_vec_generator
 from trainer_base_class import ModelTrainer
 
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
@@ -44,6 +44,8 @@ class MonoSegmentationTrainer(ModelTrainer):
             output = self._model(image)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
+            # cmap = plt.cm.get_cmap('hsv', 20)
+
             pred = torch.argmax(output,dim=1,keepdim=True)
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
@@ -51,11 +53,11 @@ class MonoSegmentationTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(mask[i,:,:])
+                plt.imshow(mask[i,:,:]) #cmap=cmap
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,:])
+                plt.imshow(pred.cpu().numpy()[i,0,:,:]) #cmap=cmap
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
@@ -221,15 +223,15 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training=MonoDataset(training_dir),
-        Validation=MonoDataset(validation_dir),
-        Testing=MonoDataset(testing_dir)
+        Training=CityScapesDataset(training_dir),
+        Validation=CityScapesDataset(validation_dir),
+        Testing=CityScapesDataset(testing_dir)
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True),
-        Testing=DataLoader(datasets["Testing"], batch_size=3, shuffle=False, num_workers=n_workers, drop_last=True)
+        Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
+        Testing=DataLoader(datasets["Testing"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True)
     )
 
     filename = "Focal"

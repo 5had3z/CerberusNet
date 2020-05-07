@@ -17,35 +17,92 @@ import matplotlib.pyplot as plt
 
 imgextension = '.png'
 
-class MonoDataset(torch.utils.data.Dataset):
+class CityScapesDataset(torch.utils.data.Dataset):
     def __init__(self, directories, output_size=(512,256), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
-        images = []
-        labels = []
+        
+        l_img_key = None
+        self.enable_right = False
+        self.enable_seg = False
+        self.enable_disparity = False
+
+        for key in directories.keys():
+            if key == 'left_images' or key == 'images':
+                l_img = []
+                l_img_key = key
+            elif key == 'labels' or key == 'mask':
+                mask = []
+                seg_dir_key = key
+                self.enable_seg = True
+            elif key == 'right_images':
+                r_img = []
+                self.enable_right = True
+            elif key == 'disparity':
+                disp = []
+                self.enable_disparity = True
+
+        if not self.enable_seg and not self.enable_disparity:
+            print("Neither Segmentation or Disparity Keys are defined")
+
+        if l_img_key is None:
+            print("Left Image Key Error")
 
         #Get all file names
-        for dirName, _, fileList in os.walk(directories['images']):
+        for dirName, _, fileList in os.walk(directories[l_img_key]):
             for filename in fileList:
                 if filename.endswith(imgextension):
-                    imgpath = os.path.join(dirName, filename)
-                    foldername = os.path.basename(os.path.dirname(imgpath))
-                    lblname = filename.replace('leftImg8bit', 'gtFine_labelIds')
-                    lblpath = os.path.join(directories['labels'], foldername, lblname)
-                    if os.path.isfile(lblpath):
-                        images.append(imgpath)
-                        labels.append(lblpath)
-                    else:
-                        print("Could not corresponding label to image: ", imgpath)
+                    read_check = True
+                    l_imgpath = os.path.join(dirName, filename)
+                    foldername = os.path.basename(os.path.dirname(l_imgpath))
+
+                    if self.enable_right:
+                        r_imgname = filename.replace('leftImg8bit', 'rightImg8bit')
+                        r_imgpath = os.path.join(directories['right_images'], foldername, r_imgname)
+                        if not os.path.isfile(r_imgpath):
+                            read_check = False
+                            print("Error finding corresponding right image to ", l_imgpath)
+
+                    if self.enable_seg:
+                        mask_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
+                        mask_path = os.path.join(directories[seg_dir_key], foldername, mask_name)
+                        if not os.path.isfile(mask_path):
+                            read_check = False
+                            print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                    if self.enable_disparity:
+                        disp_name = filename.replace('leftImg8bit', 'disparity')
+                        disp_path = os.path.join(directories['disparity'], foldername, disp_name)
+                        if not os.path.isfile(disp_path):
+                            read_check = False
+                            print("Error finding corresponding disparity image to ", l_imgpath)
+
+                    if read_check:
+                        l_img.append(l_imgpath)
+
+                        if self.enable_right:
+                            r_img.append(r_imgpath)
+                        if self.enable_seg:
+                            mask.append(mask_path)
+                        if self.enable_disparity:
+                            disp.append(disp_path)
         
         #Create dataset from specified ids
         if id_vector is not None:
-            self.images = [images[i] for i in id_vector]
-            self.labels = [labels[i] for i in id_vector]
+            self.l_img = [l_img[i] for i in id_vector]
+            if self.enable_right:
+                self.r_img = [r_img[i] for i in id_vector]
+            if self.enable_seg:
+                self.mask = [mask[i] for i in id_vector]
+            if self.enable_disparity:
+                self.disp = [disp[i] for i in id_vector]
         else:
-            self.images = images
-            self.labels = labels
+            self.l_img = l_img
+            if self.enable_right:
+                self.r_img = r_img
+            if self.enable_seg:
+                self.mask = mask
+            if self.enable_disparity:
+                self.disp = disp
 
-        self.img_dir = directories['images']
-        self.lbl_dir = directories['labels']
         self.transform = transform
 
         self.output_size = output_size
@@ -64,33 +121,79 @@ class MonoDataset(torch.utils.data.Dataset):
         '''
         Returns an Image and Label Pair
         '''
-        #Read image and labels
-        image = Image.open(self.images[idx]).convert('RGB')
-        mask = Image.open(self.labels[idx])
+        # Read image and labels
+        l_img = Image.open(self.l_img[idx]).convert('RGB')
+        r_img = None
+        mask = None
+        disparity = None
 
-        image, mask = self._sync_transform(image, mask)
+        if self.enable_right:
+            r_img = Image.open(self.r_img[idx]).convert('RGB')
+        if self.enable_seg:
+            mask = Image.open(self.mask[idx])
+        if self.enable_disparity:
+            disparity = Image.open(self.disp[idx])
+
+        image, r_img, mask, disparity = self._sync_transform(l_img, r_img, mask, disparity)
+
         #   Apply Defined Transformations
         if self.transform is not None:
             image = self.transform(image)
+            if self.enable_right:
+                r_img = self.transform(r_img)
 
-        return image, mask
+        if self.enable_right:
+            image = torch.cat((image, r_img))
 
-    def _sync_transform(self, img, mask):
+        if self.enable_seg and self.enable_disparity:
+            label = (mask, disparity)
+        elif self.enable_seg:
+            label = mask
+        else:
+            label = disparity
+
+        return image, label
+
+    def _sync_transform(self, l_img, r_img, mask, disparity):
+
         # random mirror
         if random.random() < 0.5:
-            img = img.transpose(Image.FLIP_LEFT_RIGHT)
-            mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
+            l_img = l_img.transpose(Image.FLIP_LEFT_RIGHT)
+            if self.enable_right: 
+                r_img = r_img.transpose(Image.FLIP_LEFT_RIGHT)
+            if self.enable_seg:
+                mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
+            if self.enable_disparity:
+                disparity = disparity.transpose(Image.FLIP_LEFT_RIGHT)
         
+        # random crop
         crop_h, crop_w = mask.size[0]/2, mask.size[1]/2
         crop_x, crop_y = random.randint(0, mask.size[1] - crop_w), random.randint(0, mask.size[0] - crop_h)
 
-        img = img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-        mask = mask.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        l_img = l_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
-        img = img.resize(self.output_size, Image.BILINEAR)
-        mask = mask.resize(self.output_size, Image.NEAREST)
+        if self.enable_right: 
+            r_img = r_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        if self.enable_seg:
+            mask = mask.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        if self.enable_disparity:
+            disparity = disparity.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+
+        # resize to target
+        l_img = l_img.resize(self.output_size, Image.BILINEAR)
+        l_img = self._img_transform(l_img)
+
+        if self.enable_right: 
+            r_img = r_img.resize(self.output_size, Image.BILINEAR)
+            r_img = self._img_transform(r_img)
+        if self.enable_seg:
+            mask = mask.resize(self.output_size, Image.NEAREST)
+            mask = self._mask_transform(mask)
+        if self.enable_disparity:
+            disparity = disparity.resize(self.output_size, Image.BILINEAR)
+            disparity = self._depth_transform(disparity)
         
-        return self._img_transform(img), self._mask_transform(mask)
+        return l_img, r_img, mask, disparity
 
     def _class_to_index(self, mask):
         values = np.unique(mask)
@@ -106,69 +209,14 @@ class MonoDataset(torch.utils.data.Dataset):
         target = self._class_to_index(np.array(mask).astype('int32'))
         return torch.LongTensor(np.array(target).astype('int32'))
 
-    def __len__(self):
-        return len(self.images)
-
-class StereoDataset(torch.utils.data.Dataset):
-    def __init__(self, directories, id_vector=None, transform=torchvision.transforms.ToTensor()):
-        images = []
-        labels = []
-
-        #Get all file names
-        for dirName, _, fileList in os.walk(directories['left_images']):
-            for filename in fileList:
-                if filename.endswith(imgextension):
-                    images.append([dirName + '/' + filename])
-
-        for idx, (dirName, _, fileList) in enumerate(os.walk(directories['right_images'])):
-            for filename in fileList:
-                if filename.endswith(imgextension):
-                    images[idx].append(dirName + '/' + filename)
-        
-        for dirName, _, fileList in os.walk(directories['left_labels']):
-            for filename in fileList:
-                if filename.endswith('gtFine_labelIds' + imgextension):
-                    labels.append([dirName + '/' + filename])
-
-        for idx, (dirName, _, fileList) in enumerate(os.walk(directories['disparity'])):
-            for filename in fileList:
-                if filename.endswith(imgextension):
-                    labels[idx].append(dirName + '/' + filename)
-        
-        #Create dataset from specified ids
-        if id_vector is not None:
-            self.images = [images[i] for i in id_vector]
-            self.labels = [labels[i] for i in id_vector]
-        else:
-            self.images = images
-            self.labels = labels
-        
-        self.directories = directories
-        self.transform = transform
+    def _depth_transform(self, disparity):
+        disparity = np.array(disparity).astype('float32')
+        disparity[disparity > 0] = (0.209313 * 2262.52) / ((disparity[disparity > 0] - 1) / 256)
+        disparity[disparity == 0] = -1 # Ignore value for loss functions
+        return  torch.FloatTensor(disparity.astype('float32'))
 
     def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        '''
-        Returns an Image and Label Pair
-        '''
-        #Read image and labels
-        l_image = Image.open(self.directories['left_images'] / self.images[idx])
-        l_mask = Image.open(self.directories['left_labels'] / self.labels[idx])
-        r_image = Image.open(self.directories['right_images'] / self.images[idx])
-        r_mask = Image.open(self.directories['right_labels'] / self.labels[idx])
-
-        #   Apply Defined Transformation
-        l_image = self.transform(l_image)
-        r_image = self.transform(r_image)
-        out_img = torch.cat((l_image, r_image), 0)
-
-        l_mask = self.transform(l_mask)
-        r_mask = self.transform(r_mask)
-        out_mask = torch.cat((l_mask, r_mask), 0)
-
-        return out_img, out_mask
+        return len(self.l_img)
 
 def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
     num_images = 0
@@ -197,42 +245,42 @@ if __name__ == '__main__':
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
-    stereo_training_data = {
+    full_training_data = {
         'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
         'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'left_labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
+        'mask': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
         'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
     }
 
-    test_mono = MonoDataset(mono_training_data)
-    test_stereo = StereoDataset(stereo_training_data)
+    test_dset = CityScapesDataset(full_training_data)
     
-    print(len(test_mono.images))
-    print(len(test_mono.labels))
-    print(len(test_stereo.images))
-    print(len(test_stereo.labels))
+    print(len(test_dset.l_img))
+    print(len(test_dset.mask))
 
     import multiprocessing
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
 
-    batch_size = 16
-    testLoader = DataLoader(test_mono, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
+    batch_size = 5
+    testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
     image, mask = next(iter(testLoader))
 
     image = image.numpy()
     mask = mask.numpy()
 
-    for i in range(batch_size):
-        classes = {}
-        for j in range(mask.shape[1]):
-            for k in range(mask.shape[2]):
-                class_id = mask[i,j,k]
-                classes[class_id] = class_id
+    # classes = {}
+    # for i in range(batch_size):
+    #     # # Get class for each individual pixel
+    #     # for j in range(mask.shape[1]):
+    #     #     for k in range(mask.shape[2]):
+    #     #         class_id = mask[i,j,k]
+    #     #         classes[class_id] = class_id
 
-        plt.subplot(121)
-        img_cpy = image[i,:,:,:]
-        plt.imshow(np.moveaxis(img_cpy,0,2))
-        plt.subplot(122)
-        plt.imshow(mask[i,:,:])
-        plt.show()
+    #     plt.subplot(121)
+    #     img_cpy = image[i,:,:,:]
+    #     plt.imshow(np.moveaxis(img_cpy,0,2))
+    #     plt.subplot(122)
+    #     plt.imshow(mask[i,:,:])
+    #     plt.show()
+
+    # print(classes)
