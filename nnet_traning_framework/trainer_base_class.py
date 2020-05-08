@@ -28,7 +28,6 @@ class ModelTrainer():
 
         self._training_loader = dataloaders["Training"]
         self._validation_loader = dataloaders["Validation"]
-        self._testing_loader = dataloaders["Testing"]
 
         self.epoch = 0
         self.best_acc = 0.0
@@ -162,7 +161,6 @@ class ModelTrainer():
         with torch.no_grad():
             self._model.eval()
 
-            loss_epoch = 0.0
             self._metric.new_epoch('validation')
 
             start_time = time.time()
@@ -176,14 +174,13 @@ class ModelTrainer():
                 
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
-                loss_epoch = loss.item()/(batch_idx+1) + loss_epoch*batch_idx/(batch_idx+1)
 
                 _, miou = self._metric.add_sample(
-                                    torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
-                                    target.cpu().numpy(),
-                                    loss=loss.item()
-                                )
-
+                    torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
+                    target.cpu().numpy(),
+                    loss=loss.item()
+                )
+                
                 if batch_idx % 10 == 0:
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))

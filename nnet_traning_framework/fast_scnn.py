@@ -10,13 +10,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['FastSCNN', 'get_fast_scnn']
+__all__ = ['FastSCNN', 'Stereo_FastSCNN', 'get_fast_scnn']
 
 class FastSCNN(nn.Module):
     def __init__(self, num_classes, aux=False, **kwargs):
         super(FastSCNN, self).__init__()
         self.aux = aux
-        self.learning_to_downsample = LearningToDownsample(32, 48, 64)
+        self.learning_to_downsample = LearningToDownsample(3, 32, 48, 64)
         self.global_feature_extractor = GlobalFeatureExtractor(64, [64, 96, 128], 128, 6, [3, 3, 3])
         self.feature_fusion = FeatureFusionModule(64, 128, 128)
         self.classifier = Classifer(128, num_classes)
@@ -44,6 +44,31 @@ class FastSCNN(nn.Module):
         #     outputs.append(auxout)
         # return tuple(outputs)
 
+class Stereo_FastSCNN(nn.Module):
+    def __init__(self, num_classes, aux=False, **kwargs):
+        super(Stereo_FastSCNN, self).__init__()
+        self.aux = aux
+        self.learning_to_downsample = LearningToDownsample(6, 32, 48, 64)
+        self.global_feature_extractor = GlobalFeatureExtractor(64, [64, 96, 128], 128, 6, [3, 3, 3])
+        self.feature_fusion = FeatureFusionModule(64, 128, 128)
+        self.classifier = Classifer(128, num_classes)
+        if self.aux:
+            self.auxlayer = nn.Sequential(
+                nn.Conv2d(64, 32, 3, padding=1, bias=False),
+                nn.BatchNorm2d(32),
+                nn.ReLU(True),
+                nn.Dropout(0.1),
+                nn.Conv2d(32, num_classes, 1)
+            )
+
+    def forward(self, x):
+        size = x.size()[2:]
+        higher_res_features = self.learning_to_downsample(x)
+        x = self.global_feature_extractor(higher_res_features)
+        x = self.feature_fusion(higher_res_features, x)
+        x = self.classifier(x)
+        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
+        return x
 
 class _ConvBNReLU(nn.Module):
     """Conv-BN-ReLU"""
@@ -147,9 +172,9 @@ class PyramidPooling(nn.Module):
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
 
-    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
+    def __init__(self, in_ch = 3, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
         super(LearningToDownsample, self).__init__()
-        self.conv = _ConvBNReLU(3, dw_channels1, 3, 2)
+        self.conv = _ConvBNReLU(in_ch, dw_channels1, 3, 2)
         self.dsconv1 = _DSConv(dw_channels1, dw_channels2, 2)
         self.dsconv2 = _DSConv(dw_channels2, out_channels, 2)
 

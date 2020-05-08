@@ -190,7 +190,7 @@ class SegmentationMetric(object):
         This plots all the statistics for an epoch
         """       
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path + ' Training and Validation Results Epoch' + str(epoch_idx))
+        plt.suptitle(self._path.name + ' Training and Validation Results Epoch' + str(epoch_idx))
 
         group_name = 'Epoch_' + str(epoch_idx)
         with h5py.File(self._path, 'r') as hf:
@@ -218,6 +218,109 @@ class SegmentationMetric(object):
             plt.ylabel('Loss')
             plt.xlabel('Iter #')
             plt.show()
+
+    def plot_summary_data(self):
+        """
+        This plots all the summary statistics over all epochs
+        """
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Summary Training and Validation Results')
+
+        with h5py.File(self._path, 'r') as hf:
+            print(list(hf))
+            training_data = np.zeros((len(list(hf['training'])), 3))
+            testing_data = np.zeros((len(list(hf['validation'])), 3))
+
+            for idx, epoch in enumerate(list(hf['training'])):
+                if epoch != 'tmp':
+                    training_data[idx] = hf['training/'+epoch+'/Summary'][:]
+
+            for idx, epoch in enumerate(list(hf['validation'])):
+                if epoch != 'tmp':
+                    testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
+
+            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
+        
+        plt.subplot(1,3,1)
+        plt.plot(training_data[:,0])
+        plt.plot(testing_data[:,0])
+        plt.legend(["Training", "Validation"])
+        plt.title('Average Batch Pixel Accuracy over Epochs')
+        plt.ylabel('% Accuracy')
+        plt.xlabel('Epoch #')
+
+        plt.subplot(1,3,2)
+        plt.plot(training_data[:,1])
+        plt.plot(testing_data[:,1])
+        plt.legend(["Training", "Validation"])
+        plt.title('Average Batch mIoU over Epochs')
+        plt.ylabel('mIoU')
+        plt.xlabel('Epoch #')
+
+        plt.subplot(1,3,3)
+        plt.plot(training_data[:,2])
+        plt.plot(testing_data[:,2])
+        plt.legend(["Training", "Validation"])
+        plt.title('Average Batch loss over Epochs')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch #')
+        plt.show()
+
+    def plot_iteration_data(self):
+        """
+        This plots all the statistics over all iterations
+        """
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Iteration Training and Validation Results')
+
+        with h5py.File(self._path, 'r') as hf:
+            print(list(hf))
+            training_miou = np.zeros((1,1))
+            training_pixa = np.zeros((1,1))
+            training_loss = np.zeros((1,1))
+
+            testing_miou = np.zeros((1,1))
+            testing_pixa = np.zeros((1,1))
+            testing_loss = np.zeros((1,1))
+
+            for epoch in list(hf['training']):
+                if epoch != 'tmp':
+                    training_miou = np.append(training_miou, hf['training/'+epoch+'/PixelAcc'][:])
+                    training_pixa = np.append(training_pixa, hf['training/'+epoch+'/mIoU'][:])
+                    training_loss = np.append(training_loss, hf['training/'+epoch+'/Loss'][:])
+
+            for epoch in list(hf['validation']):
+                if epoch != 'tmp':
+                    testing_miou = np.append(testing_miou, hf['validation/'+epoch+'/PixelAcc'][:])
+                    testing_pixa = np.append(testing_pixa, hf['validation/'+epoch+'/mIoU'][:])
+                    testing_loss = np.append(testing_loss, hf['validation/'+epoch+'/Loss'][:])
+
+            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
+        
+        plt.subplot(1,3,1)
+        plt.plot(training_pixa)
+        plt.plot(testing_pixa)
+        plt.legend(["Training", "Validation"])
+        plt.title('Batch Pixel Accuracy over Iterations')
+        plt.ylabel('% Accuracy')
+        plt.xlabel('Iteration #')
+
+        plt.subplot(1,3,2)
+        plt.plot(training_miou)
+        plt.plot(testing_miou)
+        plt.legend(["Training", "Validation"])
+        plt.title('Batch mIoU over Iterations')
+        plt.ylabel('mIoU')
+        plt.xlabel('Iteration #')
+
+        plt.subplot(1,3,3)
+        plt.plot(training_loss)
+        plt.plot(testing_loss)
+        plt.legend(["Training", "Validation"])
+        plt.title('Batch loss over Epochs')
+        plt.ylabel('Loss')
+        plt.xlabel('Iteration #')
+        plt.show()
 
     def _cache_data(self):
         """
@@ -261,30 +364,6 @@ class ClassificationMetric(object):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    test = np.array([1,2,3,4,5])
-    with h5py.File('test.hdf5', 'w') as hf:
-        top_grp = hf.create_group('top1')
-        subgrp1 = top_grp.create_group('sub1')
-        subgrp2 = top_grp.create_dataset('sub2', data=test)
-        top_grp['sub1'].create_dataset('subsub1', data=test)
-        top_grp['sub1'].create_dataset('subsub2', data=test)
-
-        top_grp = hf.create_group('top2')
-        subgrp1 = top_grp.create_group('sub3')
-        subgrp2 = top_grp.create_group('sub4')
-        subgrp1 = test
-        subgrp2 = test
-
-    with h5py.File('test.hdf5', 'r') as hf:
-        print(list(hf))
-        for data in list(hf['top1']):
-            nmpy = hf['top1'][data]
-            print(nmpy)
-        print(list(hf['top2']))
-
-    with h5py.File('test.hdf5', 'a') as hf:
-        for data in list(hf['top2']):
-            hf.copy('top2/'+data,'top1/'+data)
-            del hf['top2/'+data]
-        print(list(hf['top1']))
-        print(list(hf['top2']))
+    filename = "Focal"
+    metric = SegmentationMetric(19, filename=filename)
+    metric.plot_iteration_data()

@@ -17,7 +17,7 @@ from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
 
-from fast_scnn import FastSCNN, Classifer
+from fast_scnn import FastSCNN, Stereo_FastSCNN, Classifer
 from dataset import CityScapesDataset, id_vec_generator
 from trainer_base_class import ModelTrainer
 
@@ -49,7 +49,7 @@ class MonoSegmentationTrainer(ModelTrainer):
             pred = torch.argmax(output,dim=1,keepdim=True)
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(image[i,:,:,:].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(image[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
@@ -209,39 +209,34 @@ if __name__ == "__main__":
 
     training_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
+        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     validation_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
+        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
-    }
-
-    testing_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/test'
     }
 
     datasets = dict(
         Training=CityScapesDataset(training_dir),
-        Validation=CityScapesDataset(validation_dir),
-        Testing=CityScapesDataset(testing_dir)
+        Validation=CityScapesDataset(validation_dir)
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
-        Testing=DataLoader(datasets["Testing"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True)
+        Training=DataLoader(datasets["Training"], batch_size=32, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation=DataLoader(datasets["Validation"], batch_size=32, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "Focal"
+    filename = "Stereo_Seg_Focal"
     # fastModel = TestModel(19)
-    fastModel = FastSCNN(19)
+    fastModel = Stereo_FastSCNN(19)
     # fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth')) #   Original Weights
     optimizer = torch.optim.SGD(fastModel.parameters(), lr=0.01, momentum=0.9)
     # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
     lossfn = FocalLoss2D(ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(43)
