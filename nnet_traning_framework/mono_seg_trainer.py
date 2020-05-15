@@ -209,13 +209,13 @@ if __name__ == "__main__":
 
     training_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
+        # 'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     validation_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
+        # 'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
     }
 
@@ -225,18 +225,19 @@ if __name__ == "__main__":
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=32, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=32, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "Stereo_Seg_Focal"
-    # fastModel = TestModel(19)
-    fastModel = Stereo_FastSCNN(19)
+    filename = "Focal_quater"
+    fastModel = FastSCNN(19)
+    # filename = "Stereo_Seg_Focal"
+    # fastModel = Stereo_FastSCNN(19)
     # fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth')) #   Original Weights
     optimizer = torch.optim.SGD(fastModel.parameters(), lr=0.01, momentum=0.9)
     # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
     lossfn = FocalLoss2D(ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(43)
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(3)

@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import numpy as np
 
-__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss']
+__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):

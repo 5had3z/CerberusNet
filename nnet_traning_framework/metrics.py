@@ -28,10 +28,7 @@ class SegmentationMetric(object):
             self._path = Path.cwd() / "torch_models" / filename
             if not os.path.isfile(self._path):
                 with h5py.File(self._path, 'a') as hf:
-                    tmp = hf.create_group('training')
-                    tmp.create_dataset('tmp', data=5)
-                    tmp = hf.create_group('validation')
-                    tmp.create_dataset('tmp', data=5)
+                    hf.create_group('cache')
                     print("Training Statitsics created at ", self._path)
         else:
             self._path = None
@@ -41,11 +38,14 @@ class SegmentationMetric(object):
         Return Number of Epochs Recorded
         """
         with h5py.File(self._path, 'r') as hf:
-            n_epochs = len(list(hf['training']))-1
-            if 'cache' in list(hf):
-                if 'training' in list(hf['cache']):
-                    n_epochs += len(list(hf['cache/training']))
-            return  n_epochs
+            if 'training' in list(hf):
+                n_epochs = len(list(hf['training']))
+                if 'cache' in list(hf):
+                    if 'training' in list(hf['cache']):
+                        n_epochs += len(list(hf['cache/training']))
+                return n_epochs
+            else:
+                return 0
     
     def __del__(self):
         with h5py.File(self._path, 'a') as hf:
@@ -76,7 +76,7 @@ class SegmentationMetric(object):
         mIoU = np.asarray(self.metric_data["Batch_mIoU"]).mean()
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
         if print_only:
-            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f" % (pixAcc, mIoU, loss))
+            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixAcc, mIoU, loss))
         return pixAcc, mIoU, loss
 
     def save_epoch(self):
@@ -90,11 +90,14 @@ class SegmentationMetric(object):
                 if len(list(hf['cache'])) > 0:
                     self._flush_to_main()
                 
-                group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
+                if self.mode in list(hf):
+                    group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
+                else:
+                    group_name = self.mode + '/Epoch_1'
+
                 top_group = hf.create_group(group_name)
-                top_group.create_dataset('PixelAcc', data=np.asarray(self.metric_data["Batch_PixelAcc"]))
-                top_group.create_dataset('mIoU', data=np.asarray(self.metric_data["Batch_mIoU"]))
-                top_group.create_dataset('Loss', data=np.asarray(self.metric_data["Batch_Loss"]))
+                for metric in self.metric_data.keys():
+                    top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
                 top_group.create_dataset('Summary', data=summary_stats)
 
                 #   Flush current data as its now in long term storage and we're ready for next dataset
@@ -116,9 +119,8 @@ class SegmentationMetric(object):
         if self._path is not None:
             with h5py.File(self._path, 'r') as hf:
                 group_name = 'Epoch_' + str(epoch_idx)
-                self.metric_data["Batch_PixelAcc"] = hf[mode][group_name]['PixelAcc'][:]
-                self.metric_data["Batch_mIoU"] = hf[mode][group_name]['mIoU'][:]
-                self.metric_data["Batch_Loss"] = hf[mode][group_name]['Loss'][:]
+                for metric in list(hf[mode][group_name]):
+                    self.metric_data[metric] = hf[mode][group_name][metric][:]
             return self.metric_data
         else:
             print("No File Specified for Segmentation Metric Manager")
@@ -133,12 +135,11 @@ class SegmentationMetric(object):
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
                 for data in hf['validation']:
-                    if data != 'tmp':
-                        summary_data = hf['validation/'+data+'/Summary'][:]
-                        if summary_data[0] > PixelAcc:
-                            PixelAcc = summary_data[0]
-                        if summary_data[1] > mIoU:
-                            mIoU = summary_data[1]
+                    summary_data = hf['validation/'+data+'/Summary'][:]
+                    if summary_data[0] > PixelAcc:
+                        PixelAcc = summary_data[0]
+                    if summary_data[1] > mIoU:
+                        mIoU = summary_data[1]
         else:
             print("No File Specified for Segmentation Metric Manager")
         return mIoU, PixelAcc
@@ -167,8 +168,10 @@ class SegmentationMetric(object):
         # We should not penalize detections in unlabeled portions of the image.
         prediction = prediction.astype('int64') + 1
         target = target.astype('int64') + 1
-        
-        pixAcc = 1.0 * np.sum((prediction == target) * (target >= 0)) / (np.spacing(1) + np.sum(target >= 0))
+
+        correct = 1.0 * np.sum((prediction == target) * (target > 0))
+        total_pixels = np.spacing(1) + np.sum(target > 0)
+        pixAcc = correct / total_pixels
         self.metric_data["Batch_PixelAcc"].append(pixAcc)
     
     def new_epoch(self, mode='training'):
@@ -194,29 +197,16 @@ class SegmentationMetric(object):
 
         group_name = 'Epoch_' + str(epoch_idx)
         with h5py.File(self._path, 'r') as hf:
-            plt.subplot(1,3,1)
-            plt.plot(hf['training'][group_name]['PixelAcc'][:])
-            plt.plot(hf['validation'][group_name]['PixelAcc'][:])
-            plt.legend(["Training", "Validation"])
-            plt.title('Batch Pixel Accuracy over Epochs')
-            plt.ylabel('% Accuracy')
-            plt.xlabel('Iter #')
+            num_metrics = len(list(hf['training'][group_name]))
+            for idx, metric in enumerate(list(hf['training'][group_name])):
+                plt.subplot(1,num_metrics,idx+1)
+                plt.plot(hf['training'][group_name][metric][:])
+                plt.plot(hf['validation'][group_name][metric][:])
+                plt.legend(["Training", "Validation"])
+                plt.title('Batch ' + str(metric) + ' over Epochs')
+                plt.ylabel(str(metric))
+                plt.xlabel('Iter #')
 
-            plt.subplot(1,3,2)
-            plt.plot(hf['training'][group_name]['mIoU'][:])
-            plt.plot(hf['validation'][group_name]['mIoU'][:])
-            plt.legend(["Training", "Validation"])
-            plt.title('Batch mIoU over Epochs')
-            plt.ylabel('mIoU')
-            plt.xlabel('Iter #')
-
-            plt.subplot(1,3,3)
-            plt.plot(hf['training'][group_name]['Loss'][:])
-            plt.plot(hf['validation'][group_name]['Loss'][:])
-            plt.legend(["Training", "Validation"])
-            plt.title('Batch loss over Epochs')
-            plt.ylabel('Loss')
-            plt.xlabel('Iter #')
             plt.show()
 
     def plot_summary_data(self):
@@ -232,12 +222,10 @@ class SegmentationMetric(object):
             testing_data = np.zeros((len(list(hf['validation'])), 3))
 
             for idx, epoch in enumerate(list(hf['training'])):
-                if epoch != 'tmp':
-                    training_data[idx] = hf['training/'+epoch+'/Summary'][:]
+                training_data[idx] = hf['training/'+epoch+'/Summary'][:]
 
             for idx, epoch in enumerate(list(hf['validation'])):
-                if epoch != 'tmp':
-                    testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
+                testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
 
             print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
         
@@ -284,16 +272,14 @@ class SegmentationMetric(object):
             testing_loss = np.zeros((1,1))
 
             for epoch in list(hf['training']):
-                if epoch != 'tmp':
-                    training_miou = np.append(training_miou, hf['training/'+epoch+'/PixelAcc'][:])
-                    training_pixa = np.append(training_pixa, hf['training/'+epoch+'/mIoU'][:])
-                    training_loss = np.append(training_loss, hf['training/'+epoch+'/Loss'][:])
+                training_miou = np.append(training_miou, hf['training/'+epoch+'/PixelAcc'][:])
+                training_pixa = np.append(training_pixa, hf['training/'+epoch+'/mIoU'][:])
+                training_loss = np.append(training_loss, hf['training/'+epoch+'/Loss'][:])
 
             for epoch in list(hf['validation']):
-                if epoch != 'tmp':
-                    testing_miou = np.append(testing_miou, hf['validation/'+epoch+'/PixelAcc'][:])
-                    testing_pixa = np.append(testing_pixa, hf['validation/'+epoch+'/mIoU'][:])
-                    testing_loss = np.append(testing_loss, hf['validation/'+epoch+'/Loss'][:])
+                testing_miou = np.append(testing_miou, hf['validation/'+epoch+'/PixelAcc'][:])
+                testing_pixa = np.append(testing_pixa, hf['validation/'+epoch+'/mIoU'][:])
+                testing_loss = np.append(testing_loss, hf['validation/'+epoch+'/Loss'][:])
 
             print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
         
@@ -329,17 +315,21 @@ class SegmentationMetric(object):
         if self._path is not None:
             summary_stats = np.asarray(self.get_epoch_statistics())
             with h5py.File(self._path, 'a') as hf:
-                n_cached = 0
+                n_cached = 1
                 if 'cache' in list(hf):
                     if self.mode in list(hf['cache']):
-                        n_cached = len(list(hf['cache/'+self.mode]))
+                        n_cached = len(list(hf['cache/'+self.mode])) + 1
 
-                group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
+                if self.mode in list(hf):
+                    group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
+                else:
+                    group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
+
                 top_group = hf.create_group(group_name)
-                top_group.create_dataset('PixelAcc', data=np.asarray(self.metric_data["Batch_PixelAcc"]))
-                top_group.create_dataset('mIoU', data=np.asarray(self.metric_data["Batch_mIoU"]))
-                top_group.create_dataset('Loss', data=np.asarray(self.metric_data["Batch_Loss"]))
+                for metric in self.metric_data.keys():
+                    top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
                 top_group.create_dataset('Summary', data=summary_stats)
+
         else:
             print("No File Specified for Segmentation Metric Manager")
 
@@ -349,9 +339,9 @@ class SegmentationMetric(object):
         """
         with h5py.File(self._path, 'a') as hf:
             for mode in list(hf['cache']):
-                for data in list(hf['cache/'+mode]):
-                        hf.copy('cache/'+mode+'/'+data, mode+'/'+data)
-                        del hf['cache/'+mode+'/'+data]
+                for epoch in list(hf['cache/'+mode]):
+                    hf.copy('cache/'+mode+'/'+epoch, mode+'/'+epoch)
+                    del hf['cache/'+mode+'/'+epoch]
 
 class BoundaryBoxMetric(object):
     def __init__(self):
@@ -364,6 +354,8 @@ class ClassificationMetric(object):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "Focal"
+    # filename = "Stereo_Seg_Focal"
+    filename = 'Focal_quater'
+    # filename = "Focal"
     metric = SegmentationMetric(19, filename=filename)
-    metric.plot_iteration_data()
+    metric.plot_summary_data()
