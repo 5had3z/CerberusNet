@@ -236,3 +236,4 @@ if __name__ == "__main__":
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(59)
+    

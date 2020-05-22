@@ -54,7 +54,7 @@ class MetricBaseClass(object):
         Save Data to new dataset named by epoch name
         """             
         if self._path is not None:
-            summary_stats = np.asarray(self._get_epoch_statistics())
+            summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
             with h5py.File(self._path, 'a') as hf:
                 # Clear any Cached data from previous first into main
                 if len(list(hf['cache'])) > 0:
@@ -131,12 +131,13 @@ class MetricBaseClass(object):
         Moves data to temporary location to be permanently saved or deleted later
         """
         if self._path is not None:
-            summary_stats = np.asarray(self._get_epoch_statistics())
+            summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
             with h5py.File(self._path, 'a') as hf:
-                n_cached = 1
                 if 'cache' in list(hf):
                     if self.mode in list(hf['cache']):
                         n_cached = len(list(hf['cache/'+self.mode])) + 1
+                else:
+                    n_cached = 1
 
                 if self.mode in list(hf):
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
@@ -241,7 +242,14 @@ class MetricBaseClass(object):
     def _reset_metric(self):
         raise NotImplementedError
 
-    def _get_epoch_statistics(self):
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
+        """
+        Returns Accuracy and Loss Metrics from an Epoch\n
+        @todo   get a specified epoch instead of only currently loaded one\n
+        @param  main_metric, only main metric\n
+        @param  loss_metric, returns recorded loss\n
+        @param  print_only, prints stats and does not return values
+        """ 
         raise NotImplementedError
 
     def max_accuracy(self):
@@ -268,21 +276,35 @@ class SegmentationMetric(MetricBaseClass):
         
         return self.metric_data["Batch_PixelAcc"][-1], self.metric_data["Batch_mIoU"][-1]
 
-    def _get_epoch_statistics(self, epoch_idx=-1, print_only=True):
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
-        Returns Accuracy Metrics [pixelwise, mIoU]
+        Returns Accuracy Metrics [pixelwise, mIoU, loss]\n
+        @todo   get a specified epoch instead of only currently loaded one\n
+        @param  main_metric, returns mIoU and not Pixel Accuracy\n
+        @param  loss_metric, returns recorded loss\n
+        @param  print_only, prints stats and does not return values
         """ 
-        pixAcc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
+        PixelAcc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
         mIoU = np.asarray(self.metric_data["Batch_mIoU"]).mean()
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
         if print_only:
-            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixAcc, mIoU, loss))
-        return pixAcc, mIoU, loss
+            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (PixelAcc, mIoU, loss))
+        else:
+            if main_metric:
+                ret_val = (mIoU)
+            else:
+                ret_val = (mIoU, PixelAcc)
+            
+            if loss_metric:
+                return ret_val + (loss)
+            else:
+                return ret_val
 
-    def max_accuracy(self):
+    def max_accuracy(self, main_metric=True):
         """
-        Returns highest mIoU and PixelWise Accuracy from per epoch summarised data
-        @output mIoU, PixelWise Accuracy
+        Returns highest mIoU and PixelWise Accuracy from per epoch summarised data.\n
+        @param  main_metric, if true only returns mIoU\n
+        @output PixelWise Accuracy, mIoU
         """
         mIoU = 0
         PixelAcc = 0
@@ -296,7 +318,10 @@ class SegmentationMetric(MetricBaseClass):
                         mIoU = summary_data[1]
         else:
             print("No File Specified for Segmentation Metric Manager")
-        return mIoU, PixelAcc
+        if main_metric:
+            return mIoU
+        else:
+            return PixelAcc, mIoU
 
     def _iou(self, prediction, target):
         # Remove classes from unlabeled pixels in gt image.
@@ -342,7 +367,7 @@ class DepthMetric(MetricBaseClass):
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
     
-    def _get_epoch_statistics(self, epoch_idx=-1, print_only=True):
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
     def max_accuracy(self):
@@ -360,7 +385,7 @@ class BoundaryBoxMetric(MetricBaseClass):
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
     
-    def _get_epoch_statistics(self, epoch_idx=-1, print_only=True):
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
     def max_accuracy(self):
@@ -377,7 +402,7 @@ class ClassificationMetric(MetricBaseClass):
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
     
-    def _get_epoch_statistics(self, epoch_idx=-1, print_only=True):
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
     def max_accuracy(self):

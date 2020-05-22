@@ -83,7 +83,7 @@ class ModelTrainer():
             'optimizer_state_dict':     self._optimizer.state_dict(), 
         }, self._path)
         self._metric.save_epoch()
-        self.best_acc = self._metric.max_accuracy()[0]
+        self.best_acc = self._metric.max_accuracy()
 
     def train_model(self, n_epochs):
         train_start_time = time.time()
@@ -103,7 +103,7 @@ class ModelTrainer():
 
             epoch_end_time = time.time()
 
-            _, mIoU, loss = self._metric._get_epoch_statistics()
+            mIoU, loss = self._metric._get_epoch_statistics()
 
             if (self.best_acc < mIoU or True) and self._checkpoints:
                 self.save_checkpoint()
