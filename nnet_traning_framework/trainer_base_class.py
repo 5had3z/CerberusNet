@@ -42,11 +42,11 @@ class ModelTrainer():
             os.makedirs(Path.cwd() / "torch_models")
         
         if modelname is not None:
-            self._modelname = modelname
-            self._path = Path.cwd() / "torch_models" / modelname
+            self._modelname = modelname 
+            self._path = Path.cwd() / "torch_models" / str(modelname + ".pth")
         else:
             self._modelname = str(datetime.now()).replace(" ", "_")
-            self._path = Path.cwd() / "torch_models" / self._modelname
+            self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
 
         self._metric = SegmentationMetric(19, filename=self._modelname)
             
@@ -103,7 +103,7 @@ class ModelTrainer():
 
             epoch_end_time = time.time()
 
-            _, mIoU, loss = self._metric.get_epoch_statistics()
+            _, mIoU, loss = self._metric._get_epoch_statistics()
 
             if (self.best_acc < mIoU or True) and self._checkpoints:
                 self.save_checkpoint()
@@ -144,7 +144,7 @@ class ModelTrainer():
             loss.backward()
             self._optimizer.step()
 
-            self._metric.add_sample(
+            self._metric._add_sample(
                 torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
@@ -175,7 +175,7 @@ class ModelTrainer():
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                _, miou = self._metric.add_sample(
+                _, miou = self._metric._add_sample(
                     torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
