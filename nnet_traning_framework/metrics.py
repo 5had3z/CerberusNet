@@ -4,15 +4,19 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
+import sys
 import h5py
 import threading
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['SegmentationMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
+__all__ = ['SegmentationMetric', 'DepthMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
 
 class MetricBaseClass(object):
+    """
+    Provides basic functionality for statistics tracking classes
+    """
     def __init__(self, mode='training', filename=None):
         assert mode == 'training' or mode == 'validation'
         self.mode = mode
@@ -54,7 +58,6 @@ class MetricBaseClass(object):
         Save Data to new dataset named by epoch name
         """             
         if self._path is not None:
-            summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
             with h5py.File(self._path, 'a') as hf:
                 # Clear any Cached data from previous first into main
                 if len(list(hf['cache'])) > 0:
@@ -68,6 +71,8 @@ class MetricBaseClass(object):
                 top_group = hf.create_group(group_name)
                 for metric in self.metric_data.keys():
                     top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
+
+                summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
 
                 #   Flush current data as its now in long term storage and we're ready for next dataset
@@ -131,7 +136,6 @@ class MetricBaseClass(object):
         Moves data to temporary location to be permanently saved or deleted later
         """
         if self._path is not None:
-            summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
             with h5py.File(self._path, 'a') as hf:
                 if 'cache' in list(hf):
                     if self.mode in list(hf['cache']):
@@ -147,6 +151,8 @@ class MetricBaseClass(object):
                 top_group = hf.create_group(group_name)
                 for metric in self.metric_data.keys():
                     top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
+
+                summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
 
         else:
@@ -256,6 +262,9 @@ class MetricBaseClass(object):
         raise NotImplementedError
 
 class SegmentationMetric(MetricBaseClass):
+    """
+    Accuracy and Loss Staticstics tracking for semantic segmentation networks
+    """
     def __init__(self, num_classes, mode='training', filename=None):
         super(SegmentationMetric, self).__init__(mode=mode, filename=filename)
         self._n_classes = num_classes
@@ -266,6 +275,9 @@ class SegmentationMetric(MetricBaseClass):
         """
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
+
+        labels = labels.astype('int64') + 1
+        preds = np.squeeze(preds.astype('int64') + 1, 1)
         
         pxthread = threading.Thread(target=self._pixelwise, args=(preds, labels))
         iouthread = threading.Thread(target=self._iou, args=(preds, labels))
@@ -312,10 +324,11 @@ class SegmentationMetric(MetricBaseClass):
             with h5py.File(self._path, 'a') as hf:
                 for epoch in hf['validation']:
                     summary_data = hf['validation/'+epoch+'/Summary'][:]
-                    if summary_data[0] > PixelAcc:
-                        PixelAcc = summary_data[0]
                     if summary_data[1] > mIoU:
                         mIoU = summary_data[1]
+                    if summary_data[0] > PixelAcc:
+                        PixelAcc = summary_data[0]
+                    
         else:
             print("No File Specified for Segmentation Metric Manager")
         if main_metric:
@@ -326,8 +339,6 @@ class SegmentationMetric(MetricBaseClass):
     def _iou(self, prediction, target):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
-        target = target.astype('int64') + 1
-        prediction = prediction.astype('int64') + 1
         prediction = prediction * (target > 0).astype(prediction.dtype)
 
         # Compute area intersection:
@@ -345,9 +356,6 @@ class SegmentationMetric(MetricBaseClass):
     def _pixelwise(self, prediction, target):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
-        prediction = np.squeeze(prediction.astype('int64') + 1, 1)
-        target = target.astype('int64') + 1
-
         correct = 1.0 * np.sum((prediction == target) * (target > 0))
         total_pixels = np.spacing(1) + np.sum(target > 0)
         pixAcc = correct / total_pixels
@@ -357,25 +365,102 @@ class SegmentationMetric(MetricBaseClass):
         self.metric_data = dict(
             Batch_Loss=[],
             Batch_PixelAcc=[],
-            Batch_mIoU=[] )
+            Batch_mIoU=[]
+        )
 
 class DepthMetric(MetricBaseClass):
+    """
+    Accuracy/Error and Loss Staticstics tracking for depth based networks
+    """
     def __init__(self, mode='training', filename=None):
         super(DepthMetric, self).__init__(mode=mode, filename=filename)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
-        raise NotImplementedError
+        n_pixels = gt_depth.size[1]*gt_depth.size[2]
+        difference = pred_depth-gt_depth
+        squared_diff = np.square(difference)
+        log_diff = np.log(pred_depth) - np.log(gt_depth)
+
+        self.metric_data['Batch_Absolute_Relative'].append((np.absolute(difference)/gt_depth).mean())
+        self.metric_data['Batch_Squared_Relative'].append((squared_diff/gt_depth).mean())
+        self.metric_data['Batch_RMSE_Linear'].append(np.linalg.norm(difference, ord=2))
+        self.metric_data['Batch_RMSE_Log'].append(np.linalg.norm(log_diff, ord=2))
+
+        eqn1 = np.mean(np.square(log_diff))
+        eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
+        self.metric_data['Batch_Invariant'].append(eqn1 - eqn2)
     
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
-        raise NotImplementedError
+        """
+        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative, rmse linear, rmse log]\n
+        @todo   get a specified epoch instead of only currently loaded one\n
+        @param  main_metric, returns scale invariant\n
+        @param  loss_metric, returns recorded loss\n
+        @param  print_only, prints stats and does not return values
+        """ 
+        abs_rel = np.asarray(self.metric_data["Batch_Absolute_Relative"]).mean()
+        sqr_rel = np.asarray(self.metric_data["Batch_Squared_Relative"]).mean()
+        rmse_lin = np.asarray(self.metric_data["Batch_RMSE_Linear"]).mean()
+        rmse_log = np.asarray(self.metric_data["Batch_RMSE_Log"]).mean()
+        invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
+        loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+        if print_only:
+            print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\tRMSE Log: %.4f\
+                \tScale Invariant: %.4f\tLoss: %.4f\n" % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
+        else:
+            if main_metric:
+                ret_val = (invariant)
+            else:
+                ret_val = (invariant, abs_rel, sqr_rel, rmse_lin, rmse_log)
+            
+            if loss_metric:
+                return ret_val + (loss)
+            else:
+                return ret_val
 
-    def max_accuracy(self):
-        raise NotImplementedError
+    def max_accuracy(self, main_metric=True):
+        """
+        Returns highest scale invariant, absolute relative, squared relative, 
+        rmse linear, rmse log Accuracy from per epoch summarised data.\n
+        @param  main_metric, if true only returns scale invariant\n
+        @output scale invariant, absolute relative, squared relative, rmse linear, rmse log
+        """
+        invariant = sys.float_info.max
+        abs_rel = sys.float_info.max
+        sqr_rel = sys.float_info.max
+        rmse_lin = sys.float_info.max
+        rmse_log = sys.float_info.max
 
+        if self._path is not None:
+            with h5py.File(self._path, 'a') as hf:
+                for epoch in hf['validation']:
+                    summary_data = hf['validation/'+epoch+'/Summary'][:]
+                    if summary_data[0] < invariant:
+                        invariant = summary_data[0]
+                    if summary_data[1] < abs_rel:
+                        abs_rel = summary_data[1]
+                    if summary_data[2] < sqr_rel:
+                        sqr_rel = summary_data[2]
+                    if summary_data[3] < rmse_lin:
+                        rmse_lin = summary_data[3]
+                    if summary_data[4] < rmse_log:
+                        rmse_log = summary_data[4]
+        else:
+            print("No File Specified for Segmentation Metric Manager")
+        if main_metric:
+            return invariant
+        else:
+            return invariant, abs_rel, sqr_rel, rmse_lin, rmse_log
+        
     def _reset_metric(self):
-        raise NotImplementedError
-
+        self.metric_data = dict(
+            Batch_Absolute_Relative=[],
+            Batch_Squared_Relative=[],
+            Batch_RMSE_Linear=[],
+            Batch_RMSE_Log=[],
+            Batch_Invariant=[]
+        )
 
 class BoundaryBoxMetric(MetricBaseClass):
     def __init__(self, mode='training', filename=None):
@@ -388,7 +473,7 @@ class BoundaryBoxMetric(MetricBaseClass):
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
-    def max_accuracy(self):
+    def max_accuracy(self, main_metric=True):
         raise NotImplementedError
 
     def _reset_metric(self):
@@ -405,7 +490,7 @@ class ClassificationMetric(MetricBaseClass):
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
-    def max_accuracy(self):
+    def max_accuracy(self, main_metric=True):
         raise NotImplementedError
 
     def _reset_metric(self):

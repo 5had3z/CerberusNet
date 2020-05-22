@@ -176,5 +176,5 @@ class ScaleInvariantError(nn.Module):
         n_pixels = target.shape[1]*target.shape[2]
         d = torch.log(pred) - torch.log(target)
         element_wise = torch.pow(d.view(-1, n_pixels),2).mean(dim=1).sum()
-        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/(2*(n_pixels**2))).sum()
+        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/n_pixels**2)).sum()
         return element_wise - scaled_error
