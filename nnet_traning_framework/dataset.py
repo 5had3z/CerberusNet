@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 imgextension = '.png'
 
 class CityScapesDataset(torch.utils.data.Dataset):
-    def __init__(self, directories, output_size=(512,256), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
+    def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
         
         l_img_key = None
         self.enable_right = False

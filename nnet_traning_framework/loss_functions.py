@@ -153,3 +153,28 @@ class FocalLoss2D(nn.Module):
             return loss.mean()
         else:
             return loss.sum()
+
+class DepthAwareLoss(nn.Module):
+    def __init__(self, size_average=True, ignore_index=0):
+        super(DepthAwareLoss, self).__init__()
+        self.size_average = size_average
+        self._ignore_index = ignore_index
+
+    def forward(self, pred, target):
+        regularization = 1 - min(torch.log(pred), torch.log(target)) / max(torch.log(pred), torch.log(target))
+        l_loss = F.smooth_l1_loss(pred, target ,size_average=self.size_average)
+        depth_aware_attention = target / torch.max(target)
+        return ((depth_aware_attention + regularization)*l_loss).mean()
+
+class ScaleInvariantError(nn.Module):
+    def __init__(self, lmda=1, ignore_index=0):
+        super(ScaleInvariantError, self).__init__()
+        self.lmda = lmda
+        self._ignore_index = ignore_index
+
+    def forward(self, pred, target):
+        n_pixels = target.shape[1]*target.shape[2]
+        d = torch.log(pred) - torch.log(target)
+        element_wise = torch.pow(d.view(-1, n_pixels),2).mean(dim=1).sum()
+        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/(2*(n_pixels**2))).sum()
+        return element_wise - scaled_error

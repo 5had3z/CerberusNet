@@ -117,21 +117,14 @@ def Init_Training_MonoFSCNN():
         'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
     }
 
-    testing_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/test'
-    }
-
     datasets = dict(
-        Training=MonoDataset(training_dir),
-        Validation=MonoDataset(validation_dir),
-        Testing=MonoDataset(testing_dir)
+        Training=CityScapesDataset(training_dir),
+        Validation=CityScapesDataset(validation_dir),
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=3, shuffle=False, num_workers=n_workers),
-        Validation=DataLoader(datasets["Validation"], batch_size=3, shuffle=False, num_workers=n_workers),
-        Testing=DataLoader(datasets["Testing"], batch_size=3, shuffle=False, num_workers=n_workers)
+        Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers),
+        Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers),
     )
 
     model_type = int(input(
@@ -180,16 +173,17 @@ def Init_Training_MonoFSCNN():
         "\nLoss Function: "))
     
     if (str_lossfn == 1):
-        lossfn = torch.nn.CrossEntropyLoss()
+        lossfn = torch.nn.CrossEntropyLoss(ignore_index=-1).to(torch.device(device))
         filename+="_CE"
     elif (str_lossfn == 2):
-        lossfn = torch.nn.CrossEntropyLoss(weight=torch.Tensor([0.1,5.0,5.0]).to(torch.device(device)))
-        filename+="_WeightedCE"
+        raise NotImplementedError
+        # lossfn = torch.nn.CrossEntropyLoss(weight=torch.Tensor([0.1,5.0,5.0]).to(torch.device(device)))
+        # filename+="_WeightedCE"
     elif (str_lossfn == 3):
         lossfn = MixSoftmaxCrossEntropyOHEMLoss(aux=False, aux_weight=0.4,ignore_index=-1).to(torch.device(device))
-        filename+="_CustomFn"
+        filename+="_CE_OHEM"
     elif (str_lossfn == 4):
-        lossfn = FocalLoss(3)
+        lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device(device))
         filename+="_Focal"
     else:
         raise AssertionError("Wrong INPUT!")
@@ -202,6 +196,7 @@ def Init_Training_MonoFSCNN():
 from chat_test_model import TestModel
 
 if __name__ == "__main__":
+    print(Path.cwd())
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -229,15 +224,15 @@ if __name__ == "__main__":
         Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "Focal_quater"
+    filename = "Focal_HalfSize"
     fastModel = FastSCNN(19)
     # filename = "Stereo_Seg_Focal"
     # fastModel = Stereo_FastSCNN(19)
     # fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth')) #   Original Weights
     optimizer = torch.optim.SGD(fastModel.parameters(), lr=0.01, momentum=0.9)
     # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
-    lossfn = FocalLoss2D(ignore_index=-1).to(torch.device("cuda"))
+    lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(3)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(59)
