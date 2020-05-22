@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 
-from metrics import SegmentationMetric
+from metrics import MetricBaseClass
 from lr_scheduler import LRScheduler
 
 class ModelTrainer():
@@ -48,7 +48,7 @@ class ModelTrainer():
             self._modelname = str(datetime.now()).replace(" ", "_")
             self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
 
-        self._metric = SegmentationMetric(19, filename=self._modelname)
+        self._metric = MetricBaseClass(filename=self._modelname)
             
         if self._checkpoints:
             self.load_checkpoint()
@@ -98,20 +98,20 @@ class ModelTrainer():
             epoch_start_time = time.time()
 
             # Calculate the training loss, training duration for each epoch, and validation accuracy
-            self._train_epoch(max_epoch)
+            # self._train_epoch(max_epoch)
             self._validate_model(max_epoch)
 
             epoch_end_time = time.time()
 
-            mIoU, loss = self._metric._get_epoch_statistics()
+            accuracy_metric, loss = self._metric._get_epoch_statistics()
 
-            if (self.best_acc < mIoU or True) and self._checkpoints:
+            if (self.best_acc < accuracy_metric or True) and self._checkpoints:
                 self.save_checkpoint()
         
             sys.stdout.flush()
             sys.stdout.write('\rEpoch: '+ str(self.epoch)+
                     ' Training Loss: '+ str(loss)+
-                    ' Testing Accuracy:'+ str(mIoU)+
+                    ' Testing Accuracy:'+ str(accuracy_metric)+
                     ' Time: '+ str(epoch_end_time - epoch_start_time)+ 's')
     
         train_end_time = time.time()
@@ -153,7 +153,7 @@ class ModelTrainer():
             if batch_idx % 10 == 0:
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
-                print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %4.4f sec || Est Time Remain: %4.4f sec' % (
+                print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                         self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
                         self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
         
@@ -175,18 +175,20 @@ class ModelTrainer():
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                _, miou = self._metric._add_sample(
+                self._metric._add_sample(
                     torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
                 )
                 
+                self._metric._get_epoch_statistics
                 if batch_idx % 10 == 0:
+                    batch_acc = self._metric.get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
-                    print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %4.4f sec || Est Time Remain: %4.4f sec' % (
+                    print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                             self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                            miou, loss.item(), time_elapsed, time_remain))
+                            batch_acc, loss.item(), time_elapsed, time_remain))
 
     def _test_model(self):
         raise NotImplementedError

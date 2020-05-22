@@ -167,8 +167,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 disparity = disparity.transpose(Image.FLIP_LEFT_RIGHT)
         
         # random crop
-        crop_h, crop_w = mask.size[0]/2, mask.size[1]/2
-        crop_x, crop_y = random.randint(0, mask.size[1] - crop_w), random.randint(0, mask.size[0] - crop_h)
+        crop_h, crop_w = l_img.size[0]/2, l_img.size[1]/2
+        crop_x, crop_y = random.randint(0, l_img.size[1] - crop_w), random.randint(0, l_img.size[0] - crop_h)
 
         l_img = l_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
@@ -211,8 +211,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
-        disparity[disparity > 0] = (0.209313 * 2262.52) / ((disparity[disparity > 0] - 1) / 256)
-        disparity[disparity == 0] = -1 # Ignore value for loss functions
+        disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
+        disparity[disparity < 2] = -1 # Ignore value for loss functions
         return  torch.FloatTensor(disparity.astype('float32'))
 
     def __len__(self):
@@ -261,13 +261,22 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
 
-    batch_size = 5
+    batch_size = 10
     testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
     image, mask = next(iter(testLoader))
 
     image = image.numpy()
-    mask = mask.numpy()
+    mask = mask[1].numpy()
 
+    for i in range(batch_size):
+        plt.subplot(121)
+        plt.imshow(np.moveaxis(image[i,0:3,:,:],0,2))    
+
+        plt.subplot(122)
+        plt.imshow(mask[i,:,:])
+
+        plt.show()
+    
     # classes = {}
     # for i in range(batch_size):
     #     # # Get class for each individual pixel

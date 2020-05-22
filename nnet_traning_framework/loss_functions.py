@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import numpy as np
 
-__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D']
+__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D', 'DepthAwareLoss', 'ScaleInvariantError']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -117,6 +117,7 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
 class FocalLoss2D(nn.Module):
     """
     https://github.com/doiken23/focal_segmentation/blob/master/focalloss2d.py
+    OG Source but I've modified a bit
     """
     def __init__(self, gamma=0, weight=None, size_average=True, ignore_index=-100):
         super(FocalLoss2D, self).__init__()
@@ -167,14 +168,22 @@ class DepthAwareLoss(nn.Module):
         return ((depth_aware_attention + regularization)*l_loss).mean()
 
 class ScaleInvariantError(nn.Module):
-    def __init__(self, lmda=1, ignore_index=0):
+    def __init__(self, lmda=1, ignore_index=-1):
         super(ScaleInvariantError, self).__init__()
         self.lmda = lmda
         self._ignore_index = ignore_index
 
     def forward(self, pred, target):
+        # Enforce pred and target are equal where there are ignore indicies in target
+        # so that there is no penalty, although not sure how to handle the n valid pixel
+        # count required for loss in an easy manner
         n_pixels = target.shape[1]*target.shape[2]
+        mask_tensor = torch.ones(target.shape).to(torch.device("cuda"))
+        pred = torch.where(target != self._ignore_index, pred.squeeze(dim=1), mask_tensor)
+        target = torch.where(target != self._ignore_index, target, mask_tensor)
+
         d = torch.log(pred) - torch.log(target)
-        element_wise = torch.pow(d.view(-1, n_pixels),2).mean(dim=1).sum()
-        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/n_pixels**2)).sum()
+        img_wise_d = d.view(-1, n_pixels)
+        element_wise = torch.pow(img_wise_d,2).mean(dim=1).sum()
+        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/n_pixels**2).sum()
         return element_wise - scaled_error

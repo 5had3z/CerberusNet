@@ -15,11 +15,12 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
-from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
 
-from fast_scnn import FastSCNN, Stereo_FastSCNN, Classifer
-from dataset import CityScapesDataset, id_vec_generator
+from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
+from fast_scnn import FastSCNN, Stereo_FastSCNN
+from dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
+from metrics import SegmentationMetric
 
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
@@ -30,6 +31,7 @@ class MonoSegmentationTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
+        self._metric = SegmentationMetric(19, filename=self._modelname)
 
     def visualize_output(self):
         """
@@ -145,7 +147,7 @@ def Init_Training_MonoFSCNN():
             {"params": fastModel.learning_to_downsample.parameters(), 'lr':1e-3},
             {"params": fastModel.global_feature_extractor.parameters(), 'lr':1e-3},
             {"params": fastModel.feature_fusion.parameters(), 'lr':1e-3},
-            ]
+        ]
     else:
         raise AssertionError("Wrong INPUT!")
 
@@ -234,6 +236,5 @@ if __name__ == "__main__":
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(59)
-    
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(10)

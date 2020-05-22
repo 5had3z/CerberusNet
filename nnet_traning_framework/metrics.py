@@ -11,7 +11,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['SegmentationMetric', 'DepthMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
+__all__ = ['MetricBaseClass','SegmentationMetric', 'DepthMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
 
 class MetricBaseClass(object):
     """
@@ -21,7 +21,6 @@ class MetricBaseClass(object):
         assert mode == 'training' or mode == 'validation'
         self.mode = mode
         self.metric_data = dict()
-        self._reset_metric()
 
         if filename is not None:
             if filename[-5:] != '.hdf5':
@@ -137,11 +136,10 @@ class MetricBaseClass(object):
         """
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
+                n_cached = 1
                 if 'cache' in list(hf):
                     if self.mode in list(hf['cache']):
                         n_cached = len(list(hf['cache/'+self.mode])) + 1
-                else:
-                    n_cached = 1
 
                 if self.mode in list(hf):
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
@@ -261,6 +259,9 @@ class MetricBaseClass(object):
     def max_accuracy(self):
         raise NotImplementedError
 
+    def get_last_batch(self):
+        raise NotImplementedError
+
 class SegmentationMetric(MetricBaseClass):
     """
     Accuracy and Loss Staticstics tracking for semantic segmentation networks
@@ -268,6 +269,7 @@ class SegmentationMetric(MetricBaseClass):
     def __init__(self, num_classes, mode='training', filename=None):
         super(SegmentationMetric, self).__init__(mode=mode, filename=filename)
         self._n_classes = num_classes
+        self._reset_metric()
 
     def _add_sample(self, preds, labels, loss=None):
         """
@@ -286,8 +288,6 @@ class SegmentationMetric(MetricBaseClass):
         pxthread.join()
         iouthread.join()
         
-        return self.metric_data["Batch_PixelAcc"][-1], self.metric_data["Batch_mIoU"][-1]
-
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
         Returns Accuracy Metrics [pixelwise, mIoU, loss]\n
@@ -335,6 +335,12 @@ class SegmentationMetric(MetricBaseClass):
         else:
             return PixelAcc, mIoU
 
+    def get_last_batch(self, main_metric=True):
+        if main_metric:
+            return self.metric_data["Batch_mIoU"][-1]
+        else:
+            return self.metric_data["Batch_mIoU"][-1], self.metric_data["Batch_PixelAcc"][-1]
+
     def _iou(self, prediction, target):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
@@ -373,9 +379,14 @@ class DepthMetric(MetricBaseClass):
     """
     def __init__(self, mode='training', filename=None):
         super(DepthMetric, self).__init__(mode=mode, filename=filename)
-        raise NotImplementedError
+        self._reset_metric()
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
+        if loss is not None:
+            self.metric_data["Batch_Loss"].append(loss)
+        pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
+        gt_depth = gt_depth[gt_depth > 0]
+
         n_pixels = gt_depth.size[1]*gt_depth.size[2]
         difference = pred_depth-gt_depth
         squared_diff = np.square(difference)
@@ -450,9 +461,20 @@ class DepthMetric(MetricBaseClass):
             return invariant
         else:
             return invariant, abs_rel, sqr_rel, rmse_lin, rmse_log
+
+    def get_last_batch(self, main_metric=True):
+        if main_metric:
+            return self.metric_data["Batch_Invariant"][-1]
+        else:
+            ret_val = ()
+            for key in self.metric_data.keys():
+                if key != "Batch_Loss":
+                    ret_val += (self.metric_data[key][-1],)
+            return ret_val
         
     def _reset_metric(self):
         self.metric_data = dict(
+            Batch_Loss = [],
             Batch_Absolute_Relative=[],
             Batch_Squared_Relative=[],
             Batch_RMSE_Linear=[],
