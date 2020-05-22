@@ -302,15 +302,14 @@ class SegmentationMetric(MetricBaseClass):
         if print_only:
             print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (PixelAcc, mIoU, loss))
         else:
+            ret_val = ()
             if main_metric:
-                ret_val = (mIoU)
+                ret_val += (mIoU,)
             else:
-                ret_val = (mIoU, PixelAcc)
-            
+                ret_val += (mIoU, PixelAcc)
             if loss_metric:
-                return ret_val + (loss)
-            else:
-                return ret_val
+                ret_val += (loss,)
+            return ret_val
 
     def max_accuracy(self, main_metric=True):
         """
@@ -409,15 +408,14 @@ class DepthMetric(MetricBaseClass):
             print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\tRMSE Log: %.4f\
                 \tScale Invariant: %.4f\tLoss: %.4f\n" % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
         else:
+            ret_val = ()
             if main_metric:
-                ret_val = (invariant)
+                ret_val += (invariant,)
             else:
-                ret_val = (invariant, abs_rel, sqr_rel, rmse_lin, rmse_log)
-            
+                ret_val += (invariant, abs_rel, sqr_rel, rmse_lin, rmse_log)
             if loss_metric:
-                return ret_val + (loss)
-            else:
-                return ret_val
+                ret_val += (loss,)
+            return ret_val
 
     def max_accuracy(self, main_metric=True):
         """
