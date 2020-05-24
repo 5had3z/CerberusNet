@@ -6,7 +6,8 @@ from torch.autograd import Variable
 
 import numpy as np
 
-__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D', 'DepthAwareLoss', 'ScaleInvariantError']
+__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D',
+    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -162,7 +163,8 @@ class DepthAwareLoss(nn.Module):
         self._ignore_index = ignore_index
 
     def forward(self, pred, target):
-        regularization = 1 - min(torch.log(pred), torch.log(target)) / max(torch.log(pred), torch.log(target))
+        pred = pred.squeeze(dim=1)
+        regularization = 1 - torch.min(torch.log(pred), torch.log(target)) / torch.max(torch.log(pred), torch.log(target))
         l_loss = F.smooth_l1_loss(pred, target ,size_average=self.size_average)
         depth_aware_attention = target / torch.max(target)
         return ((depth_aware_attention + regularization)*l_loss).mean()
@@ -187,3 +189,21 @@ class ScaleInvariantError(nn.Module):
         element_wise = torch.pow(img_wise_d,2).mean(dim=1).sum()
         scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/n_pixels**2).sum()
         return element_wise - scaled_error
+
+class InvHuberLoss(nn.Module):
+    def __init__(self, ignore_index=-1):
+        super(InvHuberLoss, self).__init__()
+        self.ignore_index = ignore_index
+    
+    def forward(self, x, target):
+        input = F.relu(x.squeeze(dim=1)) # depth predictions must be >=0
+        diff = input - target
+        mask = target != self.ignore_index
+
+        err = torch.abs(diff * mask.float())
+        c = 0.2 * torch.max(err)
+        err2 = (diff**2 + c**2) / (2. * c)
+        mask_err = err <= c
+        mask_err2 = err > c
+        cost = torch.mean(err*mask_err.float() + err2*mask_err2.float())
+        return cost

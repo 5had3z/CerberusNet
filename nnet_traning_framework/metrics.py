@@ -38,14 +38,12 @@ class MetricBaseClass(object):
         Return Number of Epochs Recorded
         """
         with h5py.File(self._path, 'r') as hf:
+            n_epochs = 0
             if 'training' in list(hf):
-                n_epochs = len(list(hf['training']))
-                if 'cache' in list(hf):
-                    if 'training' in list(hf['cache']):
-                        n_epochs += len(list(hf['cache/training']))
-                return n_epochs
-            else:
-                return 0
+                n_epochs += len(list(hf['training']))
+            if 'cache' in list(hf) and 'training' in list(hf['cache']):
+                n_epochs += len(list(hf['cache/training']))
+            return n_epochs
     
     def __del__(self):
         with h5py.File(self._path, 'a') as hf:
@@ -59,7 +57,7 @@ class MetricBaseClass(object):
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
                 # Clear any Cached data from previous first into main
-                if len(list(hf['cache'])) > 0:
+                if 'cache' in list(hf) and len(list(hf['cache'])) > 0:
                     self._flush_to_main()
                 
                 if self.mode in list(hf):
@@ -137,9 +135,8 @@ class MetricBaseClass(object):
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
                 n_cached = 1
-                if 'cache' in list(hf):
-                    if self.mode in list(hf['cache']):
-                        n_cached = len(list(hf['cache/'+self.mode])) + 1
+                if 'cache' in list(hf) and self.mode in list(hf['cache']):
+                    n_cached = len(list(hf['cache/'+self.mode])) + 1
 
                 if self.mode in list(hf):
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
@@ -183,10 +180,10 @@ class MetricBaseClass(object):
             training_data = np.zeros((len(list(hf['training'])), len(metrics)))
             testing_data = np.zeros((len(list(hf['validation'])), len(metrics)))
 
-            for idx, epoch in enumerate(list(hf['training'])):
+            for idx, epoch in enumerate(sorted(list(hf['training']), key=lambda x: int(x[6:]))):
                 training_data[idx] = hf['training/'+epoch+'/Summary'][:]
 
-            for idx, epoch in enumerate(list(hf['validation'])):
+            for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
                 testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
 
             print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
@@ -384,10 +381,11 @@ class DepthMetric(MetricBaseClass):
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
-        pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
-        gt_depth = gt_depth[gt_depth > 0]
+        # pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
+        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != -1]
+        gt_depth = gt_depth[gt_depth != -1]
 
-        n_pixels = gt_depth.size[1]*gt_depth.size[2]
+        n_pixels = gt_depth.size
         difference = pred_depth-gt_depth
         squared_diff = np.square(difference)
         log_diff = np.log(pred_depth) - np.log(gt_depth)
@@ -518,7 +516,8 @@ class ClassificationMetric(MetricBaseClass):
 
 if __name__ == "__main__":
     # filename = "Stereo_Seg_Focal"
-    filename = 'Focal_HalfSize'
-    # filename = "Focal"
+    # filename = 'Focal_HalfSize.hdf5'
+    # filename = 'Focal_quater.hdf5'
+    filename = "Focal"
     metric = SegmentationMetric(19, filename=filename)
-    metric.plot_iteration_data()
+    metric.plot_summary_data()

@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import DepthAwareLoss, ScaleInvariantError
+from loss_functions import DepthAwareLoss, ScaleInvariantError, InvHuberLoss
 from metrics import DepthMetric
 from dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
@@ -31,6 +31,78 @@ class StereoDisparityTrainer(ModelTrainer):
         '''
         super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
         self._metric = DepthMetric(filename=self._modelname)
+
+    def _train_epoch(self, max_epoch):
+        self._model.train()
+
+        self._metric.new_epoch('training')
+
+        start_time = time.time()
+
+        for batch_idx, (data, target) in enumerate(self._training_loader):
+            cur_lr = self._lr_manager(batch_idx)
+            for param_group in self._optimizer.param_groups:
+                param_group['lr'] = cur_lr
+            
+            # Put both image and target onto device
+            data = data.to(self._device)
+            target = target.to(self._device)
+            
+            # Computer loss, use the optimizer object to zero all of the gradients
+            # Then backpropagate and step the optimizer
+            outputs = self._model(data)
+
+            loss = self._loss_function(outputs, target)
+
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._optimizer.step()
+
+            self._metric._add_sample(
+                outputs.cpu().data.numpy(),
+                target.cpu().data.numpy(),
+                loss=loss.item()
+            )
+
+            if batch_idx % 10 == 0:
+                time_elapsed = time.time() - start_time
+                time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
+                print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                        self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+        
+    def _validate_model(self, max_epoch):
+        with torch.no_grad():
+            self._model.eval()
+
+            self._metric.new_epoch('validation')
+
+            start_time = time.time()
+
+            for batch_idx, (data, target) in enumerate(self._validation_loader):
+                # Put both image and target onto device
+                data = data.to(self._device)
+                target = target.to(self._device)
+
+                outputs = self._model(data)
+                
+                # Caculate the loss and accuracy for the predictions
+                loss = self._loss_function(outputs, target)
+
+                self._metric._add_sample(
+                    outputs.cpu().data.numpy(),
+                    target.cpu().numpy(),
+                    loss=loss.item()
+                )
+                
+                self._metric._get_epoch_statistics
+                if batch_idx % 10 == 0:
+                    batch_acc = self._metric.get_last_batch()
+                    time_elapsed = time.time() - start_time
+                    time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
+                    print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                            self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
+                            batch_acc, loss.item(), time_elapsed, time_remain))
 
     def visualize_output(self):
         """
@@ -95,8 +167,8 @@ if __name__ == "__main__":
     filename = "DisparityTest"
     disparityModel = TestModel()
     optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    lossfn = ScaleInvariantError().to(torch.device("cuda"))
+    lossfn = InvHuberLoss().to(torch.device("cuda"))
 
     modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(1)
