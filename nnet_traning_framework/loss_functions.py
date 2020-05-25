@@ -176,28 +176,32 @@ class ScaleInvariantError(nn.Module):
         self._ignore_index = ignore_index
 
     def forward(self, pred, target):
-        # Enforce pred and target are equal where there are ignore indicies in target
-        # so that there is no penalty, although not sure how to handle the n valid pixel
-        # count required for loss in an easy manner
+        #   Number of pixels per image
         n_pixels = target.shape[1]*target.shape[2]
-        mask_tensor = torch.ones(target.shape).to(torch.device("cuda"))
-        pred = torch.where(target != self._ignore_index, pred.squeeze(dim=1), mask_tensor)
-        target = torch.where(target != self._ignore_index, target, mask_tensor)
+        #   Number of valid pixels in target image
+        n_valid = (target != self._ignore_index).view(-1, n_pixels).float().sum(dim=1)
+        #   Predictions should be greater than zero
+        pred_relu = F.relu(pred.squeeze(dim=1))
 
-        d = torch.log(pred) - torch.log(target)
-        img_wise_d = d.view(-1, n_pixels)
-        element_wise = torch.pow(img_wise_d,2).mean(dim=1).sum()
-        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/n_pixels**2).sum()
-        return element_wise - scaled_error
+        #   Log difference betwen prediction and ground truth
+        d = torch.log(pred_relu) - torch.log(target)
+        #   Zero out where missing ground truth
+        d = torch.where(target != self._ignore_index, d, torch.zeros(target.shape))
+        #   Flatten out to batch size x image vector
+        d = d.view(-1, n_pixels)
+        
+        element_wise = (d**2).sum()/n_valid
+        scaled_error = self.lmda*d.sum(dim=1)**2/n_valid**2
+        return (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
     def __init__(self, ignore_index=-1):
         super(InvHuberLoss, self).__init__()
         self.ignore_index = ignore_index
     
-    def forward(self, x, target):
-        input = F.relu(x.squeeze(dim=1)) # depth predictions must be >=0
-        diff = input - target
+    def forward(self, pred, target):
+        pred_relu = F.relu(pred.squeeze(dim=1)) # depth predictions must be >=0
+        diff = pred_relu - target
         mask = target != self.ignore_index
 
         err = torch.abs(diff * mask.float())
@@ -207,3 +211,18 @@ class InvHuberLoss(nn.Module):
         mask_err2 = err > c
         cost = torch.mean(err*mask_err.float() + err2*mask_err2.float())
         return cost
+
+import PIL.Image as Image
+
+if __name__ == '__main__':
+    loss_fn = ScaleInvariantError()
+
+    depth_map = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/test/berlin/berlin_000000_000019_disparity.png')
+    disparity = np.array(depth_map).astype('float32')
+    disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
+    disparity[disparity < 2] = -1 # Ignore value for loss functions
+    uniform = torch.ones(disparity.shape).unsqueeze(0)
+    ground_truth = torch.FloatTensor(disparity.astype('float32')).unsqueeze(0)
+
+    loss = loss_fn(uniform, ground_truth)
+    print(loss)

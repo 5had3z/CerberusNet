@@ -15,7 +15,7 @@ class TestModel(nn.Module):
             nn.Conv2d(16, 32, 5),
             nn.ReLU(),
             nn.ConvTranspose2d(32, 1, 3),
-            nn.Sigmoid()
+            nn.ReLU()
         )
 
     def forward(self, x):
