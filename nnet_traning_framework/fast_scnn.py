@@ -12,6 +12,8 @@ import torch.nn.functional as F
 
 __all__ = ['FastSCNN', 'Stereo_FastSCNN', 'get_fast_scnn']
 
+from nnet_ops import _ConvBNReLU, _DSConv, _DWConv
+
 class FastSCNN(nn.Module):
     def __init__(self, num_classes, aux=False, **kwargs):
         super(FastSCNN, self).__init__()
@@ -69,52 +71,6 @@ class Stereo_FastSCNN(nn.Module):
         x = self.classifier(x)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
         return x
-
-class _ConvBNReLU(nn.Module):
-    """Conv-BN-ReLU"""
-
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, **kwargs):
-        super(_ConvBNReLU, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
-
-class _DSConv(nn.Module):
-    """Depthwise Separable Convolutions"""
-
-    def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DSConv, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(dw_channels, dw_channels, 3, stride, 1, groups=dw_channels, bias=False),
-            nn.BatchNorm2d(dw_channels),
-            nn.ReLU(True),
-            nn.Conv2d(dw_channels, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
-
-class _DWConv(nn.Module):
-    def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DWConv, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(dw_channels, out_channels, 3, stride, 1, groups=dw_channels, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
 
 class LinearBottleneck(nn.Module):
     """LinearBottleneck used in MobileNetV2"""
@@ -256,26 +212,5 @@ class Classifer(nn.Module):
         x = self.conv(x)
         return x
 
-
-def get_fast_scnn(dataset='citys', pretrained=False, root='./weights', map_cpu=False, **kwargs):
-    acronyms = {
-        'pascal_voc': 'voc',
-        'pascal_aug': 'voc',
-        'ade20k': 'ade',
-        'coco': 'coco',
-        'citys': 'citys',
-    }
-    from data_loader import datasets
-    model = FastSCNN(datasets[dataset].NUM_CLASS, **kwargs)
-    if pretrained:
-        if(map_cpu):
-            model.load_state_dict(torch.load(os.path.join(root, 'fast_scnn_%s.pth' % acronyms[dataset]), map_location='cpu'))
-        else:
-            model.load_state_dict(torch.load(os.path.join(root, 'fast_scnn_%s.pth' % acronyms[dataset])))
-    return model
-
-
 if __name__ == '__main__':
-    img = torch.randn(2, 3, 256, 512)
-    model = get_fast_scnn('citys')
-    outputs = model(img)
+    raise NotImplementedError

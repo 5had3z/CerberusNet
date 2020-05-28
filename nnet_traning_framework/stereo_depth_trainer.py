@@ -3,10 +3,7 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os
-import time
-import platform
-import multiprocessing
+import os, sys, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
 
@@ -45,12 +42,13 @@ class StereoDisparityTrainer(ModelTrainer):
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            data = data.to(self._device)
+            left = data[0].to(self._device)
+            right = data[1].to(self._device)
             target = target.to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            outputs = self._model(data)
+            outputs = self._model(left, right)
 
             loss = self._loss_function(outputs, target)
 
@@ -67,7 +65,8 @@ class StereoDisparityTrainer(ModelTrainer):
             if batch_idx % 10 == 0:
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
-                print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                sys.stdout.flush()
+                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                         self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
                         self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
         
@@ -81,10 +80,11 @@ class StereoDisparityTrainer(ModelTrainer):
 
             for batch_idx, (data, target) in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                data = data.to(self._device)
+                left = data[0].to(self._device)
+                right = data[1].to(self._device)
                 target = target.to(self._device)
 
-                outputs = self._model(data)
+                outputs = self._model(left, right)
                 
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
@@ -155,8 +155,8 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training=CityScapesDataset(training_dir),
-        Validation=CityScapesDataset(validation_dir)
+        Training=CityScapesDataset(training_dir, crop_fraction=1),
+        Validation=CityScapesDataset(validation_dir, crop_fraction=1)
     )
 
     dataloaders=dict(
@@ -164,11 +164,12 @@ if __name__ == "__main__":
         Validation=DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "DisparityTest"
+    filename = "ScaleInv"
     disparityModel = TestModel()
     optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    lossfn = InvHuberLoss().to(torch.device("cuda"))
+    lossfn = ScaleInvariantError().to(torch.device("cuda"))
+    # lossfn = InvHuberLoss().to(torch.device("cuda"))
 
     modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(1)
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(1)

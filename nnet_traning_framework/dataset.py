@@ -106,6 +106,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.transform = transform
 
         self.output_size = output_size
+        self.crop_fraction = crop_fraction
 
         self.valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
                               23, 24, 25, 26, 27, 28, 31, 32, 33]
@@ -143,7 +144,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 r_img = self.transform(r_img)
 
         if self.enable_right:
-            image = torch.cat((image, r_img))
+            image = image, r_img
 
         if self.enable_seg and self.enable_disparity:
             label = (mask, disparity)
@@ -167,7 +168,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 disparity = disparity.transpose(Image.FLIP_LEFT_RIGHT)
         
         # random crop
-        crop_h, crop_w = l_img.size[0]/2, l_img.size[1]/2
+        crop_h, crop_w = int(l_img.size[0]/self.crop_fraction), int(l_img.size[1]/self.crop_fraction)
         crop_x, crop_y = random.randint(0, l_img.size[1] - crop_w), random.randint(0, l_img.size[0] - crop_h)
 
         l_img = l_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
@@ -190,7 +191,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             mask = mask.resize(self.output_size, Image.NEAREST)
             mask = self._mask_transform(mask)
         if self.enable_disparity:
-            disparity = disparity.resize(self.output_size, Image.BILINEAR)
+            disparity = disparity.resize(self.output_size, Image.NEAREST)
             disparity = self._depth_transform(disparity)
         
         return l_img, r_img, mask, disparity
@@ -252,7 +253,7 @@ if __name__ == '__main__':
         'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
     }
 
-    test_dset = CityScapesDataset(full_training_data)
+    test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
     
     print(len(test_dset.l_img))
     print(len(test_dset.mask))

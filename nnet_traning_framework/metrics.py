@@ -382,7 +382,7 @@ class DepthMetric(MetricBaseClass):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
         # pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
-        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != -1]
+        pred_depth = pred_depth[gt_depth != -1]
         gt_depth = gt_depth[gt_depth != -1]
 
         n_pixels = gt_depth.size
@@ -518,6 +518,6 @@ if __name__ == "__main__":
     # filename = "Stereo_Seg_Focal"
     # filename = 'Focal_HalfSize.hdf5'
     # filename = 'Focal_quater.hdf5'
-    filename = "Focal"
+    filename = "ScaleInv"
     metric = SegmentationMetric(19, filename=filename)
     metric.plot_summary_data()

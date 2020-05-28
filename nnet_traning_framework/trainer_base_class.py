@@ -35,6 +35,7 @@ class ModelTrainer():
         self._model = model.to(self._device)
         self._optimizer = optimizer
         self._loss_function = loss_fn
+        self._base_lr = learning_rate
 
         self._checkpoints = checkpoints
 
@@ -90,7 +91,7 @@ class ModelTrainer():
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager = LRScheduler(mode='poly', base_lr=0.01, nepochs=n_epochs,
+        self._lr_manager = LRScheduler(mode='poly', base_lr=self._base_lr, nepochs=n_epochs,
                                 iters_per_epoch=len(self._training_loader), power=0.9)
 
         while self.epoch < max_epoch:
@@ -112,7 +113,7 @@ class ModelTrainer():
             sys.stdout.write('\rEpoch: '+ str(self.epoch)+
                     ' Training Loss: '+ str(loss)+
                     ' Testing Accuracy:'+ str(accuracy_metric)+
-                    ' Time: '+ str(epoch_end_time - epoch_start_time)+ 's')
+                    ' Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
     
         train_end_time = time.time()
 

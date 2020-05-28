@@ -6,6 +6,8 @@ import torch.nn.functional as F
 
 __all__ = ['TestModel']
 
+from nnet_ops import _ConvBNReLU, _DSConv, _DWConv
+
 class TestModel(nn.Module):
     def __init__(self, aux=False, **kwargs):
         super(TestModel, self).__init__()
@@ -18,8 +20,8 @@ class TestModel(nn.Module):
             nn.ReLU()
         )
 
-    def forward(self, x):
-        size = x.size()[2:]
-        x = self.model(x)
+    def forward(self, left, right):
+        size = left.size()[2:]
+        x = self.model(torch.cat((left, right),dim=1))
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
         return x
