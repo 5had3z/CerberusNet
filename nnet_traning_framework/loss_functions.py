@@ -184,8 +184,7 @@ class ScaleInvariantError(nn.Module):
         #   Prevent infs and nans
         pred[pred<=0] = 0.00001
         target[target==self._ignore_index] = 0.00001
-        target.unsqueeze_(dim=1)
-        d = torch.log(pred) - torch.log(target)
+        d = torch.log(pred.squeeze(dim=1)) - torch.log(target)
 
         element_wise = torch.pow(d.view(-1, n_pixels),2).sum(dim=1)/n_valid
         scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/(2*(n_valid**2)))

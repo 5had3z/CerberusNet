@@ -33,6 +33,7 @@ class StereoDisparityTrainer(ModelTrainer):
         self._model.train()
 
         self._metric.new_epoch('training')
+        torch.autograd.set_detect_anomaly(True)
 
         start_time = time.time()
 
@@ -111,15 +112,16 @@ class StereoDisparityTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             image, disparity = next(iter(self._validation_loader))
-            image = image.to(self._device)
+            left = image[0].to(self._device)
+            right = image[1].to(self._device)
 
             start_time = time.time()
-            pred = self._model(image)
+            pred = self._model(left, right)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(image[i,0:3,:,:].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
@@ -133,7 +135,7 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from chat_test_model import TestModel
+from chat_test_model import StereoDepthSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -160,16 +162,17 @@ if __name__ == "__main__":
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training=DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation=DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "ScaleInv"
-    disparityModel = TestModel()
+    filename = "CustomModel_InvHuber"
+    disparityModel = StereoDepthSeparated()
     optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    lossfn = ScaleInvariantError().to(torch.device("cuda"))
-    # lossfn = InvHuberLoss().to(torch.device("cuda"))
+    # lossfn = DepthAwareLoss().to(torch.device("cuda"))
+    # lossfn = ScaleInvariantError().to(torch.device("cuda"))
+    lossfn = InvHuberLoss().to(torch.device("cuda"))
 
     modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(1)

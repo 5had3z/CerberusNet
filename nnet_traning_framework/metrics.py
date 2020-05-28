@@ -382,7 +382,7 @@ class DepthMetric(MetricBaseClass):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
         # pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
-        pred_depth = pred_depth[gt_depth != -1]
+        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != -1]
         gt_depth = gt_depth[gt_depth != -1]
 
         n_pixels = gt_depth.size
