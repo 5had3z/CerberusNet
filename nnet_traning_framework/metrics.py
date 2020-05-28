@@ -518,6 +518,6 @@ if __name__ == "__main__":
     # filename = "Stereo_Seg_Focal"
     # filename = 'Focal_HalfSize.hdf5'
     # filename = 'Focal_quater.hdf5'
-    filename = "ScaleInv"
-    metric = SegmentationMetric(19, filename=filename)
+    filename = "CustomModel_InvHuber"
+    metric = DepthMetric(filename=filename)
     metric.plot_summary_data()

@@ -101,7 +101,8 @@ class StereoDisparityTrainer(ModelTrainer):
                     batch_acc = self._metric.get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
-                    print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                    sys.stdout.flush()
+                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                             self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
                             batch_acc, loss.item(), time_elapsed, time_remain))
 
@@ -121,15 +122,15 @@ class StereoDisparityTrainer(ModelTrainer):
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(left[i,0:3,:,40:980].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(disparity[i,:,:])
+                plt.imshow(disparity[i,:,40:980])
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,:])
+                plt.imshow(pred.cpu().numpy()[i,0,:,40:980])
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
