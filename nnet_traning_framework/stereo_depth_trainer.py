@@ -122,15 +122,15 @@ class StereoDisparityTrainer(ModelTrainer):
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(left[i,0:3,:,40:980].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(disparity[i,:,40:980])
+                plt.imshow(disparity[i,:,:])
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,40:980])
+                plt.imshow(pred.cpu().numpy()[i,0,:,:])
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))

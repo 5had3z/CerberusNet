@@ -214,6 +214,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
         disparity = np.array(disparity).astype('float32')
         disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
         disparity[disparity < 2] = -1 # Ignore value for loss functions
+        # Ignore sides and bottom of frame as these are patchy/glitchy
+        side_clip   = int(disparity.shape[1]/20)
+        bottom_clip = int(disparity.shape[0]/10)
+        disparity[-bottom_clip:-1,:]    = -1    #bottom
+        disparity[:,:side_clip]         = -1    #lhs
+        disparity[:,-side_clip:-1]      = -1    #rhs
         return  torch.FloatTensor(disparity.astype('float32'))
 
     def __len__(self):
@@ -266,7 +272,7 @@ if __name__ == '__main__':
     testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
     image, mask = next(iter(testLoader))
 
-    image = image.numpy()
+    image = image[0].numpy()
     mask = mask[1].numpy()
 
     for i in range(batch_size):
