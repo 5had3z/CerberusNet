@@ -13,21 +13,21 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import DepthAwareLoss, ScaleInvariantError, InvHuberLoss
-from metrics import DepthMetric
+from loss_functions import FocalLoss2D
+from metrics import SegmentationMetric
 from dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
-__all__ = ['StereoDisparityTrainer']
+__all__ = ['StereoSegmentationTrainer']
 
-class StereoDisparityTrainer(ModelTrainer):
+class StereoSegmentationTrainer(ModelTrainer):
     def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
-        self._metric = DepthMetric(filename=self._modelname)
+        self._metric = SegmentationMetric(19, filename=self._modelname)
 
     def _train_epoch(self, max_epoch):
         self._model.train()
@@ -58,7 +58,7 @@ class StereoDisparityTrainer(ModelTrainer):
             self._optimizer.step()
 
             self._metric._add_sample(
-                outputs.cpu().data.numpy(),
+                torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
             )
@@ -91,7 +91,7 @@ class StereoDisparityTrainer(ModelTrainer):
                 loss = self._loss_function(outputs, target)
 
                 self._metric._add_sample(
-                    outputs.cpu().data.numpy(),
+                    torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
                 )
@@ -120,6 +120,7 @@ class StereoDisparityTrainer(ModelTrainer):
             pred = self._model(left, right)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
+            pred = torch.argmax(pred,dim=1,keepdim=True)
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
                 plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
@@ -130,13 +131,13 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(torch.exp(pred).cpu().numpy()[i,0,:,:])
+                plt.imshow(pred.cpu().numpy()[i,0,:,:])
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from chat_test_model import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from chat_test_model import StereoSegmentaionSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -148,18 +149,18 @@ if __name__ == "__main__":
     training_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
         'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
     }
 
     validation_dir = {
         'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
         'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/val'
+        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
     }
 
     datasets = dict(
-        Training=CityScapesDataset(training_dir, crop_fraction=1),
-        Validation=CityScapesDataset(validation_dir, crop_fraction=1)
+        Training=CityScapesDataset(training_dir, crop_fraction=2),
+        Validation=CityScapesDataset(validation_dir, crop_fraction=2)
     )
 
     dataloaders=dict(
@@ -167,13 +168,11 @@ if __name__ == "__main__":
         Validation=DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "ReLuModel_ScaleInv_2"
-    disparityModel = StereoDepthSeparatedExp()
-    optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ScaleInvariantError().to(torch.device("cuda"))
-    # lossfn = InvHuberLoss().to(torch.device("cuda"))
+    filename = "StereoSeg_Focal"
+    Model = StereoSegmentaionSeparated()
+    optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
+    lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
-    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
     modeltrainer.visualize_output()
-    # modeltrainer.train_model(8)
+    # modeltrainer.train_model(15)

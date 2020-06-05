@@ -4,18 +4,52 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['StereoDepthSeparated']
+__all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp', 'StereoSegmentaionSeparated']
 
 from nnet_ops import _ConvBNReLU, _DSConv, _DWConv
 
-class StereoDepthSeparated(nn.Module):
+class StereoDepthSeparatedReLu(nn.Module):
     def __init__(self, aux=False, **kwargs):
-        super(StereoDepthSeparated, self).__init__()
+        super(StereoDepthSeparatedReLu, self).__init__()
         self.left_ds        = SeparateDownsample()
         self.right_ds       = SeparateDownsample()
         self.ds_fusion      = DownsampleFusionModule(48)
         self.global_fusion  = GlobalFusionModule(48, 128, 48)
-        self.upsample       = UpsampleDepthOutput(48)
+        self.upsample       = UpsampleDepthOutputReLu(48)
+
+    def forward(self, left, right):
+        left            = self.left_ds(left)
+        right           = self.right_ds(right)
+        stereo_fused    = self.ds_fusion(left, right)
+        global_fused    = self.global_fusion(left, right, stereo_fused)
+        out             = self.upsample(global_fused)
+        return out
+
+class StereoDepthSeparatedExp(nn.Module):
+    def __init__(self, aux=False, **kwargs):
+        super(StereoDepthSeparatedExp, self).__init__()
+        self.left_ds        = SeparateDownsample()
+        self.right_ds       = SeparateDownsample()
+        self.ds_fusion      = DownsampleFusionModule(48)
+        self.global_fusion  = GlobalFusionModule(48, 128, 48)
+        self.upsample       = UpsampleDepthOutputReLu(48)
+
+    def forward(self, left, right):
+        left            = self.left_ds(left)
+        right           = self.right_ds(right)
+        stereo_fused    = self.ds_fusion(left, right)
+        global_fused    = self.global_fusion(left, right, stereo_fused)
+        out             = self.upsample(global_fused)
+        return out
+
+class StereoSegmentaionSeparated(nn.Module):
+    def __init__(self, classes=19, aux=False, **kwargs):
+        super(StereoSegmentaionSeparated, self).__init__()
+        self.left_ds        = SeparateDownsample()
+        self.right_ds       = SeparateDownsample()
+        self.ds_fusion      = DownsampleFusionModule(48)
+        self.global_fusion  = GlobalFusionModule(48, 128, 48)
+        self.upsample       = UpsampleSegmentation(48,19)
 
     def forward(self, left, right):
         left            = self.left_ds(left)
@@ -77,12 +111,37 @@ class GlobalFusionModule(nn.Module):
         stereo_fused = self.conv_fuse(torch.cat((fused_model, left_downsample, right_downsample),dim=1))
         return self.relu(stereo_fused)
 
-class UpsampleDepthOutput(nn.Module):
-    """Fusion of each downsampled stereo images"""
+class UpsampleDepthOutputReLu(nn.Module):
+    """Fusion of each downsampled stereo images with ReLu Output"""
     def __init__(self, in_channels, scale_factor = 4,**kwargs):
-        super(UpsampleDepthOutput, self).__init__()
+        super(UpsampleDepthOutputReLu, self).__init__()
         self.scale_factor = scale_factor
         self.conv_fuse = nn.Conv2d(in_channels, 1, 1)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        upsampled = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear', align_corners=True)
+        upsampled = self.conv_fuse(upsampled)
+        return self.relu(upsampled)
+
+class UpsampleDepthOutputExp(nn.Module):
+    """Fusion of each downsampled stereo images with Exponential Output"""
+    def __init__(self, in_channels, scale_factor = 4,**kwargs):
+        super(UpsampleDepthOutputExp, self).__init__()
+        self.scale_factor = scale_factor
+        self.conv_fuse = nn.Conv2d(in_channels, 1, 1)
+
+    def forward(self, x):
+        upsampled = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear', align_corners=True)
+        upsampled = self.conv_fuse(upsampled)
+        return torch.exp(upsampled)
+
+class UpsampleSegmentation(nn.Module):
+    """Fusion of each downsampled stereo images with Class Segmentation"""
+    def __init__(self, in_channels, classes = 19, scale_factor = 4,**kwargs):
+        super(UpsampleSegmentation, self).__init__()
+        self.scale_factor = scale_factor
+        self.conv_fuse = nn.Conv2d(in_channels, classes, 1)
         self.relu = nn.ReLU()
 
     def forward(self, x):

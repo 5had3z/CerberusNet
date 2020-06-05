@@ -383,6 +383,7 @@ class DepthMetric(MetricBaseClass):
             self.metric_data["Batch_Loss"].append(loss)
         # pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
         pred_depth = pred_depth.squeeze(axis=1)[gt_depth != -1]
+        pred_depth[pred_depth <= 0] = 0.00001
         gt_depth = gt_depth[gt_depth != -1]
 
         n_pixels = gt_depth.size
@@ -390,10 +391,10 @@ class DepthMetric(MetricBaseClass):
         squared_diff = np.square(difference)
         log_diff = np.log(pred_depth) - np.log(gt_depth)
 
-        self.metric_data['Batch_Absolute_Relative'].append((np.absolute(difference)/gt_depth).mean())
-        self.metric_data['Batch_Squared_Relative'].append((squared_diff/gt_depth).mean())
-        self.metric_data['Batch_RMSE_Linear'].append(np.linalg.norm(difference, ord=2))
-        self.metric_data['Batch_RMSE_Log'].append(np.linalg.norm(log_diff, ord=2))
+        self.metric_data['Batch_Absolute_Relative'].append(np.mean(np.absolute(difference)/gt_depth))
+        self.metric_data['Batch_Squared_Relative'].append(np.mean(squared_diff/gt_depth))
+        self.metric_data['Batch_RMSE_Linear'].append(np.sqrt(np.mean(squared_diff)))
+        self.metric_data['Batch_RMSE_Log'].append(np.sqrt(np.mean(np.square(log_diff))))
 
         eqn1 = np.mean(np.square(log_diff))
         eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
@@ -515,9 +516,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    # filename = "Stereo_Seg_Focal"
-    # filename = 'Focal_HalfSize.hdf5'
-    # filename = 'Focal_quater.hdf5'
-    filename = "CustomModel_InvHuber"
+    filename = "StereoSeg_Focal"
     metric = DepthMetric(filename=filename)
     metric.plot_summary_data()

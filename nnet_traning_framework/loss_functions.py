@@ -182,13 +182,13 @@ class ScaleInvariantError(nn.Module):
         n_valid = (target != self._ignore_index).view(-1, n_pixels).float().sum(dim=1)
 
         #   Prevent infs and nans
-        pred[pred<=0] = 0.00001
+        # pred[pred<=0] = 0.00001
         target[target==self._ignore_index] = 0.00001
-        d = torch.log(pred.squeeze(dim=1)) - torch.log(target)
+        d = pred.squeeze(dim=1) - torch.log(target)
 
         element_wise = torch.pow(d.view(-1, n_pixels),2).sum(dim=1)/n_valid
         scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/(2*(n_valid**2)))
-        return (element_wise - scaled_error).sum()
+        return (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
     def __init__(self, ignore_index=-1):
