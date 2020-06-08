@@ -130,13 +130,14 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(torch.exp(pred).cpu().numpy()[i,0,:,:])
+                plt.imshow(pred.cpu().numpy()[i,0,:,:])
+                # plt.imshow(torch.exp(pred).cpu().numpy()[i,0,:,:])
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from chat_test_model import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from StereoModels import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -145,30 +146,30 @@ if __name__ == "__main__":
     else:
         n_workers = multiprocessing.cpu_count()
 
+    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
     training_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
+        'images'        : base_dir + 'leftImg8bit/train',
+        'right_images'  : base_dir + 'rightImg8bit/train',
+        'disparity'     : base_dir + 'disparity/train'
     }
-
     validation_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/val'
+        'images'        : base_dir + 'leftImg8bit/val',
+        'right_images'  : base_dir + 'rightImg8bit/val',
+        'disparity'     : base_dir + 'disparity/val'
     }
 
     datasets = dict(
-        Training=CityScapesDataset(training_dir, crop_fraction=1),
-        Validation=CityScapesDataset(validation_dir, crop_fraction=1)
+        Training    = CityScapesDataset(training_dir, crop_fraction=1),
+        Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
     )
 
-    dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+    dataloaders = dict(
+        Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "ReLuModel_ScaleInv_2"
-    disparityModel = StereoDepthSeparatedExp()
+    filename = "ReLuModel_ScaleInv"
+    disparityModel = StereoDepthSeparatedReLu()
     optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
     # lossfn = DepthAwareLoss().to(torch.device("cuda"))
     lossfn = ScaleInvariantError().to(torch.device("cuda"))
@@ -176,4 +177,4 @@ if __name__ == "__main__":
 
     modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
     modeltrainer.visualize_output()
-    # modeltrainer.train_model(8)
+    # modeltrainer.train_model(5)

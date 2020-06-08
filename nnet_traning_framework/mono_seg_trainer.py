@@ -276,16 +276,14 @@ if __name__ == "__main__":
     else:
         n_workers = multiprocessing.cpu_count()
 
+    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
     training_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        # 'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
+        'images': base_dir + 'leftImg8bit/train',
+        'labels': base_dir + 'gtFine/train'
     }
-
     validation_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
-        # 'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
+        'images': base_dir + 'leftImg8bit/val',
+        'labels': base_dir + 'gtFine/val'
     }
 
     datasets = dict(

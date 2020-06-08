@@ -52,12 +52,14 @@ class StereoSegmentaionSeparated(nn.Module):
         self.upsample       = UpsampleSegmentation(48,19)
 
     def forward(self, left, right):
+        assert left.size() == right.size(), 'left and right shape mismatch'
+        out_size = left.size()[2:]
         left            = self.left_ds(left)
         right           = self.right_ds(right)
         stereo_fused    = self.ds_fusion(left, right)
         global_fused    = self.global_fusion(left, right, stereo_fused)
         out             = self.upsample(global_fused)
-        return out
+        return F.interpolate(out, out_size, mode='bilinear', align_corners=True)
 
 class SeparateDownsample(nn.Module):
     """ Downsample Module for each Image """
@@ -138,13 +140,15 @@ class UpsampleDepthOutputExp(nn.Module):
 
 class UpsampleSegmentation(nn.Module):
     """Fusion of each downsampled stereo images with Class Segmentation"""
-    def __init__(self, in_channels, classes = 19, scale_factor = 4,**kwargs):
+    def __init__(self, in_channels, classes = 19, stride = 1,**kwargs):
         super(UpsampleSegmentation, self).__init__()
-        self.scale_factor = scale_factor
-        self.conv_fuse = nn.Conv2d(in_channels, classes, 1)
-        self.relu = nn.ReLU()
+        self.dsconv = _DSConv(in_channels, in_channels, stride)
+        self.conv_out = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Conv2d(in_channels, classes, 1)
+        )
 
     def forward(self, x):
-        upsampled = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear', align_corners=True)
-        upsampled = self.conv_fuse(upsampled)
-        return self.relu(upsampled)
+        x = self.dsconv(x)
+        x = self.conv_out(x)
+        return x

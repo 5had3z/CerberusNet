@@ -137,7 +137,7 @@ class StereoSegmentationTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from chat_test_model import StereoSegmentaionSeparated
+from StereoModels import StereoSegmentaionSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -146,33 +146,35 @@ if __name__ == "__main__":
     else:
         n_workers = multiprocessing.cpu_count()
 
+    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
+
     training_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
+        'images'        : base_dir + 'leftImg8bit/train',
+        'right_images'  : base_dir + 'rightImg8bit/train',
+        'labels'        : base_dir + 'gtFine/train'
     }
 
     validation_dir = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/val',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/val',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/val'
+        'images'        : base_dir + 'leftImg8bit/val',
+        'right_images'  : base_dir + 'rightImg8bit/val',
+        'labels'        : base_dir + 'gtFine/val'
     }
 
     datasets = dict(
-        Training=CityScapesDataset(training_dir, crop_fraction=2),
-        Validation=CityScapesDataset(validation_dir, crop_fraction=2)
+        Training    = CityScapesDataset(training_dir, crop_fraction=2),
+        Validation  = CityScapesDataset(validation_dir, crop_fraction=2)
     )
 
     dataloaders=dict(
-        Training=DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "StereoSeg_Focal"
+    filename = "StereoSeg1.1_Focal"
     Model = StereoSegmentaionSeparated()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(15)
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(1)

@@ -6,7 +6,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import os
 import sys
 import h5py
-import threading
+import multiprocessing
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -278,12 +278,16 @@ class SegmentationMetric(MetricBaseClass):
         labels = labels.astype('int64') + 1
         preds = np.squeeze(preds.astype('int64') + 1, 1)
         
-        pxthread = threading.Thread(target=self._pixelwise, args=(preds, labels))
-        iouthread = threading.Thread(target=self._iou, args=(preds, labels))
+        rcv_px, send_px = multiprocessing.Pipe(False)
+        pxthread = multiprocessing.Process(target=self._pixelwise, args=(preds, labels, send_px))
+        rcv_iou, send_iou = multiprocessing.Pipe(False)
+        iouthread = multiprocessing.Process(target=self._iou, args=(preds, labels, send_iou))
         pxthread.start()
         iouthread.start()
         pxthread.join()
         iouthread.join()
+        self.metric_data["Batch_mIoU"].append(rcv_iou.recv())
+        self.metric_data["Batch_PixelAcc"].append(rcv_px.recv())
         
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
@@ -293,19 +297,24 @@ class SegmentationMetric(MetricBaseClass):
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
         """ 
-        PixelAcc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
-        mIoU = np.asarray(self.metric_data["Batch_mIoU"]).mean()
-        loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+
         if print_only:
+            PixelAcc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
+            mIoU = np.asarray(self.metric_data["Batch_mIoU"]).mean()
+            loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
             print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (PixelAcc, mIoU, loss))
         else:
             ret_val = ()
             if main_metric:
-                ret_val += (mIoU,)
+                invariant = np.asarray(self.metric_data["Batch_mIoU"]).mean()
+                ret_val += (invariant,)
+                if loss_metric:
+                    loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+                    ret_val += (loss,)
             else:
-                ret_val += (mIoU, PixelAcc)
-            if loss_metric:
-                ret_val += (loss,)
+                for metric in self.metric_data.keys():
+                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                    ret_val += (mean_data,)
             return ret_val
 
     def max_accuracy(self, main_metric=True):
@@ -338,7 +347,7 @@ class SegmentationMetric(MetricBaseClass):
         else:
             return self.metric_data["Batch_mIoU"][-1], self.metric_data["Batch_PixelAcc"][-1]
 
-    def _iou(self, prediction, target):
+    def _iou(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
         prediction = prediction * (target > 0).astype(prediction.dtype)
@@ -353,15 +362,15 @@ class SegmentationMetric(MetricBaseClass):
         area_union = area_pred + area_lab - area_intersection
         
         mIoU = (1.0 * area_intersection / (np.spacing(1) + area_union)).mean()
-        self.metric_data["Batch_mIoU"].append(mIoU)
+        ret_val.send(mIoU)
     
-    def _pixelwise(self, prediction, target):
+    def _pixelwise(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
         correct = 1.0 * np.sum((prediction == target) * (target > 0))
         total_pixels = np.spacing(1) + np.sum(target > 0)
         pixAcc = correct / total_pixels
-        self.metric_data["Batch_PixelAcc"].append(pixAcc)
+        ret_val.send(pixAcc)
     
     def _reset_metric(self):
         self.metric_data = dict(
@@ -408,23 +417,28 @@ class DepthMetric(MetricBaseClass):
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
         """ 
-        abs_rel = np.asarray(self.metric_data["Batch_Absolute_Relative"]).mean()
-        sqr_rel = np.asarray(self.metric_data["Batch_Squared_Relative"]).mean()
-        rmse_lin = np.asarray(self.metric_data["Batch_RMSE_Linear"]).mean()
-        rmse_log = np.asarray(self.metric_data["Batch_RMSE_Log"]).mean()
-        invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
-        loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+
         if print_only:
+            abs_rel = np.asarray(self.metric_data["Batch_Absolute_Relative"]).mean()
+            sqr_rel = np.asarray(self.metric_data["Batch_Squared_Relative"]).mean()
+            rmse_lin = np.asarray(self.metric_data["Batch_RMSE_Linear"]).mean()
+            rmse_log = np.asarray(self.metric_data["Batch_RMSE_Log"]).mean()
+            invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
+            loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
             print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\tRMSE Log: %.4f\
                 \tScale Invariant: %.4f\tLoss: %.4f\n" % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
         else:
             ret_val = ()
             if main_metric:
+                invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
                 ret_val += (invariant,)
+                if loss_metric:
+                    loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+                    ret_val += (loss,)
             else:
-                ret_val += (invariant, abs_rel, sqr_rel, rmse_lin, rmse_log)
-            if loss_metric:
-                ret_val += (loss,)
+                for metric in self.metric_data.keys():
+                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                    ret_val += (mean_data,)
             return ret_val
 
     def max_accuracy(self, main_metric=True):
@@ -516,6 +530,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "StereoSeg_Focal"
+    filename = "StereoSeg1.1_Focal"
     metric = DepthMetric(filename=filename)
     metric.plot_summary_data()
