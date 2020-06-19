@@ -18,8 +18,8 @@ import torchvision.transforms as transforms
 from metrics import MetricBaseClass
 from lr_scheduler import LRScheduler
 
-class ModelTrainer():
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
+class ModelTrainer(object):
+    def __init__(self, model, optimizer, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -30,11 +30,10 @@ class ModelTrainer():
         self._validation_loader = dataloaders["Validation"]
 
         self.epoch = 0
-        self.best_acc = 0.0
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
-        self._loss_function = loss_fn
+        
         self._base_lr = learning_rate
 
         self._checkpoints = checkpoints
@@ -44,12 +43,10 @@ class ModelTrainer():
         
         if modelname is not None:
             self._modelname = modelname 
-            self._path = Path.cwd() / "torch_models" / str(modelname + ".pth")
         else:
             self._modelname = str(datetime.now()).replace(" ", "_")
-            self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
-
-        self._metric = MetricBaseClass(filename=self._modelname)
+        
+        self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
             
         if self._checkpoints:
             self.load_checkpoint()
@@ -65,10 +62,9 @@ class ModelTrainer():
         '''
         if os.path.isfile(self._path):
             #Load Checkpoint
-            check_point = torch.load(self._path, map_location=torch.device(self._device))
-            self._model.load_state_dict(check_point['model_state_dict'])
-            self._optimizer.load_state_dict(check_point['optimizer_state_dict'])
-            self.epoch = len(self._metric)
+            checkpoint = torch.load(self._path, map_location=torch.device(self._device))
+            self._model.load_state_dict(checkpoint['model_state_dict'])
+            self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             sys.stdout.write("\nCheckpoint loaded, starting from epoch:" + str(self.epoch) + "\n")
         else:
             #Raise Error if it does not exist
@@ -83,8 +79,6 @@ class ModelTrainer():
             'model_state_dict':         self._model.state_dict(),
             'optimizer_state_dict':     self._optimizer.state_dict(), 
         }, self._path)
-        self._metric.save_epoch()
-        self.best_acc = self._metric.max_accuracy()
 
     def train_model(self, n_epochs):
         train_start_time = time.time()
@@ -104,16 +98,12 @@ class ModelTrainer():
 
             epoch_end_time = time.time()
 
-            accuracy_metric, loss = self._metric._get_epoch_statistics()
-
-            if (self.best_acc < accuracy_metric or True) and self._checkpoints:
+            if self._checkpoints:
                 self.save_checkpoint()
         
             sys.stdout.flush()
-            sys.stdout.write('\rEpoch: '+ str(self.epoch)+
-                    ' Training Loss: '+ str(loss)+
-                    ' Testing Accuracy:'+ str(accuracy_metric)+
-                    ' Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
+            sys.stdout.write('\rEpoch '+ str(self.epoch)+
+                    'Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
     
         train_end_time = time.time()
 

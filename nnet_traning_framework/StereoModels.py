@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp', 'StereoSegmentaionSeparated']
+__all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp',
+    'StereoSegmentaionSeparated', 'StereoDepthSegSeparated']
 
 from nnet_ops import _ConvBNReLU, _DSConv, _DWConv
 
@@ -49,7 +50,7 @@ class StereoSegmentaionSeparated(nn.Module):
         self.right_ds       = SeparateDownsample()
         self.ds_fusion      = DownsampleFusionModule(48)
         self.global_fusion  = GlobalFusionModule(48, 128, 48)
-        self.upsample       = UpsampleSegmentation(48,19)
+        self.upsample       = UpsampleSegmentation(48, classes=classes)
 
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
@@ -60,6 +61,35 @@ class StereoSegmentaionSeparated(nn.Module):
         global_fused    = self.global_fusion(left, right, stereo_fused)
         out             = self.upsample(global_fused)
         return F.interpolate(out, out_size, mode='bilinear', align_corners=True)
+
+class StereoDepthSegSeparated(nn.Module):
+    def __init__(self, classes=19, aux=False, **kwargs):
+        super(StereoDepthSegSeparated, self).__init__()
+        self.left_ds        = SeparateDownsample()
+        self.right_ds       = SeparateDownsample()
+        self.ds_fusion      = DownsampleFusionModule(48)
+        self.global_fusion  = GlobalFusionModule(48, 128, 48)
+
+        self.depth          = UpsampleDepthOutputReLu(48)
+        self.segmentation   = UpsampleSegmentation(48, classes=classes)
+
+    def forward(self, left, right):
+        assert left.size() == right.size(), 'left and right shape mismatch'
+        out_size = left.size()[2:]
+        left            = self.left_ds(left)
+        right           = self.right_ds(right)
+        stereo_fused    = self.ds_fusion(left, right)
+        global_fused    = self.global_fusion(left, right, stereo_fused)
+
+        #   Depth Only Branch
+        depth_est       = self.depth(global_fused)
+        depth_est       = F.interpolate(depth_est, out_size, mode='bilinear', align_corners=True)
+
+        #   Segmentation Only Branch
+        segmentation    = self.segmentation(global_fused)
+        segmentation    = F.interpolate(segmentation, out_size, mode='bilinear', align_corners=True)
+
+        return segmentation, depth_est
 
 class SeparateDownsample(nn.Module):
     """ Downsample Module for each Image """

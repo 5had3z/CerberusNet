@@ -147,7 +147,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             image = image, r_img
 
         if self.enable_seg and self.enable_disparity:
-            label = (mask, disparity)
+            label = mask, disparity
         elif self.enable_seg:
             label = mask
         else:

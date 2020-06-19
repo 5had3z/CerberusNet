@@ -26,8 +26,18 @@ class StereoSegmentationTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
+        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
+        self._loss_function = loss_fn
         self._metric = SegmentationMetric(19, filename=self._modelname)
+
+    def save_checkpoint(self):
+        super(StereoSegmentationTrainer, self).save_checkpoint()
+        self._metric.save_epoch()
+
+    def load_checkpoint(self):
+        if os.path.isfile(self._path):
+            self.epoch = len(self._metric)
+        super(StereoSegmentationTrainer, self).load_checkpoint()
 
     def _train_epoch(self, max_epoch):
         self._model.train()
@@ -63,7 +73,7 @@ class StereoSegmentationTrainer(ModelTrainer):
                 loss=loss.item()
             )
 
-            if batch_idx % 10 == 0:
+            if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
@@ -96,8 +106,7 @@ class StereoSegmentationTrainer(ModelTrainer):
                     loss=loss.item()
                 )
                 
-                self._metric._get_epoch_statistics
-                if batch_idx % 10 == 0:
+                if not batch_idx % 10:
                     batch_acc = self._metric.get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
@@ -176,5 +185,5 @@ if __name__ == "__main__":
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
     modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(1)

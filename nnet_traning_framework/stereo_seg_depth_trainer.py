@@ -13,37 +13,41 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import DepthAwareLoss, ScaleInvariantError, InvHuberLoss
-from metrics import DepthMetric
+from loss_functions import FocalLoss2D, InvHuberLoss
+from metrics import SegmentationMetric, DepthMetric
 from dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
-__all__ = ['StereoDisparityTrainer']
+__all__ = ['StereoSegDepthTrainer']
 
-class StereoDisparityTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+class StereoSegDepthTrainer(ModelTrainer):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
-        self._loss_function = loss_fn
-        self._metric = DepthMetric(filename=self._modelname)
+        self._seg_loss_fn = loss_fn['segmentation']
+        self._depth_loss_fn = loss_fn['depth']
+        self._seg_metric = SegmentationMetric(19, filename=modelname+'_seg')
+        self._depth_metric = DepthMetric(filename=modelname+'_depth')
+
+        super(StereoSegDepthTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, modelname, checkpoints)
 
     def save_checkpoint(self):
-        super(StereoDisparityTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
+        super(StereoSegDepthTrainer, self).save_checkpoint()
+        self._seg_metric.save_epoch()
+        self._depth_metric.save_epoch()
 
     def load_checkpoint(self):
         if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(StereoDisparityTrainer, self).load_checkpoint()
+            self.epoch = len(self._seg_metric)
+        super(StereoSegDepthTrainer, self).load_checkpoint()
 
     def _train_epoch(self, max_epoch):
         self._model.train()
 
-        self._metric.new_epoch('training')
-        torch.autograd.set_detect_anomaly(True)
+        self._seg_metric.new_epoch('training')
+        self._depth_metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -55,22 +59,31 @@ class StereoDisparityTrainer(ModelTrainer):
             # Put both image and target onto device
             left = data[0].to(self._device)
             right = data[1].to(self._device)
-            target = target.to(self._device)
+            seg_gt = target[0].to(self._device)
+            depth_gt = target[1].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            outputs = self._model(left, right)
+            seg_pred, depth_pred = self._model(left, right)
 
-            loss = self._loss_function(outputs, target)
+            seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
+            depth_loss = self._depth_loss_fn(depth_pred, depth_gt)
+            loss = seg_loss + depth_loss
 
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
-                outputs.cpu().data.numpy(),
-                target.cpu().data.numpy(),
-                loss=loss.item()
+            self._seg_metric._add_sample(
+                torch.argmax(seg_pred,dim=1,keepdim=True).cpu().data.numpy(),
+                seg_gt.cpu().data.numpy(),
+                loss=seg_loss.item()
+            )
+
+            self._depth_metric._add_sample(
+                depth_pred.cpu().data.numpy(),
+                depth_gt.cpu().data.numpy(),
+                loss=depth_loss.item()
             )
 
             if not batch_idx % 10:
@@ -85,7 +98,8 @@ class StereoDisparityTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
 
-            self._metric.new_epoch('validation')
+            self._seg_metric.new_epoch('validation')
+            self._depth_metric.new_epoch('validation')
 
             start_time = time.time()
 
@@ -93,27 +107,39 @@ class StereoDisparityTrainer(ModelTrainer):
                 # Put both image and target onto device
                 left = data[0].to(self._device)
                 right = data[1].to(self._device)
-                target = target.to(self._device)
+                seg_gt = target[0].to(self._device)
+                depth_gt = target[1].to(self._device)
 
-                outputs = self._model(left, right)
+                seg_pred, depth_pred = self._model(left, right)
                 
                 # Caculate the loss and accuracy for the predictions
-                loss = self._loss_function(outputs, target)
+                seg_pred, depth_pred = self._model(left, right)
 
-                self._metric._add_sample(
-                    outputs.cpu().data.numpy(),
-                    target.cpu().numpy(),
-                    loss=loss.item()
+                seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
+                depth_loss = self._depth_loss_fn(depth_pred, depth_gt)
+                loss = seg_loss + depth_loss
+
+                self._seg_metric._add_sample(
+                    torch.argmax(seg_pred,dim=1,keepdim=True).cpu().data.numpy(),
+                    seg_gt.cpu().data.numpy(),
+                    loss=seg_loss.item()
+                )
+
+                self._depth_metric._add_sample(
+                    depth_pred.cpu().data.numpy(),
+                    depth_gt.cpu().data.numpy(),
+                    loss=depth_loss.item()
                 )
                 
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    seg_acc = self._seg_metric.get_last_batch()
+                    depth_acc = self._depth_metric.get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
-                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Depth Acc: %.4f || Seg Acc: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                             self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                            batch_acc, loss.item(), time_elapsed, time_remain))
+                            depth_acc, seg_acc, loss.item(), time_elapsed, time_remain))
 
     def visualize_output(self):
         """
@@ -121,34 +147,47 @@ class StereoDisparityTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, disparity = next(iter(self._validation_loader))
+            image, labels = next(iter(self._validation_loader))
             left = image[0].to(self._device)
             right = image[1].to(self._device)
+            seg_gt = labels[0]
+            depth_gt = labels[1]
 
             start_time = time.time()
-            pred = self._model(left, right)
+
+            seg_pred, depth_pred = self._model(left, right)
+            seg_pred = torch.argmax(seg_pred,dim=1,keepdim=True)
+
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             for i in range(self._validation_loader.batch_size):
-                plt.subplot(1,3,1)
+                plt.subplot(1,5,1)
                 plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
         
-                plt.subplot(1,3,2)
-                plt.imshow(disparity[i,:,:])
-                plt.xlabel("Ground Truth")
+                plt.subplot(1,5,2)
+                plt.imshow(seg_gt[i,:,:])
+                plt.xlabel("Segmentation Ground Truth")
         
-                plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,:])
-                # plt.imshow(torch.exp(pred).cpu().numpy()[i,0,:,:])
-                plt.xlabel("Prediction")
+                plt.subplot(1,5,3)
+                plt.imshow(seg_pred.cpu().numpy()[i,0,:,:])
+                plt.xlabel("Segmentation Prediction")
+
+                plt.subplot(1,5,4)
+                plt.imshow(depth_gt[i,:,:])
+                plt.xlabel("Depth Ground Truth")
+        
+                plt.subplot(1,5,5)
+                plt.imshow(depth_pred.cpu().numpy()[i,0,:,:])
+                plt.xlabel("Depth Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from StereoModels import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from StereoModels import StereoDepthSegSeparated
 
 if __name__ == "__main__":
+    # multiprocessing.set_start_method('spawn', True)
     print(Path.cwd())
     if platform.system() == 'Windows':
         n_workers = 0
@@ -156,14 +195,18 @@ if __name__ == "__main__":
         n_workers = multiprocessing.cpu_count()
 
     base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
+
     training_dir = {
         'images'        : base_dir + 'leftImg8bit/train',
         'right_images'  : base_dir + 'rightImg8bit/train',
+        'labels'        : base_dir + 'gtFine/train',
         'disparity'     : base_dir + 'disparity/train'
     }
+
     validation_dir = {
         'images'        : base_dir + 'leftImg8bit/val',
         'right_images'  : base_dir + 'rightImg8bit/val',
+        'labels'        : base_dir + 'gtFine/val',
         'disparity'     : base_dir + 'disparity/val'
     }
 
@@ -172,18 +215,19 @@ if __name__ == "__main__":
         Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
     )
 
-    dataloaders = dict(
+    dataloaders=dict(
         Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
         Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "ReLuModel_ScaleInv"
-    disparityModel = StereoDepthSeparatedReLu()
-    optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ScaleInvariantError().to(torch.device("cuda"))
-    # lossfn = InvHuberLoss().to(torch.device("cuda"))
+    filename = "StereoSegDepth1_Focal_InvH"
+    Model = StereoDepthSegSeparated()
+    optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
+    lossfn = dict(
+        segmentation   = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda")),
+        depth          = InvHuberLoss(ignore_index=-1).to(torch.device("cuda"))
+    )
 
-    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
     modeltrainer.visualize_output()
-    # modeltrainer.train_model(5)
+    # modeltrainer.train_model(2)
