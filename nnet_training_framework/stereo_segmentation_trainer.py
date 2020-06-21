@@ -26,9 +26,9 @@ class StereoSegmentationTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
         self._loss_function = loss_fn
-        self._metric = SegmentationMetric(19, filename=self._modelname)
+        self._metric = SegmentationMetric(19, filename=savefile)
+        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
 
     def save_checkpoint(self):
         super(StereoSegmentationTrainer, self).save_checkpoint()
