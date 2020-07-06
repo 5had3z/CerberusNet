@@ -109,13 +109,13 @@ class StereoDepthSegSeparated(nn.Module):
 class StereoDepthSegSeparated2(nn.Module):
     def __init__(self, classes=19, aux=False, **kwargs):
         super(StereoDepthSegSeparated2, self).__init__()
-        self.left_ds        = SeparateDownsample()
-        self.right_ds       = SeparateDownsample()
-        self.ds_fusion      = DownsampleFusionModule2(48)
-        self.global_fusion  = GlobalFusionModule(48, 128, 48)
+        self.left_ds        = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.right_ds       = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.ds_fusion      = DownsampleFusionModule2(in_channels=32, block_channels=[48, 72, 96])
+        self.global_fusion  = GlobalFusionModule(32, 96, 32, scale_factor=4)
 
-        self.depth          = UpsampleDepthOutputReLu(48)
-        self.segmentation   = UpsampleSegmentation(48, classes=classes)
+        self.depth          = UpsampleDepthOutputReLu(32)
+        self.segmentation   = UpsampleSegmentation(32, classes=classes)
 
     def __str__(self):
         return "StereoSD1.1"
@@ -167,18 +167,18 @@ class DownsampleFusionModule(nn.Module):
 
 class DownsampleFusionModule2(nn.Module):
     """Fusion of each downsampled stereo images"""
-    def __init__(self, downsampled_channels, block_channels = [64, 96, 128], **kwargs):
+    def __init__(self, in_channels, block_channels = [64, 96, 128], **kwargs):
         super(DownsampleFusionModule2, self).__init__()
-        nBlockIter = 3
-        self.dsconv1 = self._make_layer(LinearBottleneck, downsampled_channels*2, block_channels[0], nBlockIter, stride=2)
+        nBlockIter = 2
+        self.dsconv1 = self._make_layer(LinearBottleneck, in_channels*2, block_channels[0], nBlockIter, stride=2)
         self.dsconv2 = self._make_layer(LinearBottleneck, block_channels[0], block_channels[1], nBlockIter, stride=2)
-        self.dsconv3 = self._make_layer(LinearBottleneck, block_channels[1], block_channels[0], nBlockIter, stride=1)
+        self.dsconv3 = self._make_layer(LinearBottleneck, block_channels[1], block_channels[2], nBlockIter, stride=1)
         self.relu = nn.ReLU()
 
     def _make_layer(self, block, inplanes, planes, blocks, t=6, stride=1):
         layers = []
         layers.append(block(inplanes, planes, t, stride))
-        for _ in itertools.repeat(None, 3):
+        for _ in itertools.repeat(None, blocks):
             layers.append(block(planes, planes, t, 1))
         return nn.Sequential(*layers)
 
