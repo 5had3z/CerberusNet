@@ -194,7 +194,7 @@ if __name__ == "__main__":
     else:
         n_workers = multiprocessing.cpu_count()
 
-    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
+    base_dir = '/home/bpfer2/sh99/bpfer2/cityscapes_data/'
 
     training_dir = {
         'images'        : base_dir + 'leftImg8bit/train',
@@ -216,8 +216,8 @@ if __name__ == "__main__":
     )
 
     dataloaders=dict(
-        Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training    = DataLoader(datasets["Training"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
     filename = "StereoSegDepth1_Focal_InvH"
@@ -229,5 +229,5 @@ if __name__ == "__main__":
     )
 
     modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(2)
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(85)

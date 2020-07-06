@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH --job-name=SegDepthTraining
+#SBATCH --time=12:00:00
+#SBATCH --ntasks=8
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:P100:1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=16384
+
+module load pytorch/1.5-cuda10
+
+python ./stereo_seg_depth_trainer.py
