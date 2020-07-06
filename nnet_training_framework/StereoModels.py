@@ -7,7 +7,7 @@ import torch.nn.functional as F
 __all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp',
     'StereoSegmentaionSeparated', 'StereoDepthSegSeparated']
 
-from nnet_ops import _ConvBNReLU, _DSConv, _DWConv
+from nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck
 
 class StereoDepthSeparatedReLu(nn.Module):
     def __init__(self, aux=False, **kwargs):
@@ -95,7 +95,7 @@ class SeparateDownsample(nn.Module):
     """ Downsample Module for each Image """
     def __init__(self, in_ch = 3, dw_channels=32, out_channels=48, **kwargs):
         super(SeparateDownsample, self).__init__()
-        self.conv = _ConvBNReLU(in_ch, dw_channels, 3, 2)
+        self.conv   = _ConvBNReLU(in_ch, dw_channels, 3, 2)
         self.dsconv = _DSConv(dw_channels, out_channels, 2)
 
     def forward(self, x):
