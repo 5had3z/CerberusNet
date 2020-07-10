@@ -503,8 +503,9 @@ class OpticFlowMetric(MetricBaseClass):
         super(OpticFlowMetric, self).__init__(mode=mode, filename=filename)
         self._reset_metric()
 
-    def _add_sample(self, pred_depth, gt_depth, loss=None):
+    def _add_sample(self, orig_img, flow_pred, seq_img, loss=None):
         """
+        @input list of original, prediction and sequence images i.e. [left, right]
         @todo write reconstruction error and endpoint error
         """
         if loss is not None:

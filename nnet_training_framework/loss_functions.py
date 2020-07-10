@@ -7,7 +7,7 @@ from torch.autograd import Variable
 import numpy as np
 
 __all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D',
-    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss']
+    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss', 'ReconstructionLoss']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -209,6 +209,14 @@ class InvHuberLoss(nn.Module):
         mask_err2 = err > c
         cost = torch.mean(err*mask_err.float() + err2*mask_err2.float())
         return cost
+
+class ReconstructionLoss(nn.Module):
+    def __init__(self, ignore_index=-1):
+        super(ReconstructionLoss, self).__init__()
+        self.ignore_index = ignore_index
+    
+    def forward(self, source, flow, target):
+        raise NotImplementedError
 
 import PIL.Image as Image
 
