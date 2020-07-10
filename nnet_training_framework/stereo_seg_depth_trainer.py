@@ -184,7 +184,7 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from StereoModels import StereoDepthSegSeparated2
+from nnet_models import StereoDepthSegSeparated2
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method('spawn', True)
@@ -227,6 +227,7 @@ if __name__ == "__main__":
         depth          = InvHuberLoss(ignore_index=-1).to(torch.device("cuda"))
     )
     filename = str(Model)+'_SGD_Focal_InvH'
+    print("Loading " + filename)
 
     modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
     modeltrainer.visualize_output()

@@ -18,6 +18,8 @@ import torchvision.transforms as transforms
 from metrics import MetricBaseClass
 from lr_scheduler import LRScheduler
 
+__all__ = ['ModelTrainer']
+
 class ModelTrainer(object):
     def __init__(self, model, optimizer, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
         '''

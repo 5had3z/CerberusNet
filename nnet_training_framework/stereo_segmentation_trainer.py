@@ -146,7 +146,7 @@ class StereoSegmentationTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from StereoModels import StereoSegmentaionSeparated
+from nnet_models import StereoSegmentaionSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())
