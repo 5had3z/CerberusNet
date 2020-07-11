@@ -267,7 +267,7 @@ def Init_Training_MonoFSCNN():
 
     return modeltrainer
 
-from chat_test_model import TestModel
+from fast_scnn import FastSCNN
 
 if __name__ == "__main__":
     print(Path.cwd())

@@ -146,7 +146,7 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from StereoModels import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
 
 if __name__ == "__main__":
     print(Path.cwd())

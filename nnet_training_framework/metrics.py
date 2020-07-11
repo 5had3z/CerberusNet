@@ -495,6 +495,95 @@ class DepthMetric(MetricBaseClass):
             Batch_Invariant=[]
         )
 
+class OpticFlowMetric(MetricBaseClass):
+    """
+    Accuracy/Error and Loss Staticstics tracking for depth based networks
+    """
+    def __init__(self, mode='training', filename=None):
+        super(OpticFlowMetric, self).__init__(mode=mode, filename=filename)
+        self._reset_metric()
+
+    def _add_sample(self, orig_img, flow_pred, seq_img, loss=None):
+        """
+        @input list of original, prediction and sequence images i.e. [left, right]
+        @todo write reconstruction error and endpoint error
+        """
+        if loss is not None:
+            self.metric_data["Batch_Loss"].append(loss)
+
+        self.metric_data["Batch_EPE"].append()
+        self.metric_data["Batch_SAD"].append()
+    
+    def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
+        """
+        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative, rmse linear, rmse log]\n
+        @todo   get a specified epoch instead of only currently loaded one\n
+        @param  main_metric, returns sum abs diff\n
+        @param  loss_metric, returns recorded loss\n
+        @param  print_only, prints stats and does not return values
+        """ 
+
+        if print_only:
+            epe = np.asarray(self.metric_data["Batch_EPE"]).mean()
+            sad = np.asarray(self.metric_data["Batch_SAD"]).mean()
+            loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+            print("End Point Error: %.4f\tSum Aboslute Difference: %.4f\tLoss: %.4f" % (epe, sad, loss))
+        else:
+            ret_val = ()
+            if main_metric:
+                invariant = np.asarray(self.metric_data["Batch_SAD"]).mean()
+                ret_val += (invariant,)
+                if loss_metric:
+                    loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+                    ret_val += (loss,)
+            else:
+                for metric in self.metric_data.keys():
+                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                    ret_val += (mean_data,)
+            return ret_val
+
+    def max_accuracy(self, main_metric=True):
+        """
+        Returns lowest end point error and sum absolute difference from per epoch summarised data.\n
+        @param  main_metric, if true only returns scale invariant\n
+        @output scale invariant, absolute relative, squared relative, rmse linear, rmse log
+        """
+        epe = sys.float_info.max
+        sad = sys.float_info.max
+
+        if self._path is not None:
+            with h5py.File(self._path, 'a') as hf:
+                for epoch in hf['validation']:
+                    summary_data = hf['validation/'+epoch+'/Summary'][:]
+                    if summary_data[0] < epe:
+                        epe = summary_data[0]
+                    if summary_data[1] < sad:
+                        sad = summary_data[1]
+
+        else:
+            print("No File Specified for Segmentation Metric Manager")
+        if main_metric:
+            return sad
+        else:
+            return sad, epe
+
+    def get_last_batch(self, main_metric=True):
+        if main_metric:
+            return self.metric_data["Batch_SAD"][-1]
+        else:
+            ret_val = ()
+            for key in self.metric_data.keys():
+                if key != "Batch_Loss":
+                    ret_val += (self.metric_data[key][-1],)
+            return ret_val
+        
+    def _reset_metric(self):
+        self.metric_data = dict(
+            Batch_Loss=[],
+            Batch_SAD=[],
+            Batch_EPE=[]
+        )
+
 class BoundaryBoxMetric(MetricBaseClass):
     def __init__(self, mode='training', filename=None):
         super(BoundaryBoxMetric, self).__init__(mode=mode, filename=filename)
@@ -530,6 +619,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "StereoSeg1.1_Focal"
+    filename = "StereoSD1.1_SGD_Focal_InvH_seg"
     metric = DepthMetric(filename=filename)
     metric.plot_summary_data()
