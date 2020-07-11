@@ -202,33 +202,55 @@ class InvHuberLoss(nn.Module):
         diff = pred_relu - target
         mask = target != self.ignore_index
 
-        err = torch.abs(diff * mask.float())
-        c = 0.2 * torch.max(err)
+        err = (diff * mask.float()).abs()
+        c = 0.2 * err.max()
         err2 = (diff**2 + c**2) / (2. * c)
         mask_err = err <= c
         mask_err2 = err > c
-        cost = torch.mean(err*mask_err.float() + err2*mask_err2.float())
+        cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
         return cost
 
 class ReconstructionLoss(nn.Module):
-    def __init__(self, ignore_index=-1):
+    def __init__(self, img_h, img_w):
         super(ReconstructionLoss, self).__init__()
-        self.ignore_index = ignore_index
+        self.img_h = img_h
+        self.img_w = img_w
+        self.transf_base = torch.zeros([1,img_h,img_w,2])
+        for i in range(img_h):
+            for j in range(img_w):
+                self.transf_base[0,i,j,1] = i/img_h*2-1
+                self.transf_base[0,i,j,0] = j/img_w*2-1
     
     def forward(self, source, flow, target):
-        raise NotImplementedError
+        flow[:,:,:,0] /= self.img_w
+        flow[:,:,:,1] /= self.img_h
+        flow += self.transf_base
+        pred = F.grid_sample(source, flow, mode='bilinear', padding_mode='zeros', align_corners=None)
+
+        #debug disp
+        plt.subplot(1,2,1)
+        plt.imshow(np.moveaxis(source[0,0:3,:,:].cpu().numpy(),0,2))
+        plt.subplot(1,2,2)
+        plt.imshow(np.moveaxis(pred[0,0:3,:,:].cpu().numpy(),0,2))
+        plt.show()
+
+
+        diff = (target-pred).abs()
+        loss = diff.view([1,-1]).sum(1).mean()
+        return loss
 
 import PIL.Image as Image
+import torchvision.transforms
+import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
-    loss_fn = ScaleInvariantError()
+    
+    img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+    img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/test/berlin/berlin_000000_000019_rightImg8bit.png')
 
-    depth_map = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/test/berlin/berlin_000000_000019_disparity.png')
-    disparity = np.array(depth_map).astype('float32')
-    disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
-    disparity[disparity < 2] = -1 # Ignore value for loss functions
-    uniform = torch.ones(disparity.shape).unsqueeze(0)
-    ground_truth = torch.FloatTensor(disparity.astype('float32')).unsqueeze(0)
-
-    loss = loss_fn(uniform, ground_truth)
+    loss_fn = ReconstructionLoss(img1.size[1], img1.size[0])
+    uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
+    
+    transform = torchvision.transforms.ToTensor()
+    loss = loss_fn(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0))
     print(loss)

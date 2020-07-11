@@ -21,9 +21,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
         
         l_img_key = None
-        self.enable_right = False
-        self.enable_seg = False
-        self.enable_disparity = False
+        self.enable_right       = False
+        self.enable_seg         = False
+        self.enable_disparity   = False
+        self.enable_left_seq    = False
+        self.enable_right_seq   = False
 
         for key in directories.keys():
             if key == 'left_images' or key == 'images':
@@ -39,9 +41,16 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'disparity':
                 disp = []
                 self.enable_disparity = True
+            elif key == 'left_seq':
+                l_seq = []
+                self.enable_left_seq = True
+            elif key == 'left_seq':
+                r_seq = []
+                self.enable_right_seq = True
 
-        if not self.enable_seg and not self.enable_disparity:
-            print("Neither Segmentation or Disparity Keys are defined")
+        if not self.enable_seg and not self.enable_disparity and \
+                not (self.enable_left_seq or self.enable_right_seq):
+            print("Neither Segmentation, Disparity or Img Sequence Keys are defined")
 
         if l_img_key is None:
             print("Left Image Key Error")
@@ -75,6 +84,20 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             read_check = False
                             print("Error finding corresponding disparity image to ", l_imgpath)
 
+                    if self.enable_left_seq:
+                        left_seq_name = filename.replace('19', '18')
+                        left_seq_path = os.path.join(directories['disparity'], foldername, left_seq_name)
+                        if not os.path.isfile(disp_path):
+                            read_check = False
+                            print("Error finding corresponding left sequence image to ", l_imgpath)
+
+                    if self.enable_right_seq:
+                        right_seq_name = filename.replace('19_leftImg8bit', '18_rightImg8bit')
+                        right_seq_path = os.path.join(directories['disparity'], foldername, right_seq_name)
+                        if not os.path.isfile(disp_path):
+                            read_check = False
+                            print("Error finding corresponding right sequence image to ", l_imgpath)
+
                     if read_check:
                         l_img.append(l_imgpath)
 
@@ -84,6 +107,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             mask.append(mask_path)
                         if self.enable_disparity:
                             disp.append(disp_path)
+                        if self.enable_left_seq:
+                            l_seq.append(left_seq_path)
+                        if self.enable_right_seq:
+                            r_seq.append(right_seq_path)
         
         #Create dataset from specified ids
         if id_vector is not None:
@@ -94,6 +121,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.mask = [mask[i] for i in id_vector]
             if self.enable_disparity:
                 self.disp = [disp[i] for i in id_vector]
+            if self.enable_left_seq:
+                self.l_seq = [l_seq[i] for i in id_vector]
+            if self.enable_right_seq:
+                self.r_seq = [r_seq[i] for i in id_vector]
         else:
             self.l_img = l_img
             if self.enable_right:
@@ -102,6 +133,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.mask = mask
             if self.enable_disparity:
                 self.disp = disp
+            if self.enable_left_seq:
+                self.l_seq = l_seq
+            if self.enable_right_seq:
+                self.r_seq = r_seq
 
         self.transform = transform
 
@@ -127,6 +162,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
         r_img = None
         mask = None
         disparity = None
+        l_seq = None
+        r_seq = None
 
         if self.enable_right:
             r_img = Image.open(self.r_img[idx]).convert('RGB')
@@ -134,8 +171,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
             mask = Image.open(self.mask[idx])
         if self.enable_disparity:
             disparity = Image.open(self.disp[idx])
+        if self.enable_left_seq:
+            l_seq = Image.open(self.l_seq[idx])
+        if self.enable_right_seq:
+            r_seq = Image.open(self.r_seq[idx])
 
-        image, r_img, mask, disparity = self._sync_transform(l_img, r_img, mask, disparity)
+        image, r_img, mask, disparity, l_seq, r_seq = self._sync_transform(l_img, r_img, mask, disparity, l_seq, r_seq)
 
         #   Apply Defined Transformations
         if self.transform is not None:
@@ -146,17 +187,19 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if self.enable_right:
             image = image, r_img
 
-        if self.enable_seg and self.enable_disparity:
-            label = mask, disparity
-        elif self.enable_seg:
-            label = mask
-        else:
-            label = disparity
+        label = ()
+        if self.enable_seg:
+            label += (mask,)
+        if self.enable_disparity:
+            label += (disparity,)
+        if self.enable_left_seq:
+            label += (l_seq,)
+        if self.enable_right_seq:
+            label += (r_seq,)
 
         return image, label
 
-    def _sync_transform(self, l_img, r_img, mask, disparity):
-
+    def _sync_transform(self, l_img, r_img, mask, disparity, l_seq, r_seq):
         # random mirror
         if random.random() < 0.5:
             l_img = l_img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -164,8 +207,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 r_img = r_img.transpose(Image.FLIP_LEFT_RIGHT)
             if self.enable_seg:
                 mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
-            if self.enable_disparity:
-                disparity = disparity.transpose(Image.FLIP_LEFT_RIGHT)
+            if self.enable_left_seq:
+                l_seq = l_seq.transpose(Image.FLIP_LEFT_RIGHT)
+            if self.enable_right_seq:
+                r_seq = l_seq.transpose(Image.FLIP_LEFT_RIGHT)
         
         # random crop
         crop_h, crop_w = int(l_img.size[0]/self.crop_fraction), int(l_img.size[1]/self.crop_fraction)
@@ -179,6 +224,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
             mask = mask.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
         if self.enable_disparity:
             disparity = disparity.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        if self.enable_left_seq:
+            l_seq = l_seq.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        if self.enable_right_seq:
+            r_seq = r_seq.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
         # resize to target
         l_img = l_img.resize(self.output_size, Image.BILINEAR)
@@ -193,8 +242,14 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if self.enable_disparity:
             disparity = disparity.resize(self.output_size, Image.NEAREST)
             disparity = self._depth_transform(disparity)
+        if self.enable_left_seq:
+            l_seq = l_seq.resize(self.output_size, Image.NEAREST)
+            l_seq = self._img_transform(l_seq)
+        if self.enable_right_seq:
+            r_seq = r_seq.resize(self.output_size, Image.NEAREST)
+            r_seq = self._img_transform(r_seq)
         
-        return l_img, r_img, mask, disparity
+        return l_img, r_img, mask, disparity, l_seq, r_seq
 
     def _class_to_index(self, mask):
         values = np.unique(mask)
