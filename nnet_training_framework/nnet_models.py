@@ -138,3 +138,35 @@ class StereoDepthSegSeparated2(nn.Module):
         segmentation    = F.interpolate(segmentation, out_size, mode='bilinear', align_corners=True)
 
         return segmentation, depth_est
+
+class StereoDepthSegSeparated3(nn.Module):
+    def __init__(self, classes=19, aux=False, **kwargs):
+        super(StereoDepthSegSeparated3, self).__init__()
+        self.left_ds        = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.right_ds       = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.ds_fusion      = DownsampleFusionModule2(in_channels=32, block_depth=3, block_channels=[48, 72, 96])
+        self.global_fusion  = GlobalFusionModule(32, 96, 32, scale_factor=4)
+
+        self.depth          = UpsampleDepthOutputReLu(32)
+        self.segmentation   = UpsampleSegmentation(32, classes=classes)
+
+    def __str__(self):
+        return "StereoSD1.2"
+
+    def forward(self, left, right):
+        assert left.size() == right.size(), 'left and right shape mismatch'
+        out_size = left.size()[2:]
+        left            = self.left_ds(left)
+        right           = self.right_ds(right)
+        stereo_fused    = self.ds_fusion(left, right)
+        global_fused    = self.global_fusion(left, right, stereo_fused)
+
+        #   Depth Only Branch
+        depth_est       = self.depth(global_fused)
+        depth_est       = F.interpolate(depth_est, out_size, mode='bilinear', align_corners=True)
+
+        #   Segmentation Only Branch
+        segmentation    = self.segmentation(global_fused)
+        segmentation    = F.interpolate(segmentation, out_size, mode='bilinear', align_corners=True)
+
+        return segmentation, depth_est
