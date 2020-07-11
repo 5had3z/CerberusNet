@@ -230,4 +230,4 @@ if __name__ == "__main__":
 
     modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
     # modeltrainer.visualize_output()
-    modeltrainer.train_model(85)
+    modeltrainer.train_model(102)
