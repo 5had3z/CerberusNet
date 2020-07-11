@@ -185,8 +185,8 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
+        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024,512)),
+        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024,512))
     )
 
     dataloaders = dict(
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     disparityModel = StereoDepthSeparatedReLu()
     optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
     # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ReconstructionLoss().to(torch.device("cuda"))
+    lossfn = ReconstructionLoss(img_w=1024,img_h=512).to(torch.device("cuda"))
     # lossfn = InvHuberLoss().to(torch.device("cuda"))
 
     modeltrainer = StereoFlowTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)

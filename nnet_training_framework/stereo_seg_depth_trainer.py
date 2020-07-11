@@ -184,7 +184,7 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_models import StereoDepthSegSeparated2
+from nnet_models import StereoDepthSegSeparated2,StereoDepthSegSeparated3
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method('spawn', True)
@@ -217,10 +217,10 @@ if __name__ == "__main__":
 
     dataloaders=dict(
         Training    = DataLoader(datasets["Training"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True)
     )
 
-    Model = StereoDepthSegSeparated2()
+    Model = StereoDepthSegSeparated3()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = dict(
         segmentation   = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda")),
@@ -230,5 +230,7 @@ if __name__ == "__main__":
     print("Loading " + filename)
 
     modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
+
     # modeltrainer.visualize_output()
-    modeltrainer.train_model(102)
+    modeltrainer.train_model(100)
+
