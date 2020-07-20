@@ -11,7 +11,8 @@ __all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp',
     'StereoDepthSegSeparated2']
 
 from nnet_modules import SeparateDownsample, DownsampleFusionModule, DownsampleFusionModule2, \
-    GlobalFusionModule, UpsampleDepthOutputReLu, UpsampleDepthOutputExp, UpsampleSegmentation
+    GlobalFusionModule, UpsampleDepthOutputReLu, UpsampleDepthOutputExp, UpsampleSegmentation, \
+    UpsampleFlowOutput
 
 class StereoDepthSeparatedReLu(nn.Module):
     def __init__(self, aux=False, **kwargs):
@@ -170,3 +171,30 @@ class StereoDepthSegSeparated3(nn.Module):
         segmentation    = F.interpolate(segmentation, out_size, mode='bilinear', align_corners=True)
 
         return segmentation, depth_est
+
+class MonoFlow1(nn.Module):
+    def __init__(self, aux=False, **kwargs):
+        super(MonoFlow1, self).__init__()
+        self.left1_ds       = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.left2_ds       = SeparateDownsample(dw_channels=16, out_channels=32)
+        self.ds_fusion      = DownsampleFusionModule2(in_channels=32, block_depth=3, block_channels=[48, 72, 96])
+        self.global_fusion  = GlobalFusionModule(32, 96, 32, scale_factor=4)
+
+        self.flow_out          = UpsampleFlowOutput(32)
+
+    def __str__(self):
+        return "MonoFlow1"
+
+    def forward(self, left, right):
+        assert left.size() == right.size(), 'left and right shape mismatch'
+        out_size = left.size()[2:]
+        left            = self.left1_ds(left)
+        right           = self.left2_ds(right)
+        stereo_fused    = self.ds_fusion(left, right)
+        global_fused    = self.global_fusion(left, right, stereo_fused)
+
+        #   Depth Only Branch
+        flow_est        = self.flow_out(global_fused)
+        flow_est        = F.interpolate(flow_est, out_size, mode='bilinear', align_corners=True)
+
+        return flow_est

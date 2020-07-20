@@ -10,7 +10,7 @@ from nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck
 
 __all__ = ['SeparateDownsample', 'DownsampleFusionModule', 'DownsampleFusionModule2',
     'GlobalFusionModule', 'UpsampleDepthOutputReLu', 'UpsampleDepthOutputExp',
-    'UpsampleSegmentation' ]
+    'UpsampleSegmentation', 'UpsampleFlowOutput' ]
 
 class SeparateDownsample(nn.Module):
     """ Downsample Module for each Image """
@@ -88,7 +88,7 @@ class GlobalFusionModule(nn.Module):
 
 class UpsampleDepthOutputReLu(nn.Module):
     """Fusion of each downsampled stereo images with ReLu Output"""
-    def __init__(self, in_channels, scale_factor = 4,**kwargs):
+    def __init__(self, in_channels, scale_factor=4,**kwargs):
         super(UpsampleDepthOutputReLu, self).__init__()
         self.scale_factor = scale_factor
         self.conv_fuse = nn.Conv2d(in_channels, 1, 1)
@@ -101,7 +101,7 @@ class UpsampleDepthOutputReLu(nn.Module):
 
 class UpsampleDepthOutputExp(nn.Module):
     """Fusion of each downsampled stereo images with Exponential Output"""
-    def __init__(self, in_channels, scale_factor = 4,**kwargs):
+    def __init__(self, in_channels, scale_factor=4,**kwargs):
         super(UpsampleDepthOutputExp, self).__init__()
         self.scale_factor = scale_factor
         self.conv_fuse = nn.Conv2d(in_channels, 1, 1)
@@ -113,7 +113,7 @@ class UpsampleDepthOutputExp(nn.Module):
 
 class UpsampleSegmentation(nn.Module):
     """Fusion of each downsampled stereo images with Class Segmentation"""
-    def __init__(self, in_channels, classes = 19, stride = 1,**kwargs):
+    def __init__(self, in_channels, classes=19, stride=1, **kwargs):
         super(UpsampleSegmentation, self).__init__()
         self.dsconv = _DSConv(in_channels, in_channels, stride)
         self.conv_out = nn.Sequential(
@@ -125,3 +125,16 @@ class UpsampleSegmentation(nn.Module):
         x = self.dsconv(x)
         x = self.conv_out(x)
         return x
+
+class UpsampleFlowOutput(nn.Module):
+    """Fusion of each downsampled stereo images with ReLu Output"""
+    def __init__(self, in_channels, scale_factor=4,**kwargs):
+        super(UpsampleFlowOutput, self).__init__()
+        self.scale_factor = scale_factor
+        self.conv_fuse = nn.Conv2d(in_channels, 2, 1)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        upsampled = F.interpolate(x, scale_factor=self.scale_factor, mode='bilinear', align_corners=True)
+        upsampled = self.conv_fuse(upsampled)
+        return self.relu(upsampled)

@@ -44,7 +44,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'left_seq':
                 l_seq = []
                 self.enable_left_seq = True
-            elif key == 'left_seq':
+            elif key == 'right_seq':
                 r_seq = []
                 self.enable_right_seq = True
 
@@ -85,16 +85,16 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             print("Error finding corresponding disparity image to ", l_imgpath)
 
                     if self.enable_left_seq:
-                        left_seq_name = filename.replace('19', '18')
-                        left_seq_path = os.path.join(directories['disparity'], foldername, left_seq_name)
-                        if not os.path.isfile(disp_path):
+                        left_seq_name = filename.replace('19_leftImg8bit', '20_leftImg8bit')
+                        left_seq_path = os.path.join(directories['left_seq'], foldername, left_seq_name)
+                        if not os.path.isfile(left_seq_path):
                             read_check = False
                             print("Error finding corresponding left sequence image to ", l_imgpath)
 
                     if self.enable_right_seq:
-                        right_seq_name = filename.replace('19_leftImg8bit', '18_rightImg8bit')
-                        right_seq_path = os.path.join(directories['disparity'], foldername, right_seq_name)
-                        if not os.path.isfile(disp_path):
+                        right_seq_name = filename.replace('19_leftImg8bit', '20_rightImg8bit')
+                        right_seq_path = os.path.join(directories['right_seq'], foldername, right_seq_name)
+                        if not os.path.isfile(right_seq_path):
                             read_check = False
                             print("Error finding corresponding right sequence image to ", l_imgpath)
 
@@ -176,28 +176,33 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if self.enable_right_seq:
             r_seq = Image.open(self.r_seq[idx])
 
-        image, r_img, mask, disparity, l_seq, r_seq = self._sync_transform(l_img, r_img, mask, disparity, l_seq, r_seq)
+        l_img, r_img, mask, disparity, l_seq, r_seq = self._sync_transform(l_img, r_img, mask, disparity, l_seq, r_seq)
 
         #   Apply Defined Transformations
         if self.transform is not None:
-            image = self.transform(image)
+            l_img = self.transform(l_img)
             if self.enable_right:
                 r_img = self.transform(r_img)
+            if self.enable_left_seq:
+                l_seq = self.transform(l_seq)
+            if self.enable_right_seq:
+                r_seq = self.transform(r_seq)
 
+        images = (l_img, )
         if self.enable_right:
-            image = image, r_img
-
-        label = ()
-        if self.enable_seg:
-            label += (mask,)
-        if self.enable_disparity:
-            label += (disparity,)
+            images += (r_img,)
         if self.enable_left_seq:
-            label += (l_seq,)
+            images += (l_seq,)
         if self.enable_right_seq:
-            label += (r_seq,)
+            images += (r_seq,)
 
-        return image, label
+        labels = ()
+        if self.enable_seg:
+            labels += (mask,)
+        if self.enable_disparity:
+            labels += (disparity,)
+
+        return images, labels
 
     def _sync_transform(self, l_img, r_img, mask, disparity, l_seq, r_seq):
         # random mirror

@@ -105,7 +105,7 @@ class ModelTrainer(object):
         
             sys.stdout.flush()
             sys.stdout.write('\rEpoch '+ str(self.epoch)+
-                    'Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
+                    ' Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
     
         train_end_time = time.time()
 

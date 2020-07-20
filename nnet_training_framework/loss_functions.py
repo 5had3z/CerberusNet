@@ -211,7 +211,7 @@ class InvHuberLoss(nn.Module):
         return cost
 
 class ReconstructionLoss(nn.Module):
-    def __init__(self, img_h, img_w):
+    def __init__(self, img_h, img_w, device=torch.device("cpu")):
         super(ReconstructionLoss, self).__init__()
         self.img_h = img_h
         self.img_w = img_w
@@ -220,23 +220,24 @@ class ReconstructionLoss(nn.Module):
             for j in range(img_w):
                 self.transf_base[0,i,j,1] = i/img_h*2-1
                 self.transf_base[0,i,j,0] = j/img_w*2-1
+        self.transf_base = self.transf_base.to(device)
     
     def forward(self, source, flow, target):
+        flow = flow.reshape(-1, self.img_h, self.img_w, 2)
         flow[:,:,:,0] /= self.img_w
         flow[:,:,:,1] /= self.img_h
         flow += self.transf_base
         pred = F.grid_sample(source, flow, mode='bilinear', padding_mode='zeros', align_corners=None)
 
         #debug disp
-        plt.subplot(1,2,1)
-        plt.imshow(np.moveaxis(source[0,0:3,:,:].cpu().numpy(),0,2))
-        plt.subplot(1,2,2)
-        plt.imshow(np.moveaxis(pred[0,0:3,:,:].cpu().numpy(),0,2))
-        plt.show()
-
+        # plt.subplot(1,2,1)
+        # plt.imshow(np.moveaxis(source[0,0:3,:,:].cpu().numpy(),0,2))
+        # plt.subplot(1,2,2)
+        # plt.imshow(np.moveaxis(pred[0,0:3,:,:].cpu().numpy(),0,2))
+        # plt.show()
 
         diff = (target-pred).abs()
-        loss = diff.view([1,-1]).sum(1).mean()
+        loss = diff.view([1,-1]).sum(1).mean() / (self.img_w * self.img_h)
         return loss
 
 import PIL.Image as Image
@@ -246,7 +247,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
     
     img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
-    img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/test/berlin/berlin_000000_000019_rightImg8bit.png')
+    img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
     loss_fn = ReconstructionLoss(img1.size[1], img1.size[0])
     uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
