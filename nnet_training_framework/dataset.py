@@ -21,7 +21,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
     """
     Cityscapes Dataset\n
     On initialization, give a dictionary to the respective paths with the corresponding keys:
-        [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]
+        [(left_images or images), right_images, seg, disparity, left_seq, right_seq, cam, pose]
+    Get Item will return the corresponding dictionary with keys:
+        [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
     def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None,\
             transform=torchvision.transforms.ToTensor(), disparity_out=False):
@@ -319,7 +321,7 @@ if __name__ == '__main__':
         'seg': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
         'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train',
         'cam': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/camera/train',
-        'l_seq': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/train',
+        'left_seq': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/train',
         'pose': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/vehicle/train'
     }
 
