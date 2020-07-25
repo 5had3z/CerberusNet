@@ -18,10 +18,19 @@ import matplotlib.pyplot as plt
 imgextension = '.png'
 
 class CityScapesDataset(torch.utils.data.Dataset):
-    def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
+    """
+    Cityscapes Dataset\n
+    On initialization, give a dictionary to the respective paths with the corresponding keys:
+        [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]
+    """
+    def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None,\
+            transform=torchvision.transforms.ToTensor(), disparity_out=False):
         '''
-        Initializer for Cityscapes dataset
-        @input dictionary that contain paths of datasets as [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]
+        Initializer for Cityscapes dataset\n
+        @input dictionary that contain paths of datasets as [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
+        @param disparity_out determines whether the disparity is given or a direct depth estimation\n
+        @param crop_fraction determines if the image is randomly cropped to by a fraction\
+            e.g. 2 results in width/2 by height/2 random crop of original image\n
         '''
         l_img_key = None
         self.enable_right       = False
@@ -172,7 +181,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.pose = pose
 
         self.transform = transform
-
+        self.disparity_out = disparity_out
         self.output_size = output_size
         self.crop_fraction = crop_fraction
 
@@ -263,14 +272,15 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
-        disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
-        disparity[disparity < 2] = -1 # Ignore value for loss functions
-        # Ignore sides and bottom of frame as these are patchy/glitchy
-        side_clip   = int(disparity.shape[1]/20)
-        bottom_clip = int(disparity.shape[0]/10)
-        disparity[-bottom_clip:-1,:]    = -1    #bottom
-        disparity[:,:side_clip]         = -1    #lhs
-        disparity[:,-side_clip:-1]      = -1    #rhs
+        if not self.disparity_out:
+            disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
+            disparity[disparity < 2] = -1 # Ignore value for loss functions
+            # Ignore sides and bottom of frame as these are patchy/glitchy
+            side_clip   = int(disparity.shape[1]/20)
+            bottom_clip = int(disparity.shape[0]/10)
+            disparity[-bottom_clip:-1,:]    = -1    #bottom
+            disparity[:,:side_clip]         = -1    #lhs
+            disparity[:,-side_clip:-1]      = -1    #rhs
         return  torch.FloatTensor(disparity.astype('float32'))
 
     def __len__(self):
@@ -307,7 +317,10 @@ if __name__ == '__main__':
         'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
         'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
         'seg': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
+        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train',
+        'cam': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/camera/train',
+        'l_seq': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/train',
+        'pose': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/vehicle/train'
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
@@ -319,12 +332,12 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
 
-    batch_size = 10
+    batch_size = 2
     testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
-    image, seg = next(iter(testLoader))
+    data = next(iter(testLoader))
 
-    image = image[0].numpy()
-    seg = seg[1].numpy()
+    image = data["l_img"].numpy()
+    seg = data["seg"].numpy()
 
     for i in range(batch_size):
         plt.subplot(121)
