@@ -7,7 +7,8 @@ from torch.autograd import Variable
 import numpy as np
 
 __all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D',
-    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss', 'ReconstructionLoss']
+    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss', 'ReconstructionLossV1',
+    'ReconstructionLossV2']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -210,9 +211,9 @@ class InvHuberLoss(nn.Module):
         cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
         return cost
 
-class ReconstructionLoss(nn.Module):
+class ReconstructionLossV1(nn.Module):
     def __init__(self, img_h, img_w, device=torch.device("cpu")):
-        super(ReconstructionLoss, self).__init__()
+        super(ReconstructionLossV1, self).__init__()
         self.img_h = img_h
         self.img_w = img_w
         self.transf_base = torch.zeros([1,img_h,img_w,2])
@@ -272,6 +273,96 @@ class SSIM(nn.Module):
 
         return torch.clamp((1 - SSIM_n / SSIM_d) / 2, 0, 1)
 
+class BackprojectDepth(nn.Module):
+    """Layer to transform a depth image into a point cloud
+    """
+    def __init__(self, batch_size, height, width):
+        super(BackprojectDepth, self).__init__()
+
+        self.batch_size = batch_size
+        self.height = height
+        self.width = width
+
+        meshgrid = np.meshgrid(range(self.width), range(self.height), indexing='xy')
+        self.id_coords = np.stack(meshgrid, axis=0).astype(np.float32)
+        self.id_coords = nn.Parameter(torch.from_numpy(self.id_coords),
+                                      requires_grad=False)
+
+        self.ones = nn.Parameter(torch.ones(self.batch_size, 1, self.height * self.width),
+                                 requires_grad=False)
+
+        self.pix_coords = torch.unsqueeze(torch.stack(
+            [self.id_coords[0].view(-1), self.id_coords[1].view(-1)], 0), 0)
+        self.pix_coords = self.pix_coords.repeat(batch_size, 1, 1)
+        self.pix_coords = nn.Parameter(torch.cat([self.pix_coords, self.ones], 1),
+                                       requires_grad=False)
+
+    def forward(self, depth, inv_K):
+        cam_points = torch.matmul(inv_K[:, :3, :3], self.pix_coords)
+        cam_points = depth.view(self.batch_size, 1, -1) * cam_points
+        cam_points = torch.cat([cam_points, self.ones], 1)
+
+        return cam_points
+
+class Project3D(nn.Module):
+    """Layer which projects 3D points into a camera with intrinsics K and at position T
+    """
+    def __init__(self, batch_size, height, width, eps=1e-7):
+        super(Project3D, self).__init__()
+
+        self.batch_size = batch_size
+        self.height = height
+        self.width = width
+        self.eps = eps
+
+    def forward(self, points, K, T):
+        P = torch.matmul(K, T)[:, :3, :]
+
+        cam_points = torch.matmul(P, points)
+
+        pix_coords = cam_points[:, :2, :] / (cam_points[:, 2, :].unsqueeze(1) + self.eps)
+        pix_coords = pix_coords.view(self.batch_size, 2, self.height, self.width)
+        pix_coords = pix_coords.permute(0, 2, 3, 1)
+        pix_coords[..., 0] /= self.width - 1
+        pix_coords[..., 1] /= self.height - 1
+        pix_coords = (pix_coords - 0.5) * 2
+        return pix_coords
+
+class ReconstructionLossV2(nn.Module):
+    """Generate the warped (reprojected) color images for a minibatch.
+    """
+    def __init__(self, batch_size, height, width, pred_type="disparity", ssim=True):
+        super(ReconstructionLossV2, self).__init__()
+        self.pred_type      = pred_type
+        self.BackprojDepth  = BackprojectDepth(batch_size, height, width)\
+                                .to("cuda" if torch.cuda.is_available() else "cpu")
+        self.Project3D      = Project3D(batch_size, height, width)\
+                                .to("cuda" if torch.cuda.is_available() else "cpu")
+        if ssim:
+            self.SSIM       = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+    
+    def depth_from_disparity(self, disparity):
+        return (0.209313 * 2262.52) / ((disparity - 1) / 256)
+    
+    def forward(self, source_img, prediction, target_img, telemetry, camera):
+        if self.pred_type is "depth":
+            depth = prediction
+        elif self.pred_type is "disparity":
+            depth = self.depth_from_disparity(prediction)
+        elif self.pred_type is "flow":
+            raise NotImplementedError
+
+        cam_points = self.backproject_depth(depth, camera["inv_K"])
+        pix_coords = self.project_3d(cam_points, camera["K"], telemetry)
+
+        source_img = F.grid_sample(source_img, pix_coords, padding_mode="border")
+
+        abs_diff = (target_img - source_img).abs()
+        if hasattr(self, 'SSIM'):
+            return 0.15*abs_diff.mean(1, True) + 0.85*self.ssim(source_img, target_img).mean(1, True)
+        else:
+            return abs_diff.mean(1, True)
+
 import PIL.Image as Image
 import torchvision.transforms
 import matplotlib.pyplot as plt
@@ -281,7 +372,7 @@ if __name__ == '__main__':
     img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
     img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
-    loss_fn = ReconstructionLoss(img1.size[1], img1.size[0])
+    loss_fn = ReconstructionLossV1(img1.size[1], img1.size[0])
     uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
     
     transform = torchvision.transforms.ToTensor()

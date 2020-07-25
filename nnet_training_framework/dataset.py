@@ -12,6 +12,7 @@ import random
 from pathlib import Path
 
 import csv
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -136,7 +137,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
                     if read_check:
                         l_img.append(l_imgpath)
-
                         if self.enable_right:
                             r_img.append(r_imgpath)
                         if self.enable_seg:
@@ -226,9 +226,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = self.transform(epoch_data[key])
 
         if self.enable_cam:
-            epoch_data["cam"] = self.cam[idx]
+            epoch_data["cam"] = self.json_to_intrinsics(self.cam[idx])
         if self.enable_pose:
-            epoch_data["pose"] = self.pose[idx]
+            epoch_data["pose"] = self.json_to_pose(self.pose[idx])
 
         return epoch_data
 
@@ -284,6 +284,29 @@ class CityScapesDataset(torch.utils.data.Dataset):
             disparity[:,:side_clip]         = -1    #lhs
             disparity[:,-side_clip:-1]      = -1    #rhs
         return  torch.FloatTensor(disparity.astype('float32'))
+    
+    def json_to_intrinsics(self, json_path):
+        with open(json_path,) as json_file:
+            #   Camera Intrinsic Matrix
+            K = np.eye(4, dtype=float) #Idk why size 4? (To match translation?)
+            json_data = json.load(json_file)["instrinsic"]
+            K[0,0] = json_data["fx"]
+            K[1,1] = json_data["fy"]
+            K[0,2] = json_data["u0"]
+            K[1,2] = json_data["v0"]
+
+            #   Transformation Mat between cameras
+            baseline = json.load(json_file)["extrinsic"]["baseline"]
+            stereo_T = np.eye(4, dtype=np.float32)
+            baseline_sign = -1 if do_flip else 1
+            side_sign = -1 if side == "l" else 1
+            stereo_T[0, 3] = side_sign * baseline_sign * baseline
+
+        return {"K":K, "inv_K":np.linalg.pinv(K), "baseline_T":stereo_T}
+
+    def json_to_pose(self, json_path):
+        pose = {}
+        raise NotImplementedError
 
     def __len__(self):
         return len(self.l_img)

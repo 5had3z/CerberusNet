@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import ReconstructionLoss
+from loss_functions import ReconstructionLossV1, ReconstructionLossV2
 from metrics import OpticFlowMetric
 from dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
@@ -188,7 +188,7 @@ if __name__ == "__main__":
 
     Model = MonoFlow1()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
-    lossfn = ReconstructionLoss(img_w=1024, img_h=512, device=torch.device("cuda")).to(torch.device("cuda"))
+    lossfn = ReconstructionLossV1(img_w=1024, img_h=512, device=torch.device("cuda")).to(torch.device("cuda"))
     filename = str(Model)+'_SGD_Recon'
 
     modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
