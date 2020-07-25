@@ -298,7 +298,7 @@ class BackprojectDepth(nn.Module):
                                        requires_grad=False)
 
     def forward(self, depth, inv_K):
-        cam_points = torch.matmul(inv_K[:, :3, :3], self.pix_coords)
+        cam_points = torch.matmul(inv_K[:, :3, :3].cuda(), self.pix_coords)
         cam_points = depth.view(self.batch_size, 1, -1) * cam_points
         cam_points = torch.cat([cam_points, self.ones], 1)
 
@@ -316,7 +316,7 @@ class Project3D(nn.Module):
         self.eps = eps
 
     def forward(self, points, K, T):
-        P = torch.matmul(K, T)[:, :3, :]
+        P = torch.matmul(K.cuda(), T.cuda())[:, :3, :]
 
         cam_points = torch.matmul(P, points)
 
@@ -352,16 +352,17 @@ class ReconstructionLossV2(nn.Module):
         elif self.pred_type is "flow":
             raise NotImplementedError
 
-        cam_points = self.backproject_depth(depth, camera["inv_K"])
-        pix_coords = self.project_3d(cam_points, camera["K"], telemetry)
+        cam_points = self.BackprojDepth(depth, camera["inv_K"])
+        pix_coords = self.Project3D(cam_points, camera["K"], telemetry)
 
         source_img = F.grid_sample(source_img, pix_coords, padding_mode="border")
 
         abs_diff = (target_img - source_img).abs()
         if hasattr(self, 'SSIM'):
-            return 0.15*abs_diff.mean(1, True) + 0.85*self.ssim(source_img, target_img).mean(1, True)
+            loss = 0.15*abs_diff.mean(1, True) + 0.85*self.SSIM(source_img, target_img).mean(1, True)
         else:
-            return abs_diff.mean(1, True)
+            loss = abs_diff.mean(1, True)
+        return loss.mean()
 
 import PIL.Image as Image
 import torchvision.transforms

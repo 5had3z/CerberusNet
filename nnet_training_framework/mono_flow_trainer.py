@@ -170,10 +170,12 @@ if __name__ == "__main__":
     training_dir = {
         'images'    : base_dir + 'leftImg8bit/train',
         'left_seq'  : base_dir + 'leftImg8bit_sequence/train',
+        'cam'       : base_dir + 'camera/train'
     }
     validation_dir = {
         'images'    : base_dir + 'leftImg8bit/val',
         'left_seq'  : base_dir + 'leftImg8bit_sequence/val',
+        'cam'       : base_dir + 'camera/val'
     }
 
     datasets = dict(

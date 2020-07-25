@@ -197,6 +197,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
                               -1, -1, 16, 17, 18])
         self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
+    def __len__(self):
+        return len(self.l_img)
+
     def __getitem__(self, idx):
         '''
         Returns relevant training data as a dict
@@ -227,8 +230,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         if self.enable_cam:
             epoch_data["cam"] = self.json_to_intrinsics(self.cam[idx])
-        if self.enable_pose:
-            epoch_data["pose"] = self.json_to_pose(self.pose[idx])
+        # if self.enable_pose:
+        #     epoch_data["pose"] = self.json_to_pose(self.pose[idx])
 
         return epoch_data
 
@@ -286,30 +289,23 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return  torch.FloatTensor(disparity.astype('float32'))
     
     def json_to_intrinsics(self, json_path):
-        with open(json_path,) as json_file:
+        with open(json_path) as json_file:
             #   Camera Intrinsic Matrix
-            K = np.eye(4, dtype=float) #Idk why size 4? (To match translation?)
-            json_data = json.load(json_file)["instrinsic"]
-            K[0,0] = json_data["fx"]
-            K[1,1] = json_data["fy"]
-            K[0,2] = json_data["u0"]
-            K[1,2] = json_data["v0"]
+            K = np.eye(4, dtype=np.float32) #Idk why size 4? (To match translation?)
+            json_data = json.load(json_file)
+            K[0,0] = json_data["intrinsic"]["fx"]
+            K[1,1] = json_data["intrinsic"]["fy"]
+            K[0,2] = json_data["intrinsic"]["u0"]
+            K[1,2] = json_data["intrinsic"]["v0"]
 
             #   Transformation Mat between cameras
-            baseline = json.load(json_file)["extrinsic"]["baseline"]
             stereo_T = np.eye(4, dtype=np.float32)
-            baseline_sign = -1 if do_flip else 1
-            side_sign = -1 if side == "l" else 1
-            stereo_T[0, 3] = side_sign * baseline_sign * baseline
+            stereo_T[0,3] = json_data["extrinsic"]["baseline"]
 
         return {"K":K, "inv_K":np.linalg.pinv(K), "baseline_T":stereo_T}
 
     def json_to_pose(self, json_path):
-        pose = {}
         raise NotImplementedError
-
-    def __len__(self):
-        return len(self.l_img)
 
 def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
     num_images = 0
@@ -358,7 +354,11 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
 
     batch_size = 2
-    testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
+    testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=0)
+
+    for idx, data in enumerate(testLoader):
+        print("yes")
+    
     data = next(iter(testLoader))
 
     image = data["l_img"].numpy()
