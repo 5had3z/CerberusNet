@@ -19,20 +19,25 @@ imgextension = '.png'
 
 class CityScapesDataset(torch.utils.data.Dataset):
     def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None, transform=torchvision.transforms.ToTensor()):
-        
+        '''
+        Initializer for Cityscapes dataset
+        @input dictionary that contain paths of datasets as [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]
+        '''
         l_img_key = None
         self.enable_right       = False
         self.enable_seg         = False
         self.enable_disparity   = False
         self.enable_left_seq    = False
         self.enable_right_seq   = False
+        self.enable_cam         = False
+        self.enable_pose        = False
 
         for key in directories.keys():
             if key == 'left_images' or key == 'images':
                 l_img = []
                 l_img_key = key
-            elif key == 'labels' or key == 'mask':
-                mask = []
+            elif key == 'seg':
+                seg = []
                 seg_dir_key = key
                 self.enable_seg = True
             elif key == 'right_images':
@@ -47,6 +52,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'right_seq':
                 r_seq = []
                 self.enable_right_seq = True
+            elif key == 'cam':
+                cam = []
+                self.enable_cam = True
+            elif key == 'pose':
+                pose = []
+                self.enable_pose = True
 
         if not self.enable_seg and not self.enable_disparity and \
                 not (self.enable_left_seq or self.enable_right_seq):
@@ -71,9 +82,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             print("Error finding corresponding right image to ", l_imgpath)
 
                     if self.enable_seg:
-                        mask_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
-                        mask_path = os.path.join(directories[seg_dir_key], foldername, mask_name)
-                        if not os.path.isfile(mask_path):
+                        seg_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
+                        seg_path = os.path.join(directories[seg_dir_key], foldername, seg_name)
+                        if not os.path.isfile(seg_path):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)
 
@@ -98,19 +109,37 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             read_check = False
                             print("Error finding corresponding right sequence image to ", l_imgpath)
 
+                    if self.enable_cam:
+                        cam_name = filename.replace('leftImg8bit.png', 'camera.json')
+                        cam_path = os.path.join(directories['cam'], foldername, cam_name)
+                        if not os.path.isfile(cam_path):
+                            read_check = False
+                            print("Error finding corresponding camera parameters for ", l_imgpath)
+
+                    if self.enable_pose:
+                        pose_name = filename.replace('leftImg8bit.png', 'vehicle.json')
+                        pose_path = os.path.join(directories['pose'], foldername, pose_name)
+                        if not os.path.isfile(pose_path):
+                            read_check = False
+                            print("Error finding corresponding GPS/Pose information for ", l_imgpath)
+
                     if read_check:
                         l_img.append(l_imgpath)
 
                         if self.enable_right:
                             r_img.append(r_imgpath)
                         if self.enable_seg:
-                            mask.append(mask_path)
+                            seg.append(seg_path)
                         if self.enable_disparity:
                             disp.append(disp_path)
                         if self.enable_left_seq:
                             l_seq.append(left_seq_path)
                         if self.enable_right_seq:
                             r_seq.append(right_seq_path)
+                        if self.enable_cam:
+                            cam.append(cam_path)
+                        if self.enable_pose:
+                            pose.append(pose_path)
         
         #Create dataset from specified ids
         if id_vector is not None:
@@ -118,7 +147,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             if self.enable_right:
                 self.r_img = [r_img[i] for i in id_vector]
             if self.enable_seg:
-                self.mask = [mask[i] for i in id_vector]
+                self.seg = [seg[i] for i in id_vector]
             if self.enable_disparity:
                 self.disp = [disp[i] for i in id_vector]
             if self.enable_left_seq:
@@ -130,13 +159,17 @@ class CityScapesDataset(torch.utils.data.Dataset):
             if self.enable_right:
                 self.r_img = r_img
             if self.enable_seg:
-                self.mask = mask
+                self.seg = seg
             if self.enable_disparity:
                 self.disp = disp
             if self.enable_left_seq:
                 self.l_seq = l_seq
             if self.enable_right_seq:
                 self.r_seq = r_seq
+            if self.enable_cam:
+                self.cam = cam
+            if self.enable_pose:
+                self.pose = pose
 
         self.transform = transform
 
@@ -155,119 +188,77 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         '''
-        Returns an Image and Label Pair
+        Returns relevant training data as a dict
+        @output l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose
         '''
+        epoch_data = {}
         # Read image and labels
-        l_img = Image.open(self.l_img[idx]).convert('RGB')
-        r_img = None
-        mask = None
-        disparity = None
-        l_seq = None
-        r_seq = None
+        epoch_data["l_img"] = Image.open(self.l_img[idx]).convert('RGB')
 
         if self.enable_right:
-            r_img = Image.open(self.r_img[idx]).convert('RGB')
+            epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
         if self.enable_seg:
-            mask = Image.open(self.mask[idx])
+            epoch_data["seg"] = Image.open(self.seg[idx])
         if self.enable_disparity:
-            disparity = Image.open(self.disp[idx])
+            epoch_data["disparity"] = Image.open(self.disp[idx])
         if self.enable_left_seq:
-            l_seq = Image.open(self.l_seq[idx])
+            epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
         if self.enable_right_seq:
-            r_seq = Image.open(self.r_seq[idx])
+            epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
 
-        l_img, r_img, mask, disparity, l_seq, r_seq = self._sync_transform(l_img, r_img, mask, disparity, l_seq, r_seq)
+        self._sync_transform(epoch_data)
 
         #   Apply Defined Transformations
         if self.transform is not None:
-            l_img = self.transform(l_img)
-            if self.enable_right:
-                r_img = self.transform(r_img)
-            if self.enable_left_seq:
-                l_seq = self.transform(l_seq)
-            if self.enable_right_seq:
-                r_seq = self.transform(r_seq)
+            for key in epoch_data.keys():
+                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                    epoch_data[key] = self.transform(epoch_data[key])
 
-        images = (l_img, )
-        if self.enable_right:
-            images += (r_img,)
-        if self.enable_left_seq:
-            images += (l_seq,)
-        if self.enable_right_seq:
-            images += (r_seq,)
+        if self.enable_cam:
+            epoch_data["cam"] = self.cam[idx]
+        if self.enable_pose:
+            epoch_data["pose"] = self.pose[idx]
 
-        labels = ()
-        if self.enable_seg:
-            labels += (mask,)
-        if self.enable_disparity:
-            labels += (disparity,)
+        return epoch_data
 
-        return images, labels
-
-    def _sync_transform(self, l_img, r_img, mask, disparity, l_seq, r_seq):
+    def _sync_transform(self, epoch_data):
         # random mirror
         if random.random() < 0.5:
-            l_img = l_img.transpose(Image.FLIP_LEFT_RIGHT)
-            if self.enable_right: 
-                r_img = r_img.transpose(Image.FLIP_LEFT_RIGHT)
-            if self.enable_seg:
-                mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
-            if self.enable_left_seq:
-                l_seq = l_seq.transpose(Image.FLIP_LEFT_RIGHT)
-            if self.enable_right_seq:
-                r_seq = l_seq.transpose(Image.FLIP_LEFT_RIGHT)
+            for item in epoch_data.values():
+                item = item.transpose(Image.FLIP_LEFT_RIGHT)
         
         # random crop
-        crop_h, crop_w = int(l_img.size[0]/self.crop_fraction), int(l_img.size[1]/self.crop_fraction)
-        crop_x, crop_y = random.randint(0, l_img.size[1] - crop_w), random.randint(0, l_img.size[0] - crop_h)
+        crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
+        crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
+        crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
+        crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
 
-        l_img = l_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        for item in epoch_data.values():
+            item = item.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
-        if self.enable_right: 
-            r_img = r_img.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-        if self.enable_seg:
-            mask = mask.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-        if self.enable_disparity:
-            disparity = disparity.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-        if self.enable_left_seq:
-            l_seq = l_seq.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-        if self.enable_right_seq:
-            r_seq = r_seq.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+        for key in epoch_data.keys():
+            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.BILINEAR)
+                epoch_data[key] = self._img_transform(epoch_data[key])
+            elif key is "seg":
+                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = self._seg_transform(epoch_data[key])
+            elif key is "disparity":
+                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = self._depth_transform(epoch_data[key])
 
-        # resize to target
-        l_img = l_img.resize(self.output_size, Image.BILINEAR)
-        l_img = self._img_transform(l_img)
-
-        if self.enable_right: 
-            r_img = r_img.resize(self.output_size, Image.BILINEAR)
-            r_img = self._img_transform(r_img)
-        if self.enable_seg:
-            mask = mask.resize(self.output_size, Image.NEAREST)
-            mask = self._mask_transform(mask)
-        if self.enable_disparity:
-            disparity = disparity.resize(self.output_size, Image.NEAREST)
-            disparity = self._depth_transform(disparity)
-        if self.enable_left_seq:
-            l_seq = l_seq.resize(self.output_size, Image.NEAREST)
-            l_seq = self._img_transform(l_seq)
-        if self.enable_right_seq:
-            r_seq = r_seq.resize(self.output_size, Image.NEAREST)
-            r_seq = self._img_transform(r_seq)
-        
-        return l_img, r_img, mask, disparity, l_seq, r_seq
-
-    def _class_to_index(self, mask):
-        values = np.unique(mask)
+    def _class_to_index(self, seg):
+        values = np.unique(seg)
         for value in values:
             assert (value in self._mapping)
-        index = np.digitize(mask.ravel(), self._mapping, right=True)
-        return self._key[index].reshape(mask.shape)
+        index = np.digitize(seg.ravel(), self._mapping, right=True)
+        return self._key[index].reshape(seg.shape)
 
     def _img_transform(self, img):
         return np.array(img)
 
-    def _mask_transform(self, mask):
-        target = self._class_to_index(np.array(mask).astype('int32'))
+    def _seg_transform(self, seg):
+        target = self._class_to_index(np.array(seg).astype('int32'))
         return torch.LongTensor(np.array(target).astype('int32'))
 
     def _depth_transform(self, disparity):
@@ -315,14 +306,14 @@ if __name__ == '__main__':
     full_training_data = {
         'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
         'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'mask': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
+        'seg': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
         'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train'
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
     
     print(len(test_dset.l_img))
-    print(len(test_dset.mask))
+    print(len(test_dset.seg))
 
     import multiprocessing
     import matplotlib.pyplot as plt
@@ -330,33 +321,33 @@ if __name__ == '__main__':
 
     batch_size = 10
     testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=multiprocessing.cpu_count())
-    image, mask = next(iter(testLoader))
+    image, seg = next(iter(testLoader))
 
     image = image[0].numpy()
-    mask = mask[1].numpy()
+    seg = seg[1].numpy()
 
     for i in range(batch_size):
         plt.subplot(121)
         plt.imshow(np.moveaxis(image[i,0:3,:,:],0,2))    
 
         plt.subplot(122)
-        plt.imshow(mask[i,:,:])
+        plt.imshow(seg[i,:,:])
 
         plt.show()
     
     # classes = {}
     # for i in range(batch_size):
     #     # # Get class for each individual pixel
-    #     # for j in range(mask.shape[1]):
-    #     #     for k in range(mask.shape[2]):
-    #     #         class_id = mask[i,j,k]
+    #     # for j in range(seg.shape[1]):
+    #     #     for k in range(seg.shape[2]):
+    #     #         class_id = seg[i,j,k]
     #     #         classes[class_id] = class_id
 
     #     plt.subplot(121)
     #     img_cpy = image[i,:,:,:]
     #     plt.imshow(np.moveaxis(img_cpy,0,2))
     #     plt.subplot(122)
-    #     plt.imshow(mask[i,:,:])
+    #     plt.imshow(seg[i,:,:])
     #     plt.show()
 
     # print(classes)

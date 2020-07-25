@@ -40,18 +40,18 @@ class MonoSegmentationTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, target) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            data = data.to(self._device)
-            target = target.to(self._device)
+            image   = data['l_img'].to(self._device)
+            target  = data['seg'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            outputs = self._model(data)
+            outputs = self._model(image)
 
             loss = self._loss_function(outputs, target)
 
@@ -80,12 +80,12 @@ class MonoSegmentationTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                data = data.to(self._device)
-                target = target.to(self._device)
+                image   = data['l_img'].to(self._device)
+                target  = data['seg'].to(self._device)
 
-                outputs = self._model(data)
+                outputs = self._model(image)
                 
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
@@ -111,7 +111,7 @@ class MonoSegmentationTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, mask = next(iter(self._validation_loader))
+            image, seg = next(iter(self._validation_loader))
             image = image.to(self._device)
 
             start_time = time.time()
@@ -127,7 +127,7 @@ class MonoSegmentationTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(mask[i,:,:]) #cmap=cmap
+                plt.imshow(seg[i,:,:]) #cmap=cmap
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)

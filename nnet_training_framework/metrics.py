@@ -30,6 +30,10 @@ class MetricBaseClass(object):
                 with h5py.File(self._path, 'a') as hf:
                     hf.create_group('cache')
                     print("Training Statitsics created at ", self._path)
+            else:
+                with h5py.File(self._path, 'a') as hf:
+                    if 'cache' in list(hf):
+                        del hf['cache']
         else:
             self._path = None
         
@@ -619,6 +623,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "StereoSD1.1_SGD_Fcl_InvH_C_seg"
+    filename = "MonoFlow1_SGD_Recon"
     metric = MetricBaseClass(filename=filename)
     metric.plot_summary_data()

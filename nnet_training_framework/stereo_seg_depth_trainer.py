@@ -51,16 +51,16 @@ class StereoSegDepthTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, target) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            left = data[0].to(self._device)
-            right = data[1].to(self._device)
-            seg_gt = target[0].to(self._device)
-            depth_gt = target[1].to(self._device)
+            left        = data['l_img'].to(self._device)
+            right       = data['r_img'].to(self._device)
+            seg_gt      = data['seg'].to(self._device)
+            depth_gt    = data['disparity'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
@@ -103,12 +103,12 @@ class StereoSegDepthTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                left = data[0].to(self._device)
-                right = data[1].to(self._device)
-                seg_gt = target[0].to(self._device)
-                depth_gt = target[1].to(self._device)
+                left        = data['l_img'].to(self._device)
+                right       = data['r_img'].to(self._device)
+                seg_gt      = data['seg'].to(self._device)
+                depth_gt    = data['disparity'].to(self._device)
 
                 seg_pred, depth_pred = self._model(left, right)
                 

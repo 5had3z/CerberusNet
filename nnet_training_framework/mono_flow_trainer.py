@@ -21,14 +21,14 @@ from trainer_base_class import ModelTrainer
 __all__ = ['MonoFlowTrainer']
 
 class MonoFlowTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(MonoFlowTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
         self._loss_function = loss_fn
-        self._metric = OpticFlowMetric(filename=self._modelname)
+        self._metric = OpticFlowMetric(filename=modelname)
+        super(MonoFlowTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, modelname, checkpoints)
 
     def save_checkpoint(self):
         super(MonoFlowTrainer, self).save_checkpoint()
@@ -46,14 +46,14 @@ class MonoFlowTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, _) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            img         = data[0].to(self._device)
-            img_seq     = data[1].to(self._device)
+            img     = data['l_img'].to(self._device)
+            img_seq = data['l_seq'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
@@ -89,10 +89,10 @@ class MonoFlowTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, _) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img         = data[0].to(self._device)
-                img_seq     = data[1].to(self._device)
+                img         = data['l_img'].to(self._device)
+                img_seq     = data['l_seq'].to(self._device)
 
                 pred_flow   = self._model(img, img_seq)
                 
@@ -123,13 +123,11 @@ class MonoFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             image, seq_img = next(iter(self._validation_loader))
-            left        = image[0].to(self._device)
-            right       = image[1].to(self._device)
-            seq_left    = seq_img[0].to(self._device)
-            #seq_right   = seq_img[1].to(self._device)
+            left        = image['l_img'].to(self._device)
+            seq_left    = seq_img['l_seq'].to(self._device)
 
             start_time = time.time()
-            pred_l, _ = self._model(left, right)
+            pred_l = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             for i in range(self._validation_loader.batch_size):
@@ -193,6 +191,6 @@ if __name__ == "__main__":
     lossfn = ReconstructionLoss(img_w=1024, img_h=512, device=torch.device("cuda")).to(torch.device("cuda"))
     filename = str(Model)+'_SGD_Recon'
 
-    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
     # modeltrainer.visualize_output()
-    modeltrainer.train_model(5)
+    modeltrainer.train_model(1)
