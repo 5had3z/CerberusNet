@@ -623,6 +623,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "MonoFlow1_SGD_Recon"
+    filename = "ReLuModel_A_ReconV2_disp"
     metric = MetricBaseClass(filename=filename)
     metric.plot_summary_data()
