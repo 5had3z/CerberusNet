@@ -39,3 +39,8 @@
 *.pyc
 *.pth
 *.hdf5
+
+# Ignore correlation package build things
+nnet_training_framewor/correlation_package/build/*
+nnet_training_framewor/correlation_package/correlation_cuda.egg-info/*
+nnet_training_framewor/correlation_package/dist/*
