@@ -3,9 +3,7 @@
 #define CUDA_NUM_THREADS 1024
 #define THREADS_PER_BLOCK 32
 
-#include <ATen/NativeFunctions.h>
 #include <ATen/Dispatch.h>
-#include <ATen/cuda/CUDAApplyUtils.cuh>
 
 using at::Half;
 
@@ -297,18 +295,19 @@ int correlation_forward_cuda_kernel(at::Tensor& output, at::Tensor& input1,
 	int inputHeight = input1.size(2);
 	int inputWidth = input1.size(3);
 
+	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
+
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
-	dim3 threads_block(THREADS_PER_BLOCK);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "channels_first_fwd_1", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>>(
+		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
 			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "channels_first_fwd_2", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>> (
+		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
 			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
@@ -344,14 +343,14 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
 	cudaError_t err;
-	int batchSize = gradOutput.size(0);
+	int batchSize		= gradOutput.size(0);
 	int nOutputChannels = gradOutput.size(1);
-	int outputHeight = gradOutput.size(2);
-	int outputWidth = gradOutput.size(3);
+	int outputHeight	= gradOutput.size(2);
+	int outputWidth		= gradOutput.size(3);
 
-	int nInputChannels = input1.size(1);
-	int inputHeight = input1.size(2);
-	int inputWidth = input1.size(3);
+	int nInputChannels  = input1.size(1);
+	int inputHeight 	= input1.size(2);
+	int inputWidth 		= input1.size(3);
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
@@ -391,8 +390,7 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 			correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
 				n, gradInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput2.data<scalar_t>(),
-				pad_size, kernel_size, max_displacement, stride1, stride2);
+				rInput2.data<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
 	}
@@ -409,8 +407,7 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 			correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
 				n, gradInput2.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput1.data<scalar_t>(),
-				pad_size, kernel_size, max_displacement, stride1, stride2);
+				rInput1.data<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
 	}

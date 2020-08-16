@@ -1,10 +1,10 @@
+#include "correlation_cuda_kernel.cuh"
+
 #include <torch/extension.h>
 #include <ATen/ATen.h>
-#include <ATen/Context.h>
 #include <ATen/cuda/CUDAContext.h>
-#include <iostream>
 
-#include "correlation_cuda_kernel.cuh"
+#include <iostream>
 
 int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2, at::Tensor& output,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
@@ -51,16 +51,16 @@ int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor
 {
     const int batchSize         = input1.size(0);
     const int nInputChannels    = input1.size(1);
-    const int height            = input1.size(2);
-    const int width             = input1.size(3);
+    const int inputHeight       = input1.size(2);
+    const int inputWidth        = input1.size(3);
 
-    const int paddedInputHeight = height + 2 * pad_size;
-    const int paddedInputWidth  = width + 2 * pad_size;
+    const int paddedInputHeight = inputHeight + 2 * pad_size;
+    const int paddedInputWidth  = inputWidth + 2 * pad_size;
 
     rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
     rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    gradInput1.resize_({batchSize, nInputChannels, height, width});
-    gradInput2.resize_({batchSize, nInputChannels, height, width});
+    gradInput1.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
+    gradInput2.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
 
     rInput1.fill_(0);
     rInput2.fill_(0);
