@@ -2,7 +2,6 @@
 #include <ATen/ATen.h>
 #include <ATen/Context.h>
 #include <ATen/cuda/CUDAContext.h>
-#include <stdio.h>
 #include <iostream>
 
 #include "correlation_cuda_kernel.cuh"
@@ -10,21 +9,20 @@
 int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2, at::Tensor& output,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
-    const int batchSize = input1.size(0);
-    const int nInputChannels = input1.size(1);
-    const int inputHeight = input1.size(2);
-    const int inputWidth = input1.size(3);
+    const int batchSize         = input1.size(0);
+    const int nInputChannels    = input1.size(1);
+    const int inputHeight       = input1.size(2);
+    const int inputWidth        = input1.size(3);
 
     const int kernel_radius = (kernel_size - 1) / 2;
     const int border_radius = kernel_radius + max_displacement;
 
     const int paddedInputHeight = inputHeight + 2 * pad_size;
-    const int paddedInputWidth = inputWidth + 2 * pad_size;
+    const int paddedInputWidth  = inputWidth + 2 * pad_size;
 
-    const int nOutputChannels = ((max_displacement/stride2)*2 + 1) * ((max_displacement/stride2)*2 + 1);
-
-    const int outputHeight = ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(stride1));
-    const int outputwidth = ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(stride1));
+    const int nOutputChannels   = ((max_displacement/stride2)*2 + 1) * ((max_displacement/stride2)*2 + 1);
+    const int outputHeight      = ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(stride1));
+    const int outputwidth       = ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(stride1));
 
     rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
     rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
@@ -51,13 +49,13 @@ int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor
     at::Tensor& gradOutput, at::Tensor& gradInput1, at::Tensor& gradInput2,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
-    const int batchSize = input1.size(0);
-    const int nInputChannels = input1.size(1);
-    const int paddedInputHeight = input1.size(2) + 2 * pad_size;
-    const int paddedInputWidth = input1.size(3) + 2 * pad_size;
+    const int batchSize         = input1.size(0);
+    const int nInputChannels    = input1.size(1);
+    const int height            = input1.size(2);
+    const int width             = input1.size(3);
 
-    const int height = input1.size(2);
-    const int width = input1.size(3);
+    const int paddedInputHeight = height + 2 * pad_size;
+    const int paddedInputWidth  = width + 2 * pad_size;
 
     rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
     rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
@@ -76,9 +74,9 @@ int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor
         at::cuda::getCurrentCUDAStream()
     );
 
-  if (!success) { AT_ERROR("CUDA call failed"); }
+    if (!success) { AT_ERROR("CUDA call failed"); }
 
-  return 1;
+    return 1;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
