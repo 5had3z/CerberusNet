@@ -11,6 +11,7 @@ class CorrelationFunction(Function):
     @staticmethod
     def forward(ctx, input1, input2, pad_size=3, kernel_size=3, max_displacement=20, stride1=1, stride2=2, corr_multiply=1):
         ctx.save_for_backward(input1, input2)
+        
         ctx.pad_size = pad_size
         ctx.kernel_size = kernel_size
         ctx.max_displacement = max_displacement
@@ -18,13 +19,12 @@ class CorrelationFunction(Function):
         ctx.stride2 = stride2
         ctx.corr_multiply = corr_multiply
 
-        with torch.cuda.device_of(input1):
-            rbot1 = input1.new()
-            rbot2 = input2.new()
-            output = input1.new()
+        rbot1 = input1.new()
+        rbot2 = input2.new()
+        output = input1.new()
 
-            correlation_cuda.forward(input1, input2, rbot1, rbot2, output, 
-                pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
+        correlation_cuda.forward(input1, input2, rbot1, rbot2, output, 
+            pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
 
         return output
 
@@ -32,15 +32,14 @@ class CorrelationFunction(Function):
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
-        with torch.cuda.device_of(input1):
-            rbot1 = input1.new()
-            rbot2 = input2.new()
+        rbot1 = input1.new()
+        rbot2 = input2.new()
 
-            grad_input1 = input1.new()
-            grad_input2 = input2.new()
+        grad_input1 = torch.zeros(input1.size()).cuda()
+        grad_input2 = torch.zeros(input2.size()).cuda()
 
-            correlation_cuda.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
-                ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
+        correlation_cuda.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
+            ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
         return grad_input1, grad_input2, None, None, None, None, None, None 
 
@@ -56,6 +55,14 @@ class Correlation(Module):
         #     'stride2': stride2,
         #     'corr_multiply': corr_multiply
         # }
+
+        # self.pad_size = torch.nn.Parameter(torch.Tensor(pad_size), requires_grad=False)
+        # self.kernel_size = torch.nn.Parameter(torch.Tensor(kernel_size), requires_grad=False)
+        # self.max_displacement = torch.nn.Parameter(torch.Tensor(max_displacement), requires_grad=False)
+        # self.stride1 = torch.nn.Parameter(torch.Tensor(stride1), requires_grad=False)
+        # self.stride2 = torch.nn.Parameter(torch.Tensor(stride2), requires_grad=False)
+        # self.corr_multiply = torch.nn.Parameter(torch.Tensor(corr_multiply), requires_grad=False)
+
         self.pad_size = pad_size
         self.kernel_size = kernel_size
         self.max_displacement = max_displacement
@@ -63,11 +70,8 @@ class Correlation(Module):
         self.stride2 = stride2
         self.corr_multiply = corr_multiply
 
-        self.correlation = CorrelationFunction.apply
-
     def forward(self, input1, input2):
-        # return self.correlation(input1, input2, self.args)
-        return self.correlation(input1, input2, self.pad_size, self.kernel_size, self.max_displacement, self.stride1, self.stride2, self.corr_multiply)
+        return CorrelationFunction.apply(input1, input2, self.pad_size, self.kernel_size, self.max_displacement, self.stride1, self.stride2, self.corr_multiply)
 
 if __name__ == '__main__':
     import time

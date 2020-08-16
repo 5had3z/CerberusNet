@@ -15,7 +15,6 @@ using at::Half;
 template <typename scalar_t>
 __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rinput, int channels, int height, int width, int pad_size)
 {
-
 	// n (batch size), c (num of channels), y (height), x (width)
 	int n = blockIdx.x;
 	int y = blockIdx.y;
@@ -39,14 +38,10 @@ __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rin
 }
 
 template <typename scalar_t>
-__global__ void correlation_forward(scalar_t*  output, int nOutputChannels, int outputHeight, int outputWidth,
+__global__ void correlation_forward(scalar_t* output, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput1, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ rInput2,
-	int pad_size,
-	int kernel_size,
-	int max_displacement,
-	int stride1,
-	int stride2)
+	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 
@@ -117,11 +112,7 @@ template <typename scalar_t>
 __global__ void correlation_backward_input1(int item, scalar_t* gradInput1, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput2,
-	int pad_size,
-	int kernel_size,
-	int max_displacement,
-	int stride1,
-	int stride2)
+	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 
@@ -210,11 +201,7 @@ template <typename scalar_t>
 __global__ void correlation_backward_input2(int item, scalar_t*  gradInput2, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput1,
-	int pad_size,
-	int kernel_size,
-	int max_displacement,
-	int stride1,
-	int stride2)
+	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 
@@ -299,89 +286,50 @@ __global__ void correlation_backward_input2(int item, scalar_t*  gradInput2, int
 
 }
 
-int correlation_forward_cuda_kernel(at::Tensor& output,
-	int ob,
-	int oc,
-	int oh,
-	int ow,
-	int osb,
-	int osc,
-	int osh,
-	int osw,
-
-	at::Tensor& input1,
-	int ic,
-	int ih,
-	int iw,
-	int isb,
-	int isc,
-	int ish,
-	int isw,
-
-	at::Tensor& input2,
-	int gc,
-	int gsb,
-	int gsc,
-	int gsh,
-	int gsw,
-
-	at::Tensor& rInput1,
-	at::Tensor& rInput2,
-	int pad_size,
-	int kernel_size,
-	int max_displacement,
-	int stride1,
-	int stride2,
-	int corr_type_multiply,
-	cudaStream_t stream)
+int correlation_forward_cuda_kernel(at::Tensor& output, at::Tensor& input1, 
+	at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2,
+	int pad_size, int kernel_size, int max_displacement, int stride1,
+	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
+	int batchSize = output.size(0);
+	int nOutputChannels = output.size(1);
+	int outputHeight = output.size(2);
+	int outputWidth = output.size(3);
 
-	int batchSize = ob;
-
-	int nInputChannels = ic;
-	int inputWidth = iw;
-	int inputHeight = ih;
-
-	int nOutputChannels = oc;
-	int outputWidth = ow;
-	int outputHeight = oh;
+	int nInputChannels = input1.size(1);
+	int inputHeight = input1.size(2);
+	int inputWidth = input1.size(3);
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	dim3 threads_block(THREADS_PER_BLOCK);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "channels_first_fwd_1", ([&] {
-
-		channels_first<scalar_t> << <blocks_grid, threads_block, 0, stream >> >(
-			input1.data<scalar_t>(), rInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth, pad_size);
-
-	}));
+		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>>(
+			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
+			nInputChannels, inputHeight, inputWidth, pad_size);
+		})
+	);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "channels_first_fwd_2", ([&] {
-
-		channels_first<scalar_t> << <blocks_grid, threads_block, 0, stream >> > (
-			input2.data<scalar_t>(), rInput2.data<scalar_t>(), nInputChannels, inputHeight, inputWidth, pad_size);
-
-	}));
+		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>> (
+			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
+			nInputChannels, inputHeight, inputWidth, pad_size);
+		})
+	);
 
 	dim3 threadsPerBlock(THREADS_PER_BLOCK);
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "correlation_forward", ([&] {
-
-		correlation_forward<scalar_t> << <totalBlocksCorr, threadsPerBlock, 0, stream >> >
+		correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>
 			(output.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
 			rInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 			rInput2.data<scalar_t>(),
-			pad_size,
-			kernel_size,
-			max_displacement,
-			stride1,
-			stride2);
-
-	}));
+			pad_size, kernel_size, max_displacement, stride1, stride2);
+		})
+	);
 
 	cudaError_t err = cudaGetLastError();
-
 
 	// check for errors
 	if (err != cudaSuccess) {
@@ -392,131 +340,61 @@ int correlation_forward_cuda_kernel(at::Tensor& output,
 	return 1;
 }
 
-
-int correlation_backward_cuda_kernel(
-	at::Tensor& gradOutput,
-	int gob,
-	int goc,
-	int goh,
-	int gow,
-	int gosb,
-	int gosc,
-	int gosh,
-	int gosw,
-
-	at::Tensor& input1,
-	int ic,
-	int ih,
-	int iw,
-	int isb,
-	int isc,
-	int ish,
-	int isw,
-
-	at::Tensor& input2,
-	int gsb,
-	int gsc,
-	int gsh,
-	int gsw,
-
-	at::Tensor& gradInput1,
-	int gisb,
-	int gisc,
-	int gish,
-	int gisw,
-
-	at::Tensor& gradInput2,
-	int ggc,
-	int ggsb,
-	int ggsc,
-	int ggsh,
-	int ggsw,
-
-	at::Tensor& rInput1,
-	at::Tensor& rInput2,
-	int pad_size,
-	int kernel_size,
-	int max_displacement,
-	int stride1,
-	int stride2,
-	int corr_type_multiply,
-	cudaStream_t stream)
+int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
+	at::Tensor& input1, at::Tensor& input2, at::Tensor& gradInput1,
+	at::Tensor& gradInput2, at::Tensor& rInput1, at::Tensor& rInput2,
+	int pad_size, int kernel_size, int max_displacement, int stride1,
+	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
+	int batchSize = gradOutput.size(0);
+	int nOutputChannels = gradOutput.size(1);
+	int outputHeight = gradOutput.size(2);
+	int outputWidth = gradOutput.size(3);
 
-	int batchSize = gob;
-	int num = batchSize;
-
-	int nInputChannels = ic;
-	int inputWidth = iw;
-	int inputHeight = ih;
-
-	int nOutputChannels = goc;
-	int outputWidth = gow;
-	int outputHeight = goh;
+	int nInputChannels = input1.size(1);
+	int inputHeight = input1.size(2);
+	int inputWidth = input1.size(3);
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	dim3 threads_block(THREADS_PER_BLOCK);
 
-
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "lltm_forward_cuda", ([&] {
-
-		channels_first<scalar_t> << <blocks_grid, threads_block, 0, stream >> >(
-			input1.data<scalar_t>(),
-			rInput1.data<scalar_t>(),
-			nInputChannels,
-			inputHeight,
-			inputWidth,
-			pad_size
-			);
-	}));
+		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>>(
+			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
+			nInputChannels, inputHeight, inputWidth, pad_size );
+		})
+	);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "lltm_forward_cuda", ([&] {
-
-		channels_first<scalar_t> << <blocks_grid, threads_block, 0, stream >> >(
-			input2.data<scalar_t>(),
-			rInput2.data<scalar_t>(),
-			nInputChannels,
-			inputHeight,
-			inputWidth,
-			pad_size
-			);
-	}));
+		channels_first<scalar_t> <<<blocks_grid, threads_block, 0, stream >>>(
+			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
+			nInputChannels, inputHeight, inputWidth, pad_size );
+		})
+	);
 
 	dim3 threadsPerBlock(THREADS_PER_BLOCK);
 	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
 
-	for (int n = 0; n < num; ++n) {
-
+	for (int n = 0; n < batchSize; ++n) {
 		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "lltm_forward_cuda", ([&] {
-
-
-			correlation_backward_input1<scalar_t> << <totalBlocksCorr, threadsPerBlock, 0, stream >> > (
+			correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
 				n, gradInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
 				rInput2.data<scalar_t>(),
-				pad_size,
-				kernel_size,
-				max_displacement,
-				stride1,
-				stride2);
-		}));
+				pad_size, kernel_size, max_displacement, stride1, stride2);
+			})
+		);
 	}
 
 	for (int n = 0; n < batchSize; n++) {
-
 		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.type(), "lltm_forward_cuda", ([&] {
-
-			correlation_backward_input2<scalar_t> << <totalBlocksCorr, threadsPerBlock, 0, stream >> >(
+			correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
 				n, gradInput2.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
 				rInput1.data<scalar_t>(),
-				pad_size,
-				kernel_size,
-				max_displacement,
-				stride1,
-				stride2);
-
-		}));
+				pad_size, kernel_size, max_displacement, stride1, stride2);
+			})
+		);
 	}
 
 	// check for errors
