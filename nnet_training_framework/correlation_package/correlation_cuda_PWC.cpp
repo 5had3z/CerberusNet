@@ -1,4 +1,4 @@
-#include "correlation_cuda_PWC.cuh"
+#include "correlation_cuda_kernel_PWC.cuh"
 #include <torch/extension.h>
 
 extern THCState *state;
@@ -141,7 +141,7 @@ int corr_cuda_backward(THCudaTensor *input1,
 
     int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
-    cudaStream_t stream = THCState_getCurrentStream(state);
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
     blob_rearrange_ongpu(input1_data,rbot1_data,batchSize,nInputPlane,nInputCols,nInputRows,inputWidthHeight,pad_size,pwidthheight,stream);
 

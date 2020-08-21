@@ -21,7 +21,7 @@ class CorrelationFunction(torch.autograd.Function):
         rbot2 = input2.new()
         output = input1.new()
 
-        correlation_arf.forward(input1, input2, rbot1, rbot2, output, 
+        correlation_pwc.forward(input1, input2, rbot1, rbot2, output, 
             pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
 
         return output
@@ -38,7 +38,7 @@ class CorrelationFunction(torch.autograd.Function):
         print("Grad Output", grad_output.shape)
         print("Input Dims", input1.shape)
 
-        correlation_arf.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
+        correlation_pwc.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
             ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
         return grad_input1, grad_input2, None, None, None, None, None, None 

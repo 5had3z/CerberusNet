@@ -1,3 +1,5 @@
+#include "correlation_cuda_kernel_PWC.cuh"
+
 #include <vector>
 #include <stdio.h>
 #include <math.h>
