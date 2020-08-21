@@ -1,12 +1,11 @@
 #include "correlation_cuda_kernel.cuh"
 
 #include <torch/extension.h>
-#include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
 
 #include <iostream>
 
-int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2, at::Tensor& output,
+int correlation_forward_cuda(torch::Tensor& input1, torch::Tensor& input2, torch::Tensor& rInput1, torch::Tensor& rInput2, torch::Tensor& output,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
     const int batchSize         = input1.size(0);
@@ -45,14 +44,20 @@ int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor&
     return 1;
 }
 
-int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2,
-    at::Tensor& gradOutput, at::Tensor& gradInput1, at::Tensor& gradInput2,
+int correlation_backward_cuda(torch::Tensor& input1, torch::Tensor& input2, torch::Tensor& rInput1, torch::Tensor& rInput2,
+    torch::Tensor& gradOutput, torch::Tensor& gradInput1, torch::Tensor& gradInput2,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
     const int batchSize         = input1.size(0);
     const int nInputChannels    = input1.size(1);
     const int inputHeight       = input1.size(2);
     const int inputWidth        = input1.size(3);
+
+    std::cout << "Input batch: " << batchSize << " ch: " << nInputChannels << 
+        " h: " << inputHeight << " w: " << inputWidth << std::endl;
+
+    std::cout << "Input strides batch: " << input1.stride(0) << " ch: " << input1.stride(1) << 
+        " h: " << input1.stride(2) << " w: " << input1.stride(3) << std::endl;
 
     const int paddedInputHeight = inputHeight + 2 * pad_size;
     const int paddedInputWidth  = inputWidth + 2 * pad_size;

@@ -35,6 +35,9 @@ class CorrelationFunction(torch.autograd.Function):
         grad_input1 = input1.new()
         grad_input2 = input2.new()
 
+        print("Grad Output", grad_output.shape)
+        print("Input Dims", input1.shape)
+
         correlation_cuda.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
             ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
@@ -61,17 +64,21 @@ if __name__ == '__main__':
     import random
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    corr = Correlation(max_displacement=4, kernel_size=1, stride1=1,
+    corr = Correlation(max_displacement=1, kernel_size=3, stride1=1,
                             stride2=1, corr_multiply=1).to(device)
 
     t_sum = 0
+    torch.cuda.set_device(0)
 
     for i in range(50):
-        C = random.choice([128, 256])
-        H = random.choice([128, 256])  # , 512
-        W = random.choice([64, 128])  # , 256
+        # C = random.choice([128, 256])
+        # H = random.choice([128, 256])  # , 512
+        # W = random.choice([64, 128])  # , 256
+        C = H = W = 124
         x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
         x2 = torch.randn(4, C, H, W).to(device)
+
+        print("original dims", x1.shape)
 
         end = time.time()
         y = corr(x1, x2)

@@ -281,8 +281,8 @@ __global__ void correlation_backward_input2(int item, scalar_t*  gradInput2, int
 
 }
 
-int correlation_forward_cuda_kernel(at::Tensor& output, at::Tensor& input1, 
-	at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2,
+int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1, 
+	torch::Tensor& input2, torch::Tensor& rInput1, torch::Tensor& rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1,
 	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
@@ -299,24 +299,23 @@ int correlation_forward_cuda_kernel(at::Tensor& output, at::Tensor& input1,
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "channels_first_fwd_1", ([&] {
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
 			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "channels_first_fwd_2", ([&] {
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
 			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
-	dim3 threadsPerBlock(THREADS_PER_BLOCK);
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "correlation_forward", ([&] {
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "correlation_forward", ([&] {
 		correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>
 			(output.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
 			rInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
@@ -336,9 +335,9 @@ int correlation_forward_cuda_kernel(at::Tensor& output, at::Tensor& input1,
 	return 1;
 }
 
-int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
-	at::Tensor& input1, at::Tensor& input2, at::Tensor& gradInput1,
-	at::Tensor& gradInput2, at::Tensor& rInput1, at::Tensor& rInput2,
+int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
+	torch::Tensor& input1, torch::Tensor& input2, torch::Tensor& gradInput1,
+	torch::Tensor& gradInput2, torch::Tensor& rInput1, torch::Tensor& rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1,
 	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
@@ -355,7 +354,7 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.type(), "channels_first_bck_1", ([&] {
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_bck_1", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
 			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size );
@@ -369,7 +368,7 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 		return 0;
 	}
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "channels_first_bck_2", ([&] {
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_bck_2", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
 			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size );
@@ -385,8 +384,20 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 
 	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
 
+	std::cout << "rInput batch: " << rInput1.size(0) << " ch: " << rInput1.size(1) <<
+		" h: " << rInput1.size(2) << " w: " << rInput1.size(3) << std::endl;
+
+	std::cout << "gradInput1 batch: " << gradInput1.size(0) << " ch: " << gradInput1.size(1) <<
+		" h: " << gradInput1.size(2) << " w: " << gradInput1.size(3) << std::endl;
+
+	std::cout << "gradOutput batch: " << gradOutput.size(0) << " ch: " << gradOutput.size(1) <<
+		" h: " << gradOutput.size(2) << " w: " << gradOutput.size(3) << std::endl;
+
+	std::cout << "gradOutput strides batch: " << gradOutput.stride(0) << " ch: " << gradOutput.stride(1) <<
+		" h: " << gradOutput.stride(2) << " w: " << gradOutput.stride(3) << std::endl;
+
 	for (int n = 0; n < batchSize; ++n) {
-		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.type(), "correlation_backward_input1", ([&] {
+		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "correlation_backward_input1", ([&] {
 			correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
 				n, gradInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
@@ -403,7 +414,7 @@ int correlation_backward_cuda_kernel( at::Tensor& gradOutput,
 	}
 
 	for (int n = 0; n < batchSize; n++) {
-		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.type(), "correlation_backward_input2", ([&] {
+		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.scalar_type(), "correlation_backward_input2", ([&] {
 			correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
 				n, gradInput2.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
 				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
