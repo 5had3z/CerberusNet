@@ -1,4 +1,4 @@
-#include "correlation_cuda_kernel.cuh"
+#include "correlation_cuda_kernel_ARF.cuh"
 
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
@@ -85,6 +85,6 @@ int correlation_backward_cuda(torch::Tensor& input1, torch::Tensor& input2, torc
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");
-  m.def("backward", &correlation_backward_cuda, "Correlation backward (CUDA)");
+  m.def("forward", &correlation_forward_cuda, "Correlation forward ARF (CUDA)");
+  m.def("backward", &correlation_backward_cuda, "Correlation backward ARF (CUDA)");
 }
