@@ -40,29 +40,17 @@ class CorrelationFunction(torch.autograd.Function):
         ctx.stride2 = stride2
         ctx.corr_multiply = corr_multiply
 
-        rbot1 = input1.new()
-        rbot2 = input2.new()
-        output = input1.new()
-
-        correlation_arf.forward(input1, input2, rbot1, rbot2, output, 
-            pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
+        output = correlation_arf.forward(input1, input2, pad_size, kernel_size,
+            max_displacement, stride1, stride2, corr_multiply)
 
         return output
 
     @staticmethod
-    @torch.autograd.function.once_differentiable
+    # @torch.autograd.function.once_differentiable
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
-        rbot1 = input1.new()
-        rbot2 = input2.new()
-        grad_input1 = input1.new_zeros(input1.size())
-        grad_input2 = input2.new_zeros(input2.size())
-
-        print("Grad Output", grad_output.shape)
-        print("Input Dims", input1.shape)
-
-        correlation_arf.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
+        grad_input1, grad_input2 = correlation_arf.backward(input1, input2, grad_output,
             ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
         return grad_input1, grad_input2, None, None, None, None, None, None 
@@ -94,12 +82,9 @@ if __name__ == '__main__':
     t_sum = 0
 
     for i in range(50):
-        # C = random.choice([128, 256])
-        # H = random.choice([128, 256])  # , 512
-        # W = random.choice([64, 128])  # , 256
-        C = 3
-        H = 132
-        W = 132
+        C = random.choice([128, 256])
+        H = random.choice([128, 256])  # , 512
+        W = random.choice([64, 128])  # , 256
         x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
         x2 = torch.randn(4, C, H, W, requires_grad=True).to(device)
 

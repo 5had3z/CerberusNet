@@ -17,19 +17,8 @@ __global__ void channels_first(const TensorAcc4R input, TensorAcc4R rinput, int 
 	int x = blockIdx.z;
 
 	int ch_off = threadIdx.x;
-	// scalar_t value;
-
-	// int dimcyx = channels * height * width;
-	// int dimyx = height * width;
-
-	// int p_dimx = (width + 2 * pad_size);
-	// int p_dimy = (height + 2 * pad_size);
-	// int p_dimyxc = channels * p_dimy * p_dimx;
-	// int p_dimxc = p_dimx * channels;
 
 	for (int c = ch_off; c < channels; c += THREADS_PER_BLOCK) {
-		// value = input[n * dimcyx + c * dimyx + y * width + x];
-		// rinput[n * p_dimyxc + (y + pad_size) * p_dimxc + (x + pad_size) * channels + c] = value;
 		rinput[n][y+pad_size][x+pad_size][c] = input[n][c][y][x];
 	}
 }
@@ -40,34 +29,23 @@ __global__ void correlation_forward(TensorAcc4R output, int nOutputChannels, int
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
-
-	int pInputWidth = inputWidth + 2 * pad_size;
-	int pInputHeight = inputHeight + 2 * pad_size;
-
-	int kernel_rad = (kernel_size - 1) / 2;
-	int displacement_rad = max_displacement / stride2;
-	int displacement_size = 2 * displacement_rad + 1;
-
-	int n = blockIdx.x;
-	int y1 = blockIdx.y * stride1 + max_displacement;
-	int x1 = blockIdx.z * stride1 + max_displacement;
-	int c = threadIdx.x;
-
-	int pdimyxc = pInputHeight * pInputWidth * nInputChannels;
-	int pdimxc = pInputWidth * nInputChannels;
-	int pdimc = nInputChannels;
-
-	int tdimcyx = nOutputChannels * outputHeight * outputWidth;
-	int tdimyx = outputHeight * outputWidth;
-	int tdimx = outputWidth;
-
-	scalar_t nelems = kernel_size * kernel_size * pdimc;
+	const int n = blockIdx.x;
+	const int y1 = blockIdx.y * stride1 + max_displacement;
+	const int x1 = blockIdx.z * stride1 + max_displacement;
+	const int c = threadIdx.x;
 
 	__shared__ scalar_t prod_sum[THREADS_PER_BLOCK];
 
 	// no significant speed-up in using chip memory for input1 sub-data, 
 	// not enough chip memory size to accomodate memory per block for input2 sub-data
-	// instead i've used device memory for both 
+	// instead i've used device memory for both
+
+	const int kernel_rad = (kernel_size - 1) / 2;
+	const int displacement_rad = max_displacement / stride2;
+	const int displacement_size = 2 * displacement_rad + 1;
+
+	const int pInputWidth = inputWidth + 2 * pad_size;
+	const int pInputHeight = inputHeight + 2 * pad_size;
 
 	// element-wise product along channel axis
 	for (int tj = -displacement_rad; tj <= displacement_rad; ++tj) {
@@ -78,10 +56,15 @@ __global__ void correlation_forward(TensorAcc4R output, int nOutputChannels, int
 
 			for (int j = -kernel_rad; j <= kernel_rad; ++j) {
 				for (int i = -kernel_rad; i <= kernel_rad; ++i) {
-					for (int ch = c; ch < pdimc; ch += THREADS_PER_BLOCK) {
-						// int indx1 = n * pdimyxc + (y1 + j) * pdimxc + (x1 + i) * pdimc + ch;
-						// int indx2 = n * pdimyxc + (y2 + j) * pdimxc + (x2 + i) * pdimc + ch;
-						// prod_sum[c] += rInput1[indx1] * rInput2[indx2];
+					for (int ch = c; ch < nInputChannels; ch += THREADS_PER_BLOCK) {
+						if (y1+j > pInputHeight || y2+j > pInputHeight || y1+j < 0 || y2+j < 0) {
+							// printf("Height exceeded! 0 > ( %d | %d ) > %d\n", y1+j, y2+j, pInputHeight);
+							continue;
+						}
+						if (x1+i > pInputWidth || x2+i > pInputWidth || x2+i < 0 || x1+i < 0) {
+							// printf("Width exceeded! 0 > ( %d | %d ) > %d\n", x1+i, x2+i, pInputHeight);
+							continue;
+						}
 						prod_sum[c] += rInput1[n][y1+j][x1+i][ch] * rInput2[n][y2+j][x2+i][ch];
 					}
 				}
@@ -95,8 +78,12 @@ __global__ void correlation_forward(TensorAcc4R output, int nOutputChannels, int
 					reduce_sum += prod_sum[index];
 				}
 				const int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
-				// const int tindx = n * tdimcyx + tc * tdimyx + blockIdx.y * tdimx + blockIdx.z;
-				// output[tindx] = reduce_sum / nelems;
+				const scalar_t nelems = kernel_size * kernel_size * nInputChannels;
+				if (tc > nOutputChannels) {
+					// This has not tripped any warnings yet
+					// printf("Output Channels exceeded! 0 > %d > %d\n", tc, nOutputChannels);
+					continue;
+				}
 				output[n][tc][blockIdx.y][blockIdx.z] = reduce_sum / nelems;
 			}
 		}
@@ -111,15 +98,15 @@ __global__ void correlation_backward_input1(int item, TensorAcc4R gradInput1, in
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 
-	int n = item;
-	int y = blockIdx.x * stride1 + pad_size;
-	int x = blockIdx.y * stride1 + pad_size;
-	int c = blockIdx.z;
-	int tch_off = threadIdx.x;
+	const int n = item;
+	const int y = blockIdx.x * stride1 + pad_size;
+	const int x = blockIdx.y * stride1 + pad_size;
+	const int c = blockIdx.z;
+	const int tch_off = threadIdx.x;
 
-	int kernel_rad = (kernel_size - 1) / 2;
-	int displacement_rad = max_displacement / stride2;
-	int displacement_size = 2 * displacement_rad + 1;
+	const int kernel_rad = (kernel_size - 1) / 2;
+	const int displacement_rad = max_displacement / stride2;
+	const int displacement_size = 2 * displacement_rad + 1;
 
 	int xmin = (x - kernel_rad - max_displacement) / stride1;
 	int ymin = (y - kernel_rad - max_displacement) / stride1;
@@ -143,21 +130,6 @@ __global__ void correlation_backward_input1(int item, TensorAcc4R gradInput1, in
 	ymin = max(0, ymin);
 	ymax = min(outputHeight - 1, ymax);
 
-	int pInputWidth = inputWidth + 2 * pad_size;
-	int pInputHeight = inputHeight + 2 * pad_size;
-
-	int pdimyxc = pInputHeight * pInputWidth * nInputChannels;
-	int pdimxc = pInputWidth * nInputChannels;
-	int pdimc = nInputChannels;
-
-	int tdimcyx = nOutputChannels * outputHeight * outputWidth;
-	int tdimyx = outputHeight * outputWidth;
-	int tdimx = outputWidth;
-
-	int odimcyx = nInputChannels * inputHeight* inputWidth;
-	int odimyx = inputHeight * inputWidth;
-	int odimx = inputWidth;
-
 	scalar_t nelems = kernel_size * kernel_size * nInputChannels;
 
 	__shared__ scalar_t prod_sum[THREADS_PER_BLOCK];
@@ -165,18 +137,20 @@ __global__ void correlation_backward_input1(int item, TensorAcc4R gradInput1, in
 
 	for (int tc = tch_off; tc < nOutputChannels; tc += THREADS_PER_BLOCK) {
 
-		int i2 = (tc % displacement_size - displacement_rad) * stride2;
-		int j2 = (tc / displacement_size - displacement_rad) * stride2;
+		const int i2 = (tc % displacement_size - displacement_rad) * stride2;
+		const int j2 = (tc / displacement_size - displacement_rad) * stride2;
 
-		int indx2 = n * pdimyxc + (y + j2)* pdimxc + (x + i2) * pdimc + c;
-
-		// scalar_t val2 = rInput2[indx2];
+		const int pInputWidth = inputWidth+pad_size*2;
+		const int pInputHeight = inputHeight+pad_size*2;
+		if (x+i2 > pInputWidth || y+j2 > pInputHeight || x+i2 < 0 || y+j2 < 0) {
+			// printf("Input Width/Height (%d,%d) exceeded! (%d,%d)\n",
+			// 		pInputWidth, pInputHeight, y+j2, x+i2);
+			continue;
+		}
 		const scalar_t val2 = rInput2[n][y+j2][x+i2][c];
 
 		for (int j = ymin; j <= ymax; ++j) {
 			for (int i = xmin; i <= xmax; ++i) {
-				// int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
-				// prod_sum[tch_off] += gradOutput[tindx] * val2;
 				prod_sum[tch_off] += gradOutput[n][tc][j][i] * val2;
 			}
 		}
@@ -188,8 +162,6 @@ __global__ void correlation_backward_input1(int item, TensorAcc4R gradInput1, in
 		for (int idx = 0; idx < THREADS_PER_BLOCK; idx++) {
 			reduce_sum += prod_sum[idx];
 		}
-		// const int indx1 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
-		// gradInput1[indx1] = reduce_sum / nelems;
 		gradInput1[n][c][y-pad_size][x-pad_size] = reduce_sum / nelems;
 	}
 
@@ -202,31 +174,16 @@ __global__ void correlation_backward_input2(int item, TensorAcc4R gradInput2, in
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 
-	int n = item;
-	int y = blockIdx.x * stride1 + pad_size;
-	int x = blockIdx.y * stride1 + pad_size;
-	int c = blockIdx.z;
+	const int n = item;
+	const int y = blockIdx.x * stride1 + pad_size;
+	const int x = blockIdx.y * stride1 + pad_size;
+	const int c = blockIdx.z;
 
-	int tch_off = threadIdx.x;
+	const int tch_off = threadIdx.x;
 
-	int kernel_rad = (kernel_size - 1) / 2;
-	int displacement_rad = max_displacement / stride2;
-	int displacement_size = 2 * displacement_rad + 1;
-
-	int pInputWidth = inputWidth + 2 * pad_size;
-	int pInputHeight = inputHeight + 2 * pad_size;
-
-	int pdimyxc = pInputHeight * pInputWidth * nInputChannels;
-	int pdimxc = pInputWidth * nInputChannels;
-	int pdimc = nInputChannels;
-
-	int tdimcyx = nOutputChannels * outputHeight * outputWidth;
-	int tdimyx = outputHeight * outputWidth;
-	int tdimx = outputWidth;
-
-	int odimcyx = nInputChannels * inputHeight* inputWidth;
-	int odimyx = inputHeight * inputWidth;
-	int odimx = inputWidth;
+	const int kernel_rad = (kernel_size - 1) / 2;
+	const int displacement_rad = max_displacement / stride2;
+	const int displacement_size = 2 * displacement_rad + 1;
 
 	scalar_t nelems = kernel_size * kernel_size * nInputChannels;
 
@@ -234,8 +191,8 @@ __global__ void correlation_backward_input2(int item, TensorAcc4R gradInput2, in
 	prod_sum[tch_off] = 0;
 
 	for (int tc = tch_off; tc < nOutputChannels; tc += THREADS_PER_BLOCK) {
-		int i2 = (tc % displacement_size - displacement_rad) * stride2;
-		int j2 = (tc / displacement_size - displacement_rad) * stride2;
+		const int i2 = (tc % displacement_size - displacement_rad) * stride2;
+		const int j2 = (tc / displacement_size - displacement_rad) * stride2;
 
 		int xmin = (x - kernel_rad - max_displacement - i2) / stride1;
 		int ymin = (y - kernel_rad - max_displacement - j2) / stride1;
@@ -259,14 +216,10 @@ __global__ void correlation_backward_input2(int item, TensorAcc4R gradInput2, in
 		ymin = max(0, ymin);
 		ymax = min(outputHeight - 1, ymax);
 
-		// int indx1 = n * pdimyxc + (y - j2)* pdimxc + (x - i2) * pdimc + c;
-		// scalar_t val1 = rInput1[indx1];
 		const scalar_t val1 = rInput1[n][y-j2][x-i2][c];
 
 		for (int j = ymin; j <= ymax; ++j) {
 			for (int i = xmin; i <= xmax; ++i) {
-				// int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
-				// prod_sum[tch_off] += gradOutput[tindx] * val1;
 				prod_sum[tch_off] += gradOutput[n][tc][j][i] * val1;
 			}
 		}
@@ -279,8 +232,6 @@ __global__ void correlation_backward_input2(int item, TensorAcc4R gradInput2, in
 		for (int idx = 0; idx < THREADS_PER_BLOCK; idx++) {
 			reduce_sum += prod_sum[idx];
 		}
-		// const int indx2 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
-		// gradInput2[indx2] = reduce_sum / nelems;
 		gradInput2[n][c][y-pad_size][x-pad_size] = reduce_sum / nelems;
 	}
 
@@ -300,12 +251,12 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 	int inputHeight = input1.size(2);
 	int inputWidth = input1.size(3);
 
+	cudaError_t err;
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
-
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1", ([&]
-		{
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1",
+		([&] {
 			TensorAcc4R input1_acc  = input1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
 			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
 
@@ -313,6 +264,12 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 				input1_acc, rInput1_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
+	// check for errors
+	err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		printf("error in input1 channels_first: %s\n", cudaGetErrorString(err));
+		return 0;
+	}
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2",
 		([&] {
@@ -323,6 +280,12 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 				input2_acc, rInput2_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
+	// check for errors
+	err = cudaGetLastError();
+	if (err != cudaSuccess) {
+		printf("error in input2 channels_first: %s\n", cudaGetErrorString(err));
+		return 0;
+	}
 
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
 
@@ -339,9 +302,8 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 				pad_size, kernel_size, max_displacement, stride1, stride2);
 		})
 	);
-
 	// check for errors
-	const cudaError_t err = cudaGetLastError();
+	err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		printf("error in correlation_forward_cuda_kernel: %s\n", cudaGetErrorString(err));
 		return 0;
@@ -357,14 +319,14 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 	int stride2, int corr_type_multiply, cudaStream_t stream)
 {
 	cudaError_t err;
-	int batchSize		= gradOutput.size(0);
-	int nOutputChannels = gradOutput.size(1);
-	int outputHeight	= gradOutput.size(2);
-	int outputWidth		= gradOutput.size(3);
+	const int batchSize			= gradOutput.size(0);
+	const int nOutputChannels 	= gradOutput.size(1);
+	const int outputHeight		= gradOutput.size(2);
+	const int outputWidth		= gradOutput.size(3);
 
-	int nInputChannels  = input1.size(1);
-	int inputHeight 	= input1.size(2);
-	int inputWidth 		= input1.size(3);
+	const int nInputChannels	= input1.size(1);
+	const int inputHeight 		= input1.size(2);
+	const int inputWidth 		= input1.size(3);
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
@@ -400,24 +362,6 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 		printf("error in input2 channels_first: %s\n", cudaGetErrorString(err));
 		return 0;
 	}
-
-	std::cout << "rInput1 batch: " << rInput1.size(0) << " ch: " << rInput1.size(1) <<
-		" h: " << rInput1.size(2) << " w: " << rInput1.size(3) << std::endl;
-
-	std::cout << "gradInput1 batch: " << gradInput1.size(0) << " ch: " << gradInput1.size(1) <<
-		" h: " << gradInput1.size(2) << " w: " << gradInput1.size(3) << std::endl;
-
-	std::cout << "rInput2 batch: " << rInput2.size(0) << " ch: " << rInput2.size(1) <<
-		" h: " << rInput2.size(2) << " w: " << rInput2.size(3) << std::endl;
-
-	std::cout << "gradInput2 batch: " << gradInput2.size(0) << " ch: " << gradInput2.size(1) <<
-		" h: " << gradInput2.size(2) << " w: " << gradInput2.size(3) << std::endl;
-
-	std::cout << "gradOutput batch: " << gradOutput.size(0) << " ch: " << gradOutput.size(1) <<
-		" h: " << gradOutput.size(2) << " w: " << gradOutput.size(3) << std::endl;
-
-	std::cout << "gradOutput strides batch: " << gradOutput.stride(0) << " ch: " << gradOutput.stride(1) <<
-		" h: " << gradOutput.stride(2) << " w: " << gradOutput.stride(3) << std::endl;
 
 	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
 
