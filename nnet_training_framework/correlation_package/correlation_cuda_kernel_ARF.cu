@@ -6,9 +6,10 @@
 #include <ATen/Dispatch.h>
 
 // using at::Half;
+#define TensorAcc4R torch::PackedTensorAccessor32<scalar_t,4,torch::RestrictPtrTraits>
 
 template <typename scalar_t>
-__global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* __restrict__ rinput, int channels, int height, int width, int pad_size)
+__global__ void channels_first(const TensorAcc4R input, TensorAcc4R rinput, int channels, int height, int width, int pad_size)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 	int n = blockIdx.x;
@@ -16,19 +17,20 @@ __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* __r
 	int x = blockIdx.z;
 
 	int ch_off = threadIdx.x;
-	scalar_t value;
+	// scalar_t value;
 
-	int dimcyx = channels * height * width;
-	int dimyx = height * width;
+	// int dimcyx = channels * height * width;
+	// int dimyx = height * width;
 
-	int p_dimx = (width + 2 * pad_size);
-	int p_dimy = (height + 2 * pad_size);
-	int p_dimyxc = channels * p_dimy * p_dimx;
-	int p_dimxc = p_dimx * channels;
+	// int p_dimx = (width + 2 * pad_size);
+	// int p_dimy = (height + 2 * pad_size);
+	// int p_dimyxc = channels * p_dimy * p_dimx;
+	// int p_dimxc = p_dimx * channels;
 
 	for (int c = ch_off; c < channels; c += THREADS_PER_BLOCK) {
-		value = input[n * dimcyx + c * dimyx + y * width + x];
-		rinput[n * p_dimyxc + (y + pad_size) * p_dimxc + (x + pad_size) * channels + c] = value;
+		// value = input[n * dimcyx + c * dimyx + y * width + x];
+		// rinput[n * p_dimyxc + (y + pad_size) * p_dimxc + (x + pad_size) * channels + c] = value;
+		rinput[n][y+pad_size][x+pad_size][c] = input[n][c][y][x];
 	}
 }
 
@@ -299,17 +301,23 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input1.data_ptr<scalar_t>(), rInput1.data_ptr<scalar_t>(),
-			nInputChannels, inputHeight, inputWidth, pad_size);
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1", ([&]
+		{
+			TensorAcc4R input1_acc  = input1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
+				input1_acc, rInput1_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
-			input2.data_ptr<scalar_t>(), rInput2.data_ptr<scalar_t>(),
-			nInputChannels, inputHeight, inputWidth, pad_size);
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2", ([&]
+		{
+			TensorAcc4R input2_acc  = input2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
+				input2_acc, rInput2_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
@@ -353,10 +361,13 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_bck_1", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input1.data_ptr<scalar_t>(), rInput1.data_ptr<scalar_t>(),
-			nInputChannels, inputHeight, inputWidth, pad_size );
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_bck_1", ([&]
+		{
+			TensorAcc4R input1_acc  = input1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
+				input1_acc, rInput1_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 	// check for errors
@@ -366,10 +377,13 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 		return 0;
 	}
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_bck_2", ([&] {
-		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input2.data_ptr<scalar_t>(), rInput2.data_ptr<scalar_t>(),
-			nInputChannels, inputHeight, inputWidth, pad_size );
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_bck_2", ([&]
+		{
+			TensorAcc4R input2_acc  = input2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
+				input2_acc, rInput2_acc, nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 	// check for errors

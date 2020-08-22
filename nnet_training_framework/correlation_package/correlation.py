@@ -50,6 +50,7 @@ class CorrelationFunction(torch.autograd.Function):
         return output
 
     @staticmethod
+    @torch.autograd.function.once_differentiable
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
@@ -97,8 +98,8 @@ if __name__ == '__main__':
         # H = random.choice([128, 256])  # , 512
         # W = random.choice([64, 128])  # , 256
         C = 3
-        H = 96
-        W = 96
+        H = 132
+        W = 132
         x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
         x2 = torch.randn(4, C, H, W, requires_grad=True).to(device)
 
