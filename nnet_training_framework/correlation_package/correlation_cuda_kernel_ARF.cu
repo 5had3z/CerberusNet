@@ -5,7 +5,7 @@
 
 #include <ATen/Dispatch.h>
 
-using at::Half;
+// using at::Half;
 
 template <typename scalar_t>
 __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rinput, int channels, int height, int width, int pad_size)
@@ -301,14 +301,14 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
+			input1.data_ptr<scalar_t>(), rInput1.data_ptr<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
-			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
+			input2.data_ptr<scalar_t>(), rInput2.data_ptr<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size);
 		})
 	);
@@ -316,17 +316,16 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "correlation_forward", ([&] {
-		correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>
-			(output.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-			rInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-			rInput2.data<scalar_t>(),
+		correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
+			output.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
+			rInput1.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
+			rInput2.data_ptr<scalar_t>(),
 			pad_size, kernel_size, max_displacement, stride1, stride2);
 		})
 	);
 
-	cudaError_t err = cudaGetLastError();
-
 	// check for errors
+	const cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		printf("error in correlation_forward_cuda_kernel: %s\n", cudaGetErrorString(err));
 		return 0;
@@ -356,11 +355,10 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_bck_1", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input1.data<scalar_t>(), rInput1.data<scalar_t>(),
+			input1.data_ptr<scalar_t>(), rInput1.data_ptr<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size );
 		})
 	);
-
 	// check for errors
 	err = cudaGetLastError();
 	if (err != cudaSuccess) {
@@ -370,11 +368,10 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_bck_2", ([&] {
 		channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-			input2.data<scalar_t>(), rInput2.data<scalar_t>(),
+			input2.data_ptr<scalar_t>(), rInput2.data_ptr<scalar_t>(),
 			nInputChannels, inputHeight, inputWidth, pad_size );
 		})
 	);
-
 	// check for errors
 	err = cudaGetLastError();
 	if (err != cudaSuccess) {
@@ -382,13 +379,17 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 		return 0;
 	}
 
-	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
-
-	std::cout << "rInput batch: " << rInput1.size(0) << " ch: " << rInput1.size(1) <<
+	std::cout << "rInput1 batch: " << rInput1.size(0) << " ch: " << rInput1.size(1) <<
 		" h: " << rInput1.size(2) << " w: " << rInput1.size(3) << std::endl;
 
 	std::cout << "gradInput1 batch: " << gradInput1.size(0) << " ch: " << gradInput1.size(1) <<
 		" h: " << gradInput1.size(2) << " w: " << gradInput1.size(3) << std::endl;
+
+	std::cout << "rInput2 batch: " << rInput2.size(0) << " ch: " << rInput2.size(1) <<
+		" h: " << rInput2.size(2) << " w: " << rInput2.size(3) << std::endl;
+
+	std::cout << "gradInput2 batch: " << gradInput2.size(0) << " ch: " << gradInput2.size(1) <<
+		" h: " << gradInput2.size(2) << " w: " << gradInput2.size(3) << std::endl;
 
 	std::cout << "gradOutput batch: " << gradOutput.size(0) << " ch: " << gradOutput.size(1) <<
 		" h: " << gradOutput.size(2) << " w: " << gradOutput.size(3) << std::endl;
@@ -396,38 +397,38 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 	std::cout << "gradOutput strides batch: " << gradOutput.stride(0) << " ch: " << gradOutput.stride(1) <<
 		" h: " << gradOutput.stride(2) << " w: " << gradOutput.stride(3) << std::endl;
 
+	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
+
 	for (int n = 0; n < batchSize; ++n) {
 		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "correlation_backward_input1", ([&] {
 			correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
-				n, gradInput1.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput2.data<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
+				n, gradInput1.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
+				gradOutput.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
+				rInput2.data_ptr<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
-	}
-
-	// check for errors
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		printf("error in correlation_backward_input1: %s\n", cudaGetErrorString(err));
-		return 0;
+		// check for errors
+		err = cudaGetLastError();
+		if (err != cudaSuccess) {
+			printf("error in correlation_backward_input1[iter:%d]: %s\n", n, cudaGetErrorString(err));
+			return 0;
+		}
 	}
 
 	for (int n = 0; n < batchSize; n++) {
 		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.scalar_type(), "correlation_backward_input2", ([&] {
 			correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
-				n, gradInput2.data<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-				gradOutput.data<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput1.data<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
+				n, gradInput2.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
+				gradOutput.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
+				rInput1.data_ptr<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
-	}
-
-	// check for errors
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		printf("error in correlation_backward_input2: %s\n", cudaGetErrorString(err));
-		return 0;
+		// check for errors
+		err = cudaGetLastError();
+		if (err != cudaSuccess) {
+			printf("error in correlation_backward_input2[iter:%d]: %s\n", n, cudaGetErrorString(err));
+			return 0;
+		}
 	}
 
 	return 1;
