@@ -59,11 +59,11 @@ void blob_rearrange_ongpu(const torch::Tensor& in, torch::Tensor& out, int num, 
 }
 
 // == Correlation Kernel
-
+template <typename scalar_t>
 __global__ void CorrelateData(const int nthreads, int num, int topwidth, int topheight, int topchannels, int topcount,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int kernel_size, int stride1, int stride2,
   int bottomwidth, int bottomheight, int bottomchannels,
-  const float *bottom0, const float *bottom1, float *top)
+  const scalar_t* __restrict__ bottom0, const scalar_t* __restrict__ bottom1, scalar_t* __restrict__ top)
 {
   extern __shared__ char patch_data_char[];
   
@@ -130,10 +130,11 @@ __global__ void CorrelateData(const int nthreads, int num, int topwidth, int top
   // Aggregate  
 }
 
+template <typename scalar_t>
 __global__ void CorrelateDataSubtract(const int nthreads, int num, int item, int topwidth, int topheight, int topchannels, int topcount,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int stride1, int stride2,
   int bottomwidth, int bottomheight, int bottomchannels,
-  const float *bottom0, const float *bottom1, float *top) 
+  const scalar_t* __restrict__ bottom0, const scalar_t* __restrict__ bottom1, scalar_t* __restrict__ top) 
 {
   CUDA_KERNEL_LOOP(index, nthreads) {
     int x = index % topwidth; //w-pos
@@ -172,7 +173,7 @@ __global__ void CorrelateDataSubtract(const int nthreads, int num, int item, int
 
 }
 
-void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output,
+void CorrelateData_ongpu(const torch::Tensor& rbot1, const torch::Tensor& rbot2, torch::Tensor& output,
     int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane,
     int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_,
     int kernel_radius_, int kernel_size, int stride1, int stride2, int paddedbottomwidth,
@@ -188,16 +189,18 @@ void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output,
     if (corr_type_multiply == 1) {
 
         dim3 totalBlocksCorr(nOutputCols, nOutputRows, batchSize);
-
-        CorrelateData<<<totalBlocksCorr, threadsPerBlock, shared_memory_per_block * sizeof(float), stream>>>(
-                outputThreadCount,
-                batchSize, nOutputCols, nOutputRows, nOutputPlane, outputCount,
-                max_displacement, neighborhood_grid_radius_,
-                neighborhood_grid_width_, kernel_radius_, kernel_size,
-                stride1, stride2,
-                paddedbottomwidth, paddedbottomheight, nInputPlane,
-                rbot1, rbot2, output
-                );
+        AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot1.scalar_type(), "CorrelateData", ([&] {
+            CorrelateData<<<totalBlocksCorr, threadsPerBlock, shared_memory_per_block * sizeof(float), stream>>>(
+                    outputThreadCount,
+                    batchSize, nOutputCols, nOutputRows, nOutputPlane, outputCount,
+                    max_displacement, neighborhood_grid_radius_,
+                    neighborhood_grid_width_, kernel_radius_, kernel_size,
+                    stride1, stride2,
+                    paddedbottomwidth, paddedbottomheight, nInputPlane,
+                    rbot1.data_ptr<scalar_t>(), rbot2.data_ptr<scalar_t>(), output.data_ptr<scalar_t>()
+                    );
+            })
+        );
         const cudaError_t err = cudaGetLastError();
         if(cudaSuccess != err) {
             fprintf(stderr, "CorrelateData cudaCheckError() failed: %s\n", cudaGetErrorString(err));
@@ -206,15 +209,16 @@ void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output,
     } else {
 
         for (int n = 0; n < batchSize; n++) {
-
-            CorrelateDataSubtract<<<GET_BLOCKS(outputThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
+            AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot1.scalar_type(), "CorrelateData", ([&] {
+                CorrelateDataSubtract<<<GET_BLOCKS(outputThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
                     outputThreadCount,
                     batchSize, n, nOutputCols, nOutputRows, nOutputPlane, outputCount,
                     max_displacement, neighborhood_grid_radius_, neighborhood_grid_width_,
                     kernel_radius_, stride1, stride2,
                     paddedbottomwidth, paddedbottomheight, nInputPlane,
-                    rbot1, rbot2, output
-                    );
+                    rbot1.data_ptr<scalar_t>(), rbot2.data_ptr<scalar_t>(), output.data_ptr<scalar_t>());
+                })
+            );
             const cudaError_t err = cudaGetLastError();
             if(cudaSuccess != err) {
                 fprintf(stderr, "CorrelateDataSubtract cudaCheckError() failed: %s\n", cudaGetErrorString(err));
@@ -226,10 +230,11 @@ void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output,
 
 // == Correlation Backward Pass Kernel (For Blob 0)
 
+template <typename scalar_t>
 __global__ void CorrelateDataBackward0(const int nthreads, int num, int item, int topwidth, int topheight, int topchannels,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int stride1, int stride2,
   int bottomwidth, int bottomheight, int pbottomwidth, int pbottomheight, int bottomchannels, int bottomcount, int pad_size,
-  float *bottom0diff, const float *bottom1, const float *topdiff) 
+  scalar_t* __restrict__ bottom0diff, const scalar_t* __restrict__ bottom1, const scalar_t* __restrict__ topdiff) 
 {
   CUDA_KERNEL_LOOP(index, nthreads) {
     int n = index % bottomchannels; //channels
@@ -290,10 +295,11 @@ __global__ void CorrelateDataBackward0(const int nthreads, int num, int item, in
 }
 
 // == Correlation Backward Pass Kernel (For Blob 1)
+template <typename scalar_t>
 __global__ void CorrelateDataBackward1(const int nthreads, int num, int item, int topwidth, int topheight, int topchannels,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int stride1, int stride2,
   int bottomwidth, int bottomheight, int pbottomwidth, int pbottomheight, int bottomchannels, int bottomcount, int pad_size,
-  const float *bottom0, float *bottom1diff, const float *topdiff) 
+  const scalar_t* __restrict__ bottom0, scalar_t* __restrict__ bottom1diff, const scalar_t* __restrict__ topdiff) 
 {
   CUDA_KERNEL_LOOP(index, nthreads) {
     //int l = index % bottomwidth + pad_size; //w-pos
@@ -360,10 +366,12 @@ __global__ void CorrelateDataBackward1(const int nthreads, int num, int item, in
 
 
 // == Correlation Backward Pass Kernel (For Blob 0)
+template <typename scalar_t>
 __global__ void CorrelateDataBackward0Subtract(const int nthreads, int num, int item, int topwidth, int topheight, int topchannels,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int stride1, int stride2,
   int bottomwidth, int bottomheight, int pbottomwidth, int pbottomheight, int bottomchannels, int bottomcount, int pad_size,
-  float *bottom0diff, const float *bottom0, const float *bottom1, const float *topdiff) 
+  scalar_t* __restrict__ bottom0diff, const scalar_t* __restrict__ bottom0,
+  const scalar_t* __restrict__ bottom1, const scalar_t* __restrict__ topdiff) 
 {
   CUDA_KERNEL_LOOP(index, nthreads) {
     int l = index % bottomwidth + pad_size; //w-pos
@@ -426,10 +434,12 @@ __global__ void CorrelateDataBackward0Subtract(const int nthreads, int num, int 
 
 
 // == Correlation Backward Pass Kernel (For Blob 1)
+template <typename scalar_t>
 __global__ void CorrelateDataBackward1Subtract(const int nthreads, int num, int item, int topwidth, int topheight, int topchannels,
   int max_displacement, int neighborhood_grid_radius, int neighborhood_grid_width, int kernel_radius, int stride1, int stride2,
   int bottomwidth, int bottomheight, int pbottomwidth, int pbottomheight, int bottomchannels, int bottomcount, int pad_size,
-  const float *bottom0, const float *bottom1, float *bottom1diff, const float *topdiff) 
+  const scalar_t* __restrict__ bottom0, const scalar_t* __restrict__ bottom1,
+  scalar_t* __restrict__ bottom1diff, const scalar_t* __restrict__ topdiff) 
 {
   CUDA_KERNEL_LOOP(index, nthreads) {
     int l = index % bottomwidth + pad_size; //w-pos
@@ -490,8 +500,8 @@ __global__ void CorrelateDataBackward1Subtract(const int nthreads, int num, int 
 
 }
 
-void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const float *gradOutput,
-    float *gradInput1, float *gradInput2, int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane,
+void CorrelateDataBackward_ongpu(const torch::Tensor& rbot1, const torch::Tensor& rbot2, const torch::Tensor& gradOutput,
+    torch::Tensor& gradInput1, torch::Tensor& gradInput2, int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane,
     int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_, int kernel_radius_,
     int stride1, int stride2, int nInputCols, int nInputRows, int paddedbottomwidth, int paddedbottomheight, int nInputPlane,
     int pad_size, int corr_type_multiply, cudaStream_t stream)
@@ -505,37 +515,39 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
     }
 
     if (corr_type_multiply == 1) {
-
         // == Run kernel Backward 0
         for (int n = 0; n < batchSize; n++) {
             //Bottom0
-            CorrelateDataBackward0<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
-                    botThreadCount,
-                    batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
+            AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot2.scalar_type(), "CorrelateDataBackward0", ([&] {
+                CorrelateDataBackward0<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
+                    botThreadCount, batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
                     max_displacement, neighborhood_grid_radius_, neighborhood_grid_width_,
                     kernel_radius_, stride1, stride2, nInputCols, nInputRows,
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
-                    gradInput1, rbot2, gradOutput
-                    );
+                    gradInput1.data_ptr<scalar_t>(), rbot2.data_ptr<scalar_t>(), gradOutput.data_ptr<scalar_t>());
+                })
+            );
             err = cudaGetLastError();
             if(cudaSuccess != err) {
-                fprintf(stderr, "CorrelateDataBackward0 cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                fprintf(stderr, "CorrelateDataBackward0[iter: %d] cudaCheckError() failed: %s, \n", n, cudaGetErrorString(err));
                 exit(-1);
             }
         }
 
         // == Run kernel Backward 1
         for (int n = 0; n < batchSize; n++) {
-            CorrelateDataBackward1<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
+            AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot1.scalar_type(), "CorrelateDataBackward1", ([&] {
+                CorrelateDataBackward1<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
                     botThreadCount, batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
                     max_displacement, neighborhood_grid_radius_, neighborhood_grid_width_,
                     kernel_radius_, stride1, stride2, nInputCols, nInputRows,
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
-                    rbot1, gradInput2, gradOutput
-                    );
+                    rbot1.data_ptr<scalar_t>(), gradInput2.data_ptr<scalar_t>(), gradOutput.data_ptr<scalar_t>());
+                })
+            );
             err = cudaGetLastError();
             if(cudaSuccess != err) {
-                fprintf(stderr, "CorrelateDataBackward1 cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                fprintf(stderr, "CorrelateDataBackward1[iter: %d] cudaCheckError() failed: %s\n", n, cudaGetErrorString(err));
                 exit(-1);
             }
         }
@@ -543,38 +555,39 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
     } else {
 
         for ( int n = 0; n < batchSize; n++ ) {
-
             //Bottom0
-            CorrelateDataBackward0Subtract<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>> (
-                    botThreadCount,
-                    batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
+            AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot1.scalar_type(), "CorrelateDataBackward0Subtract", ([&] {
+                CorrelateDataBackward0Subtract<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>> (
+                    botThreadCount, batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
                     max_displacement, neighborhood_grid_radius_, neighborhood_grid_width_,
                     kernel_radius_, stride1, stride2, nInputCols, nInputRows,
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
-                    gradInput1, rbot1, rbot2, gradOutput
+                    gradInput1.data_ptr<scalar_t>(), rbot1.data_ptr<scalar_t>(),
+                    rbot2.data_ptr<scalar_t>(), gradOutput.data_ptr<scalar_t>());
+                })
             );
             err = cudaGetLastError();
             if(cudaSuccess != err) {
-                fprintf(stderr, "CorrelateDataBackward0Subtract cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                fprintf(stderr, "CorrelateDataBackward0Subtract[iter: %d] cudaCheckError() failed: %s\n", n, cudaGetErrorString(err));
                 exit(-1);
             }
         }
 
         for (int n = 0; n < batchSize; n++ ) {
-
             //Bottom0
-            CorrelateDataBackward1Subtract<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
-                    botThreadCount,
-                    batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
+            AT_DISPATCH_FLOATING_TYPES_AND_HALF(rbot1.scalar_type(), "CorrelateDataBackward1Subtract", ([&] {
+                CorrelateDataBackward1Subtract<<<GET_BLOCKS(botThreadCount, CUDA_NUM_THREADS), CUDA_NUM_THREADS, 0, stream>>>(
+                    botThreadCount, batchSize, n, nOutputCols, nOutputRows, nOutputPlane,
                     max_displacement, neighborhood_grid_radius_, neighborhood_grid_width_,
                     kernel_radius_, stride1, stride2, nInputCols, nInputRows,
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
-                    rbot1, rbot2, gradInput2, gradOutput
-                    );
-
+                    rbot1.data_ptr<scalar_t>(), rbot2.data_ptr<scalar_t>(),
+                    gradInput2.data_ptr<scalar_t>(), gradOutput.data_ptr<scalar_t>());
+                })
+            );
             err = cudaGetLastError();
             if(cudaSuccess != err) {
-                fprintf(stderr, "CorrelateDataBackward1Subtract cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                fprintf(stderr, "CorrelateDataBackward1Subtract[iter: %d] cudaCheckError() failed: %s\n", n, cudaGetErrorString(err));
                 exit(-1);
             }
         }

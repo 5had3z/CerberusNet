@@ -52,8 +52,8 @@ int corr_cuda_forward(torch::Tensor &input1, torch::Tensor &input2,
     blob_rearrange_ongpu(input2, rbot2, batchSize, nInputPlane,
         nInputCols, nInputRows, inputWidthHeight, pad_size, pwidthheight, stream);
 
-    CorrelateData_ongpu(rbot1.data_ptr<float>(), rbot2.data_ptr<float>(), output.data_ptr<float>(),
-        batchSize, nOutputCols, nOutputRows, nOutputPlane, max_displacement,
+    CorrelateData_ongpu(rbot1, rbot2, output, batchSize,
+        nOutputCols, nOutputRows, nOutputPlane, max_displacement,
         neighborhood_grid_radius_, neighborhood_grid_width_, kernel_radius_,
         kernel_size, stride1, stride2, paddedbottomwidth, paddedbottomheight,
         nInputPlane, corr_type_multiply, stream);
@@ -108,10 +108,10 @@ int corr_cuda_backward(const torch::Tensor &input1, const torch::Tensor &input2,
     //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
     // gradInput2 = torch::zeros(input2.sizes(),
     //                         at::device({at::kCUDA, input2.get_device()}).dtype(input2.scalar_type()));
-    gradInput1.resize_(input1.sizes(), c10::MemoryFormat::Contiguous);
-    gradInput1.fill_({0});
-    gradInput2.resize_(input2.sizes(), c10::MemoryFormat::Contiguous);
-    gradInput2.fill_({0});
+    // gradInput1.resize_(input1.sizes(), c10::MemoryFormat::Contiguous);
+    // gradInput1.fill_({0});
+    // gradInput2.resize_(input2.sizes(), c10::MemoryFormat::Contiguous);
+    // gradInput2.fill_({0});
 
     const int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
@@ -125,8 +125,7 @@ int corr_cuda_backward(const torch::Tensor &input1, const torch::Tensor &input2,
 
     // CorrelationLayerBackward
 
-    CorrelateDataBackward_ongpu(rbot1.data_ptr<float>(), rbot2.data_ptr<float>(),
-        gradOutput.data_ptr<float>(), gradInput1.data_ptr<float>(), gradInput2.data_ptr<float>(),
+    CorrelateDataBackward_ongpu(rbot1, rbot2, gradOutput, gradInput1, gradInput2,
         batchSize, nOutputCols, nOutputRows, nOutputPlane, max_displacement,
         neighborhood_grid_radius_, neighborhood_grid_width_, kernel_radius_,
         stride1, stride2, nInputCols, nInputRows, paddedbottomwidth, paddedbottomheight,

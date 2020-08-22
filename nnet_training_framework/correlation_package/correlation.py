@@ -55,8 +55,8 @@ class CorrelationFunction(torch.autograd.Function):
 
         rbot1 = input1.new()
         rbot2 = input2.new()
-        grad_input1 = input1.new()
-        grad_input2 = input2.new()
+        grad_input1 = input1.new_zeros(input1.size())
+        grad_input2 = input2.new_zeros(input2.size())
 
         print("Grad Output", grad_output.shape)
         print("Input Dims", input1.shape)
@@ -96,11 +96,11 @@ if __name__ == '__main__':
         # C = random.choice([128, 256])
         # H = random.choice([128, 256])  # , 512
         # W = random.choice([64, 128])  # , 256
-        C = 64
-        H = 64
+        C = 3
+        H = 96
         W = 96
-        x1 = torch.randn(16, C, H, W, requires_grad=True).to(device)
-        x2 = torch.randn(16, C, H, W, requires_grad=True).to(device)
+        x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
+        x2 = torch.randn(4, C, H, W, requires_grad=True).to(device)
 
         print("original dims", x1.shape)
 
