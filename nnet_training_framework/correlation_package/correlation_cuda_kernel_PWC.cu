@@ -50,7 +50,7 @@ void blob_rearrange_ongpu(const float *in, float *out, int num, int channels, in
     err = cudaGetLastError();
     if(cudaSuccess != err)
     {
-        fprintf(stderr, "cudaCheckError() failed: %s\n", cudaGetErrorString(err));
+        fprintf(stderr, "blob_rearrange_kernel2 cudaCheckError() failed: %s\n", cudaGetErrorString(err));
         exit(-1);
     }
 }
@@ -192,6 +192,11 @@ void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output, 
                 paddedbottomwidth, paddedbottomheight, nInputPlane,
                 rbot1, rbot2, output
                 );
+        const cudaError_t err = cudaGetLastError();
+        if(cudaSuccess != err) {
+            fprintf(stderr, "CorrelateData cudaCheckError() failed: %s\n", cudaGetErrorString(err));
+            exit(-1);
+        }
     } else {
 
         for (int n = 0; n < batchSize; n++) {
@@ -204,7 +209,12 @@ void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output, 
                     paddedbottomwidth, paddedbottomheight, nInputPlane,
                     rbot1, rbot2, output
                     );
-        }
+            const cudaError_t err = cudaGetLastError();
+            if(cudaSuccess != err) {
+                fprintf(stderr, "CorrelateDataSubtract cudaCheckError() failed: %s\n", cudaGetErrorString(err));
+                exit(-1);
+            }
+        }  
     }
 }
 
@@ -478,6 +488,12 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
 {
     int inputCount = nInputPlane * nInputRows * nInputCols;
     int botThreadCount = inputCount;
+    cudaError_t err = cudaGetLastError();
+    if(cudaSuccess != err)
+    {
+        fprintf(stderr, "Bruh we error-ing before we start cudaCheckError() failed: %s\n", cudaGetErrorString(err));
+        exit(-1);
+    }
 
     if (corr_type_multiply == 1) {
 
@@ -492,7 +508,11 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
                     gradInput1, rbot2, gradOutput
                     );
-
+            err = cudaGetLastError();
+            if(cudaSuccess != err) {
+                fprintf(stderr, "CorrelateDataBackward0 cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                exit(-1);
+            }
         }
 
         // == Run kernel Backward 1
@@ -504,6 +524,11 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
                     rbot1, gradInput2, gradOutput
                     );
+            err = cudaGetLastError();
+            if(cudaSuccess != err) {
+                fprintf(stderr, "CorrelateDataBackward1 cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                exit(-1);
+            }
         }
 
     } else {
@@ -519,6 +544,11 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
                     gradInput1, rbot1, rbot2, gradOutput
             );
+            err = cudaGetLastError();
+            if(cudaSuccess != err) {
+                fprintf(stderr, "CorrelateDataBackward0Subtract cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                exit(-1);
+            }
         }
 
         for (int n = 0; n < batchSize; n++ ) {
@@ -532,6 +562,12 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
                     paddedbottomwidth, paddedbottomheight, nInputPlane, inputCount, pad_size,
                     rbot1, rbot2, gradInput2, gradOutput
                     );
+
+            err = cudaGetLastError();
+            if(cudaSuccess != err) {
+                fprintf(stderr, "CorrelateDataBackward1Subtract cudaCheckError() failed: %s, iter: %d\n", cudaGetErrorString(err), n);
+                exit(-1);
+            }
         }
     }
 }

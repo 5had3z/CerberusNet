@@ -1,6 +1,9 @@
 import torch
 import correlation_arf, correlation_pwc
 
+torch.backends.cudnn.deterministic = True
+torch.cuda.set_device(0)
+
 class CorrelationFunction(torch.autograd.Function):
     """
     Typical Parameters: pad_size=3, kernel_size=3, max_displacement=20, stride1=1, stride2=2, corr_multiply=1
@@ -68,15 +71,14 @@ if __name__ == '__main__':
                             stride2=1, corr_multiply=1).to(device)
 
     t_sum = 0
-    torch.cuda.set_device(0)
 
     for i in range(50):
         # C = random.choice([128, 256])
         # H = random.choice([128, 256])  # , 512
         # W = random.choice([64, 128])  # , 256
-        C = H = W = 124
-        x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
-        x2 = torch.randn(4, C, H, W).to(device)
+        C = H = W = 256
+        x1 = torch.randn(2, C, H, W, requires_grad=True).to(device)
+        x2 = torch.randn(2, C, H, W, requires_grad=True).to(device)
 
         print("original dims", x1.shape)
 
