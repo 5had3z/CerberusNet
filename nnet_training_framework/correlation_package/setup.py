@@ -5,7 +5,7 @@ import torch
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-cxx_args = ['-std=c++14 -Ofast']
+cxx_args = ['-std=c++14']
 
 nvcc_args = [
     '-gencode', 'arch=compute_61,code=sm_61',

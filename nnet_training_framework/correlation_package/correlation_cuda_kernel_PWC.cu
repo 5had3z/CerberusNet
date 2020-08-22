@@ -483,7 +483,11 @@ __global__ void CorrelateDataBackward1Subtract(const int nthreads, int num, int 
 
 }
 
-void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const float *gradOutput, float *gradInput1, float *gradInput2, int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane, int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_, int kernel_radius_, int stride1, int stride2, int nInputCols, int nInputRows, int paddedbottomwidth, int paddedbottomheight, int nInputPlane, int pad_size, int corr_type_multiply, cudaStream_t stream)
+void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const float *gradOutput,
+    float *gradInput1, float *gradInput2, int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane,
+    int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_, int kernel_radius_,
+    int stride1, int stride2, int nInputCols, int nInputRows, int paddedbottomwidth, int paddedbottomheight, int nInputPlane,
+    int pad_size, int corr_type_multiply, cudaStream_t stream)
 {
     int inputCount = nInputPlane * nInputRows * nInputCols;
     int botThreadCount = inputCount;
