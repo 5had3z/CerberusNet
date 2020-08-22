@@ -104,9 +104,9 @@ __global__ void correlation_forward(TensorAcc4R output, int nOutputChannels, int
 }
 
 template <typename scalar_t>
-__global__ void correlation_backward_input1(int item, scalar_t* __restrict__ gradInput1, int nInputChannels, int inputHeight, int inputWidth,
-	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
-	const scalar_t* __restrict__ rInput2,
+__global__ void correlation_backward_input1(int item, TensorAcc4R gradInput1, int nInputChannels, int inputHeight, int inputWidth,
+	const TensorAcc4R gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
+	const TensorAcc4R rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
@@ -170,12 +170,14 @@ __global__ void correlation_backward_input1(int item, scalar_t* __restrict__ gra
 
 		int indx2 = n * pdimyxc + (y + j2)* pdimxc + (x + i2) * pdimc + c;
 
-		scalar_t val2 = rInput2[indx2];
+		// scalar_t val2 = rInput2[indx2];
+		const scalar_t val2 = rInput2[n][y+j2][x+i2][c];
 
 		for (int j = ymin; j <= ymax; ++j) {
 			for (int i = xmin; i <= xmax; ++i) {
-				int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
-				prod_sum[tch_off] += gradOutput[tindx] * val2;
+				// int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
+				// prod_sum[tch_off] += gradOutput[tindx] * val2;
+				prod_sum[tch_off] += gradOutput[n][tc][j][i] * val2;
 			}
 		}
 	}
@@ -186,16 +188,16 @@ __global__ void correlation_backward_input1(int item, scalar_t* __restrict__ gra
 		for (int idx = 0; idx < THREADS_PER_BLOCK; idx++) {
 			reduce_sum += prod_sum[idx];
 		}
-		const int indx1 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
-		gradInput1[indx1] = reduce_sum / nelems;
+		// const int indx1 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
+		// gradInput1[indx1] = reduce_sum / nelems;
+		gradInput1[n][c][y-pad_size][x-pad_size] = reduce_sum / nelems;
 	}
 
 }
 
 template <typename scalar_t>
-__global__ void correlation_backward_input2(int item, scalar_t* __restrict__ gradInput2, int nInputChannels, int inputHeight, int inputWidth,
-	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
-	const scalar_t* __restrict__ rInput1,
+__global__ void correlation_backward_input2(int item, TensorAcc4R gradInput2, int nInputChannels, int inputHeight, int inputWidth,
+	const TensorAcc4R gradOutput, int nOutputChannels, int outputHeight, int outputWidth, const TensorAcc4R rInput1,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
@@ -257,13 +259,15 @@ __global__ void correlation_backward_input2(int item, scalar_t* __restrict__ gra
 		ymin = max(0, ymin);
 		ymax = min(outputHeight - 1, ymax);
 
-		int indx1 = n * pdimyxc + (y - j2)* pdimxc + (x - i2) * pdimc + c;
-		scalar_t val1 = rInput1[indx1];
+		// int indx1 = n * pdimyxc + (y - j2)* pdimxc + (x - i2) * pdimc + c;
+		// scalar_t val1 = rInput1[indx1];
+		const scalar_t val1 = rInput1[n][y-j2][x-i2][c];
 
 		for (int j = ymin; j <= ymax; ++j) {
 			for (int i = xmin; i <= xmax; ++i) {
-				int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
-				prod_sum[tch_off] += gradOutput[tindx] * val1;
+				// int tindx = n * tdimcyx + tc * tdimyx + j * tdimx + i;
+				// prod_sum[tch_off] += gradOutput[tindx] * val1;
+				prod_sum[tch_off] += gradOutput[n][tc][j][i] * val1;
 			}
 		}
 	}
@@ -275,8 +279,9 @@ __global__ void correlation_backward_input2(int item, scalar_t* __restrict__ gra
 		for (int idx = 0; idx < THREADS_PER_BLOCK; idx++) {
 			reduce_sum += prod_sum[idx];
 		}
-		const int indx2 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
-		gradInput2[indx2] = reduce_sum / nelems;
+		// const int indx2 = n * odimcyx + c * odimyx + (y - pad_size) * odimx + (x - pad_size);
+		// gradInput2[indx2] = reduce_sum / nelems;
+		gradInput2[n][c][y-pad_size][x-pad_size] = reduce_sum / nelems;
 	}
 
 }
@@ -309,8 +314,8 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 		})
 	);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2", ([&]
-		{
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2",
+		([&] {
 			TensorAcc4R input2_acc  = input2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
 			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
 
@@ -417,11 +422,16 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 	dim3 totalBlocksCorr(inputHeight, inputWidth, nInputChannels);
 
 	for (int n = 0; n < batchSize; ++n) {
-		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "correlation_backward_input1", ([&] {
-			correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
-				n, gradInput1.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-				gradOutput.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput2.data_ptr<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
+		AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "correlation_backward_input1",
+			([&] {
+				TensorAcc4R gradInput1_acc  = gradInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+				TensorAcc4R gradOutput_acc  = gradOutput.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+				TensorAcc4R rInput2_acc  = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+				correlation_backward_input1<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
+					n, gradInput1_acc, nInputChannels, inputHeight, inputWidth,
+					gradOutput_acc, nOutputChannels, outputHeight, outputWidth,
+					rInput2_acc, pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
 		// check for errors
@@ -433,11 +443,16 @@ int correlation_backward_cuda_kernel( torch::Tensor& gradOutput,
 	}
 
 	for (int n = 0; n < batchSize; n++) {
-		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.scalar_type(), "correlation_backward_input2", ([&] {
-			correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
-				n, gradInput2.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-				gradOutput.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-				rInput1.data_ptr<scalar_t>(), pad_size, kernel_size, max_displacement, stride1, stride2);
+		AT_DISPATCH_FLOATING_TYPES_AND_HALF(rInput1.scalar_type(), "correlation_backward_input2",
+			([&] {
+				TensorAcc4R gradInput2_acc  = gradInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+				TensorAcc4R gradOutput_acc  = gradOutput.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+				TensorAcc4R rInput1_acc  = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+				correlation_backward_input2<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>>(
+					n, gradInput2_acc, nInputChannels, inputHeight, inputWidth,
+					gradOutput_acc, nOutputChannels, outputHeight, outputWidth,
+					rInput1_acc, pad_size, kernel_size, max_displacement, stride1, stride2);
 			})
 		);
 		// check for errors
