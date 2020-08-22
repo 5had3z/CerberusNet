@@ -62,10 +62,10 @@ int correlation_backward_cuda(torch::Tensor& input1, torch::Tensor& input2, torc
     const int paddedInputHeight = inputHeight + 2 * pad_size;
     const int paddedInputWidth  = inputWidth + 2 * pad_size;
 
-    rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    gradInput1.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
-    gradInput2.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
+    rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, c10::MemoryFormat::Contiguous);
+    rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, c10::MemoryFormat::Contiguous);
+    gradInput1.resize_({batchSize, nInputChannels, inputHeight, inputWidth}, c10::MemoryFormat::Contiguous);
+    gradInput2.resize_({batchSize, nInputChannels, inputHeight, inputWidth}, c10::MemoryFormat::Contiguous);
 
     rInput1.fill_(0);
     rInput2.fill_(0);

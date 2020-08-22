@@ -16,7 +16,9 @@
 #define GET_BLOCKS(n, t) (n+t-1) / t
 
 // == Dimension rearrangement Kernel
-__global__ void blob_rearrange_kernel2(const float *in, float *out, int num, int channels, int width, int height, int widthheight, int padding, int pwidthheight)
+template <typename scalar_t>
+__global__ void blob_rearrange_kernel2(const scalar_t* __restrict__ in, scalar_t* __restrict__ out,
+    int num, int channels, int width, int height, int widthheight, int padding, int pwidthheight)
 {
     int xy = blockIdx.x*blockDim.x + threadIdx.x;
     if(xy>=widthheight)
@@ -36,17 +38,19 @@ __global__ void blob_rearrange_kernel2(const float *in, float *out, int num, int
     out[(n*pwidthheight+xypad)*channels + ch] = value;
 }
 
-void blob_rearrange_ongpu(const float *in, float *out, int num, int channels, int width, int height, int widthheight, int padding, int pwidthheight, cudaStream_t stream)
+void blob_rearrange_ongpu(const torch::Tensor& in, torch::Tensor& out, int num, int channels, int width, int height, int widthheight, int padding, int pwidthheight, cudaStream_t stream)
 {
-    int threads_per_block=16;
+    constexpr int threads_per_block=16;
     dim3 totalBlocksRearr((widthheight-1)/threads_per_block+1, channels, num);
 
-    cudaError_t err;
-
-    blob_rearrange_kernel2<<<totalBlocksRearr, threads_per_block, 0, stream>>>
-        (in, out, num, channels, width, height, widthheight, padding, pwidthheight);
-
-    err = cudaGetLastError();
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(in.scalar_type(), "channels_first_fwd_1", ([&] {
+        blob_rearrange_kernel2<scalar_t> <<<totalBlocksRearr, threads_per_block, 0, stream>>> (
+            in.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), num,
+            channels, width, height, widthheight, padding, pwidthheight);
+		})
+    );
+    
+    const cudaError_t err = cudaGetLastError();
     if(cudaSuccess != err)
     {
         fprintf(stderr, "blob_rearrange_kernel2 cudaCheckError() failed: %s\n", cudaGetErrorString(err));
@@ -168,9 +172,12 @@ __global__ void CorrelateDataSubtract(const int nthreads, int num, int item, int
 
 }
 
-void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output, int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane, int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_, int kernel_radius_, int kernel_size, int stride1, int stride2, int paddedbottomwidth, int paddedbottomheight, int nInputPlane, int corr_type_multiply, cudaStream_t stream)
+void CorrelateData_ongpu(const float *rbot1, const float *rbot2, float *output,
+    int batchSize, int nOutputCols, int nOutputRows, int nOutputPlane,
+    int max_displacement, int neighborhood_grid_radius_, int neighborhood_grid_width_,
+    int kernel_radius_, int kernel_size, int stride1, int stride2, int paddedbottomwidth,
+    int paddedbottomheight, int nInputPlane, int corr_type_multiply, cudaStream_t stream)
 {
-
     dim3 threadsPerBlock(THREADS_PER_WARP * WARPS_PER_BLOCK);
 
     int shared_memory_per_block = (kernel_size*kernel_size)*nInputPlane;
@@ -492,8 +499,7 @@ void CorrelateDataBackward_ongpu(const float *rbot1, const float *rbot2, const f
     int inputCount = nInputPlane * nInputRows * nInputCols;
     int botThreadCount = inputCount;
     cudaError_t err = cudaGetLastError();
-    if(cudaSuccess != err)
-    {
+    if(cudaSuccess != err) {
         fprintf(stderr, "Bruh we error-ing before we start cudaCheckError() failed: %s\n", cudaGetErrorString(err));
         exit(-1);
     }

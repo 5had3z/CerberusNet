@@ -1,5 +1,4 @@
 #include "correlation_cuda_kernel_PWC.cuh"
-#include <torch/extension.h>
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -47,13 +46,11 @@ int corr_cuda_forward(torch::Tensor &input1, torch::Tensor &input2,
 
     int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
-    blob_rearrange_ongpu(input1.data_ptr<float>(), rbot1.data_ptr<float>(),
-        batchSize, nInputPlane, nInputCols, nInputRows,
-        inputWidthHeight, pad_size, pwidthheight, stream);
+    blob_rearrange_ongpu(input1, rbot1, batchSize, nInputPlane,
+        nInputCols, nInputRows, inputWidthHeight, pad_size, pwidthheight, stream);
 
-    blob_rearrange_ongpu(input2.data_ptr<float>(), rbot2.data_ptr<float>(),
-        batchSize, nInputPlane, nInputCols, nInputRows,
-        inputWidthHeight, pad_size, pwidthheight, stream);
+    blob_rearrange_ongpu(input2, rbot2, batchSize, nInputPlane,
+        nInputCols, nInputRows, inputWidthHeight, pad_size, pwidthheight, stream);
 
     CorrelateData_ongpu(rbot1.data_ptr<float>(), rbot2.data_ptr<float>(), output.data_ptr<float>(),
         batchSize, nOutputCols, nOutputRows, nOutputPlane, max_displacement,
@@ -64,8 +61,8 @@ int corr_cuda_forward(torch::Tensor &input1, torch::Tensor &input2,
     return 1;
 }
 
-int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
-    torch::Tensor &rbot1, torch::Tensor &rbot2, torch::Tensor &gradOutput,
+int corr_cuda_backward(const torch::Tensor &input1, const torch::Tensor &input2,
+    torch::Tensor &rbot1, torch::Tensor &rbot2, const torch::Tensor &gradOutput,
     torch::Tensor &gradInput1, torch::Tensor &gradInput2,
     int pad_size, int kernel_size, int max_displacement,
     int stride1, int stride2, int corr_type_multiply)
@@ -101,9 +98,9 @@ int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
     //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
     // rbot1 = torch::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth},
     //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
-    rbot1.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth});
+    rbot1.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, c10::MemoryFormat::Contiguous);
     rbot1.fill_({0});
-    rbot2.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth});
+    rbot2.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, c10::MemoryFormat::Contiguous);
     rbot2.fill_({0});
 
     // Resize grad of inputs
@@ -111,22 +108,20 @@ int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
     //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
     // gradInput2 = torch::zeros(input2.sizes(),
     //                         at::device({at::kCUDA, input2.get_device()}).dtype(input2.scalar_type()));
-    gradInput1.resize_(input1.sizes());
+    gradInput1.resize_(input1.sizes(), c10::MemoryFormat::Contiguous);
     gradInput1.fill_({0});
-    gradInput2.resize_(input2.sizes());
+    gradInput2.resize_(input2.sizes(), c10::MemoryFormat::Contiguous);
     gradInput2.fill_({0});
 
     const int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-    blob_rearrange_ongpu(input1.data_ptr<float>(), rbot1.data_ptr<float>(),
-        batchSize, nInputPlane, nInputCols, nInputRows,
-        inputWidthHeight, pad_size, pwidthheight, stream);
+    blob_rearrange_ongpu(input1, rbot1, batchSize, nInputPlane,
+        nInputCols, nInputRows, inputWidthHeight, pad_size, pwidthheight, stream);
 
-    blob_rearrange_ongpu(input2.data_ptr<float>(), rbot2.data_ptr<float>(),
-        batchSize, nInputPlane, nInputCols, nInputRows,
-        inputWidthHeight, pad_size, pwidthheight, stream);
+    blob_rearrange_ongpu(input2, rbot2, batchSize, nInputPlane,
+        nInputCols, nInputRows, inputWidthHeight, pad_size, pwidthheight, stream);
 
     // CorrelationLayerBackward
 

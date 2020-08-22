@@ -8,7 +8,7 @@
 // using at::Half;
 
 template <typename scalar_t>
-__global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rinput, int channels, int height, int width, int pad_size)
+__global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* __restrict__ rinput, int channels, int height, int width, int pad_size)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
 	int n = blockIdx.x;
@@ -33,7 +33,7 @@ __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rin
 }
 
 template <typename scalar_t>
-__global__ void correlation_forward(scalar_t* output, int nOutputChannels, int outputHeight, int outputWidth,
+__global__ void correlation_forward(scalar_t* __restrict__ output, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput1, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
@@ -104,7 +104,7 @@ __global__ void correlation_forward(scalar_t* output, int nOutputChannels, int o
 }
 
 template <typename scalar_t>
-__global__ void correlation_backward_input1(int item, scalar_t* gradInput1, int nInputChannels, int inputHeight, int inputWidth,
+__global__ void correlation_backward_input1(int item, scalar_t* __restrict__ gradInput1, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
@@ -193,7 +193,7 @@ __global__ void correlation_backward_input1(int item, scalar_t* gradInput1, int 
 }
 
 template <typename scalar_t>
-__global__ void correlation_backward_input2(int item, scalar_t*  gradInput2, int nInputChannels, int inputHeight, int inputWidth,
+__global__ void correlation_backward_input2(int item, scalar_t* __restrict__ gradInput2, int nInputChannels, int inputHeight, int inputWidth,
 	const scalar_t* __restrict__ gradOutput, int nOutputChannels, int outputHeight, int outputWidth,
 	const scalar_t* __restrict__ rInput1,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)

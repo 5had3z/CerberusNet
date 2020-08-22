@@ -1,7 +1,8 @@
 #pragma once
+#include <torch/extension.h>
 #include <THC/THC.h>
 
-void blob_rearrange_ongpu(const float *in, float *out, 
+void blob_rearrange_ongpu(const torch::Tensor& in, torch::Tensor& out, 
     int num, int channels, int width, int height,
     int widthheight, int padding, int pwidthheight, cudaStream_t stream);
 
