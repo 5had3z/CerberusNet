@@ -1,4 +1,4 @@
-#include "correlation_cuda_kernel_ARF.cuh"
+#include "correlation_cuda_kernel.cuh"
 
 #define CUDA_NUM_THREADS 1024
 #define THREADS_PER_BLOCK 32

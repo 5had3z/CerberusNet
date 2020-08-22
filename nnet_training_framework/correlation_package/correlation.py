@@ -1,9 +1,5 @@
 import torch
-import correlation_arf, correlation_pwc
-
-torch.backends.cudnn.deterministic = True
-torch.cuda.set_device(0)
-torch.backends.cudnn.benchmark = False
+import correlation_pkg, correlation_pwc
 
 class CorrelationTorch(torch.nn.Module):
     def __init__(self, max_displacement=4, *args, **kwargs):
@@ -40,17 +36,16 @@ class CorrelationFunction(torch.autograd.Function):
         ctx.stride2 = stride2
         ctx.corr_multiply = corr_multiply
 
-        output = correlation_arf.forward(input1, input2, pad_size, kernel_size,
+        output = correlation_pkg.forward(input1, input2, pad_size, kernel_size,
             max_displacement, stride1, stride2, corr_multiply)
 
         return output
 
     @staticmethod
-    # @torch.autograd.function.once_differentiable
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
-        grad_input1, grad_input2 = correlation_arf.backward(input1, input2, grad_output,
+        grad_input1, grad_input2 = correlation_pkg.backward(input1, input2, grad_output,
             ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
         return grad_input1, grad_input2, None, None, None, None, None, None 
@@ -76,7 +71,7 @@ if __name__ == '__main__':
     import random
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    corr = Correlation(max_displacement=1, kernel_size=3, stride1=1, stride2=1, corr_multiply=1).to(device)
+    corr = Correlation(max_displacement=5, kernel_size=3, stride1=1, stride2=1, corr_multiply=1).to(device)
     # corr = CorrelationTorch(2)
 
     t_sum = 0
@@ -85,8 +80,8 @@ if __name__ == '__main__':
         C = random.choice([128, 256])
         H = random.choice([128, 256])  # , 512
         W = random.choice([64, 128])  # , 256
-        x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
-        x2 = torch.randn(4, C, H, W, requires_grad=True).to(device)
+        x1 = torch.randn(16, C, H, W, requires_grad=True).to(device)
+        x2 = torch.randn(16, C, H, W, requires_grad=True).to(device)
 
         print("original dims", x1.shape)
 
@@ -100,7 +95,7 @@ if __name__ == '__main__':
         y.sum().backward()
         t_b = time.time() - end
 
-        print('Forward: {:.3f}ms, Backward: {:.3f}ms'.format(t_f * 100, t_b * 100))
+        print('Forward: {:.3f}ms, Backward: {:.3f}ms'.format(t_f * 1000, t_b * 1000))
 
         if i < 3:
             continue

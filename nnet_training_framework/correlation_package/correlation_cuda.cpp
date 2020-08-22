@@ -1,4 +1,4 @@
-#include "correlation_cuda_kernel_ARF.cuh"
+#include "correlation_cuda_kernel.cuh"
 
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
@@ -35,7 +35,7 @@ torch::Tensor correlation_forward_cuda(torch::Tensor& input1, torch::Tensor& inp
     );
 
     //check for errors
-    if (!success) { AT_ERROR("CUDA call failed"); }
+    if (!success) { AT_ERROR("CUDA correlation_forward_cuda_kernel failed"); }
 
     return output;
 }
@@ -64,12 +64,12 @@ std::vector<torch::Tensor> correlation_backward_cuda(torch::Tensor& input1, torc
         at::cuda::getCurrentCUDAStream()
     );
 
-    if (!success) { AT_ERROR("CUDA call failed"); }
+    if (!success) { AT_ERROR("CUDA correlation_backward_cuda_kernel failed"); }
 
     return {gradInput1, gradInput2};
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("forward", &correlation_forward_cuda, "Correlation forward ARF (CUDA)");
-    m.def("backward", &correlation_backward_cuda, "Correlation backward ARF (CUDA)");
+    m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");
+    m.def("backward", &correlation_backward_cuda, "Correlation backward (CUDA)");
 }
