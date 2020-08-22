@@ -35,9 +35,8 @@ __global__ void channels_first(const TensorAcc4R input, TensorAcc4R rinput, int 
 }
 
 template <typename scalar_t>
-__global__ void correlation_forward(scalar_t* __restrict__ output, int nOutputChannels, int outputHeight, int outputWidth,
-	const scalar_t* __restrict__ rInput1, int nInputChannels, int inputHeight, int inputWidth,
-	const scalar_t* __restrict__ rInput2,
+__global__ void correlation_forward(TensorAcc4R output, int nOutputChannels, int outputHeight, int outputWidth,
+	const TensorAcc4R rInput1, int nInputChannels, int inputHeight, int inputWidth, const TensorAcc4R rInput2,
 	int pad_size, int kernel_size, int max_displacement, int stride1, int stride2)
 {
 	// n (batch size), c (num of channels), y (height), x (width)
@@ -74,16 +73,16 @@ __global__ void correlation_forward(scalar_t* __restrict__ output, int nOutputCh
 	for (int tj = -displacement_rad; tj <= displacement_rad; ++tj) {
 		for (int ti = -displacement_rad; ti <= displacement_rad; ++ti) {
 			prod_sum[c] = 0;
-			int x2 = x1 + ti*stride2;
-			int y2 = y1 + tj*stride2;
+			const int x2 = x1 + ti*stride2;
+			const int y2 = y1 + tj*stride2;
 
 			for (int j = -kernel_rad; j <= kernel_rad; ++j) {
 				for (int i = -kernel_rad; i <= kernel_rad; ++i) {
 					for (int ch = c; ch < pdimc; ch += THREADS_PER_BLOCK) {
-						int indx1 = n * pdimyxc + (y1 + j) * pdimxc + (x1 + i) * pdimc + ch;
-						int indx2 = n * pdimyxc + (y2 + j) * pdimxc + (x2 + i) * pdimc + ch;
-
-						prod_sum[c] += rInput1[indx1] * rInput2[indx2];
+						// int indx1 = n * pdimyxc + (y1 + j) * pdimxc + (x1 + i) * pdimc + ch;
+						// int indx2 = n * pdimyxc + (y2 + j) * pdimxc + (x2 + i) * pdimc + ch;
+						// prod_sum[c] += rInput1[indx1] * rInput2[indx2];
+						prod_sum[c] += rInput1[n][y1+j][x1+i][ch] * rInput2[n][y2+j][x2+i][ch];
 					}
 				}
 			}
@@ -95,14 +94,13 @@ __global__ void correlation_forward(scalar_t* __restrict__ output, int nOutputCh
 				for (int index = 0; index < THREADS_PER_BLOCK; ++index) {
 					reduce_sum += prod_sum[index];
 				}
-				int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
-				const int tindx = n * tdimcyx + tc * tdimyx + blockIdx.y * tdimx + blockIdx.z;
-				output[tindx] = reduce_sum / nelems;
+				const int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
+				// const int tindx = n * tdimcyx + tc * tdimyx + blockIdx.y * tdimx + blockIdx.z;
+				// output[tindx] = reduce_sum / nelems;
+				output[n][tc][blockIdx.y][blockIdx.z] = reduce_sum / nelems;
 			}
-
 		}
 	}
-
 }
 
 template <typename scalar_t>
@@ -323,12 +321,17 @@ int correlation_forward_cuda_kernel(torch::Tensor& output, torch::Tensor& input1
 
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "correlation_forward", ([&] {
-		correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
-			output.data_ptr<scalar_t>(), nOutputChannels, outputHeight, outputWidth,
-			rInput1.data_ptr<scalar_t>(), nInputChannels, inputHeight, inputWidth,
-			rInput2.data_ptr<scalar_t>(),
-			pad_size, kernel_size, max_displacement, stride1, stride2);
+	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "correlation_forward",
+		([&] {
+			TensorAcc4R output_acc  = output.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+
+			correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
+				output_acc, nOutputChannels, outputHeight, outputWidth,
+				rInput1_acc, nInputChannels, inputHeight, inputWidth,
+				rInput2_acc,
+				pad_size, kernel_size, max_displacement, stride1, stride2);
 		})
 	);
 
