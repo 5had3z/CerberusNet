@@ -3,6 +3,26 @@ import correlation_arf, correlation_pwc
 
 torch.backends.cudnn.deterministic = True
 torch.cuda.set_device(0)
+torch.backends.cudnn.benchmark = False
+
+class CorrelationTorch(torch.nn.Module):
+    def __init__(self, max_displacement=4, *args, **kwargs):
+        super(CorrelationTorch, self).__init__()
+        self.max_displacement = max_displacement
+        self.output_dim = 2 * self.max_displacement + 1
+        self.pad_size = self.max_displacement
+
+    def forward(self, x1, x2):
+        B, C, H, W = x1.size()
+
+        x2 = torch.nn.functional.pad(x2, [self.pad_size] * 4)
+        cv = []
+        for i in range(self.output_dim):
+            for j in range(self.output_dim):
+                cost = x1 * x2[:, :, i:(i + H), j:(j + W)]
+                cost = torch.mean(cost, 1, keepdim=True)
+                cv.append(cost)
+        return torch.cat(cv, 1)
 
 class CorrelationFunction(torch.autograd.Function):
     """
@@ -13,38 +33,40 @@ class CorrelationFunction(torch.autograd.Function):
     def forward(ctx, input1, input2, pad_size=3, kernel_size=3, max_displacement=20, stride1=1, stride2=2, corr_multiply=1):
         ctx.save_for_backward(input1, input2)
         
-        ctx.pad_size = pad_size
-        ctx.kernel_size = kernel_size
-        ctx.max_displacement = max_displacement
-        ctx.stride1 = stride1
-        ctx.stride2 = stride2
-        ctx.corr_multiply = corr_multiply
+        with torch.cuda.device_of(input1):
+            ctx.pad_size = pad_size
+            ctx.kernel_size = kernel_size
+            ctx.max_displacement = max_displacement
+            ctx.stride1 = stride1
+            ctx.stride2 = stride2
+            ctx.corr_multiply = corr_multiply
 
-        rbot1 = input1.new()
-        rbot2 = input2.new()
-        output = input1.new()
+            rbot1 = input1.new()
+            rbot2 = input2.new()
+            output = input1.new()
 
-        correlation_pwc.forward(input1, input2, rbot1, rbot2, output, 
-            pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
+            correlation_pwc.forward(input1, input2, rbot1, rbot2, output, 
+                pad_size, kernel_size, max_displacement, stride1, stride2, corr_multiply)
 
-        return output
+            return output
 
     @staticmethod
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
-        rbot1 = input1.new()
-        rbot2 = input2.new()
-        grad_input1 = input1.new()
-        grad_input2 = input2.new()
+        with torch.cuda.device_of(input1):
+            rbot1 = input1.new()
+            rbot2 = input2.new()
+            grad_input1 = input1.new()
+            grad_input2 = input2.new()
 
-        print("Grad Output", grad_output.shape)
-        print("Input Dims", input1.shape)
+            print("Grad Output", grad_output.shape)
+            print("Input Dims", input1.shape)
 
-        correlation_pwc.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
-            ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
+            correlation_pwc.backward(input1, input2, rbot1, rbot2, grad_output, grad_input1, grad_input2,
+                ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
-        return grad_input1, grad_input2, None, None, None, None, None, None 
+            return grad_input1, grad_input2, None, None, None, None, None, None 
 
 
 class Correlation(torch.nn.Module):
@@ -67,8 +89,8 @@ if __name__ == '__main__':
     import random
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    corr = Correlation(max_displacement=1, kernel_size=3, stride1=1,
-                            stride2=1, corr_multiply=1).to(device)
+    corr = Correlation(max_displacement=2, kernel_size=3, stride1=1, stride2=1, corr_multiply=1).to(device)
+    # corr = CorrelationTorch(2)
 
     t_sum = 0
 
@@ -76,9 +98,10 @@ if __name__ == '__main__':
         # C = random.choice([128, 256])
         # H = random.choice([128, 256])  # , 512
         # W = random.choice([64, 128])  # , 256
-        C = H = W = 256
-        x1 = torch.randn(2, C, H, W, requires_grad=True).to(device)
-        x2 = torch.randn(2, C, H, W, requires_grad=True).to(device)
+        C = 3
+        C = H = W = 124
+        x1 = torch.randn(4, C, H, W, requires_grad=True).to(device)
+        x2 = torch.randn(4, C, H, W, requires_grad=True).to(device)
 
         print("original dims", x1.shape)
 

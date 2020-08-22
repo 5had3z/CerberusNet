@@ -47,15 +47,15 @@ int corr_cuda_forward(torch::Tensor &input1, torch::Tensor &input2,
 
     int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
-    blob_rearrange_ongpu(input1.data<float>(), rbot1.data<float>(),
+    blob_rearrange_ongpu(input1.data_ptr<float>(), rbot1.data_ptr<float>(),
         batchSize, nInputPlane, nInputCols, nInputRows,
         inputWidthHeight, pad_size, pwidthheight, stream);
 
-    blob_rearrange_ongpu(input2.data<float>(), rbot2.data<float>(),
+    blob_rearrange_ongpu(input2.data_ptr<float>(), rbot2.data_ptr<float>(),
         batchSize, nInputPlane, nInputCols, nInputRows,
         inputWidthHeight, pad_size, pwidthheight, stream);
 
-    CorrelateData_ongpu(rbot1.data<float>(), rbot2.data<float>(), output.data<float>(),
+    CorrelateData_ongpu(rbot1.data_ptr<float>(), rbot2.data_ptr<float>(), output.data_ptr<float>(),
         batchSize, nOutputCols, nOutputRows, nOutputPlane, max_displacement,
         neighborhood_grid_radius_, neighborhood_grid_width_, kernel_radius_,
         kernel_size, stride1, stride2, paddedbottomwidth, paddedbottomheight,
@@ -70,8 +70,8 @@ int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
     int pad_size, int kernel_size, int max_displacement,
     int stride1, int stride2, int corr_type_multiply)
 {
-    std::cout << "going backward" << std::endl;
-    
+    std::cout << "going backward..." << std::endl;
+
     long nInputCols = input1.size(3);
     long nInputRows = input1.size(2);
     long nInputPlane = input1.size(1);
@@ -97,12 +97,20 @@ int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
     const int nOutputPlane = neighborhood_grid_width_ * neighborhood_grid_width_;
 
     // Resize rearrange
+    // rbot1 = torch::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth},
+    //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
+    // rbot1 = torch::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth},
+    //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
     rbot1.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth});
     rbot1.fill_({0});
     rbot2.resize_({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth});
     rbot2.fill_({0});
 
     // Resize grad of inputs
+    // gradInput1 = torch::zeros(input1.sizes(),
+    //                         at::device({at::kCUDA, input1.get_device()}).dtype(input1.scalar_type()));
+    // gradInput2 = torch::zeros(input2.sizes(),
+    //                         at::device({at::kCUDA, input2.get_device()}).dtype(input2.scalar_type()));
     gradInput1.resize_(input1.sizes());
     gradInput1.fill_({0});
     gradInput2.resize_(input2.sizes());
@@ -112,18 +120,18 @@ int corr_cuda_backward(torch::Tensor &input1, torch::Tensor &input2,
 
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
-    blob_rearrange_ongpu(input1.data<float>(), rbot1.data<float>(),
+    blob_rearrange_ongpu(input1.data_ptr<float>(), rbot1.data_ptr<float>(),
         batchSize, nInputPlane, nInputCols, nInputRows,
         inputWidthHeight, pad_size, pwidthheight, stream);
 
-    blob_rearrange_ongpu(input2.data<float>(), rbot2.data<float>(),
+    blob_rearrange_ongpu(input2.data_ptr<float>(), rbot2.data_ptr<float>(),
         batchSize, nInputPlane, nInputCols, nInputRows,
         inputWidthHeight, pad_size, pwidthheight, stream);
 
     // CorrelationLayerBackward
 
-    CorrelateDataBackward_ongpu(rbot1.data<float>(), rbot2.data<float>(),
-        gradOutput.data<float>(), gradInput1.data<float>(), gradInput2.data<float>(),
+    CorrelateDataBackward_ongpu(rbot1.data_ptr<float>(), rbot2.data_ptr<float>(),
+        gradOutput.data_ptr<float>(), gradInput1.data_ptr<float>(), gradInput2.data_ptr<float>(),
         batchSize, nOutputCols, nOutputRows, nOutputPlane, max_displacement,
         neighborhood_grid_radius_, neighborhood_grid_width_, kernel_radius_,
         stride1, stride2, nInputCols, nInputRows, paddedbottomwidth, paddedbottomheight,
