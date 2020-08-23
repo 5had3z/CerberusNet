@@ -15,8 +15,8 @@ import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 
-from metrics import MetricBaseClass
-from lr_scheduler import LRScheduler
+from utilities.metrics import MetricBaseClass
+from utilities.lr_scheduler import LRScheduler
 
 __all__ = ['ModelTrainer']
 

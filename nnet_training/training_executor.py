@@ -3,7 +3,7 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-from mono_seg_trainer import MonoSegmentationTrainer, Init_Training_MonoFSCNN
+from training_frameworks.mono_seg_trainer import MonoSegmentationTrainer, Init_Training_MonoFSCNN
 
 if __name__ == "__main__":
 

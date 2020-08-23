@@ -7,15 +7,17 @@ import os, sys, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
 
+print(Path.cwd())
+
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import ReconstructionLossV1, ReconstructionLossV2
-from metrics import OpticFlowMetric
-from dataset import CityScapesDataset
+from .utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
+from .utilities.metrics import OpticFlowMetric
+from .utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['MonoFlowTrainer']
@@ -38,6 +40,13 @@ class MonoFlowTrainer(ModelTrainer):
         if os.path.isfile(self._path):
             self.epoch = len(self._metric)
         super(MonoFlowTrainer, self).load_checkpoint()
+
+    def build_pyramid(self, image, lvl_stp=[0.5,0.5,0.5]):
+        pyramid = [image]
+        for level in lvl_stp:
+            pyr_img = torch.nn.functional.interpolate(pyramid[-1], scale_factor=level, mode='bilinear', align_corners=True)
+            pyramid.append(pyr_img)
+        return pyramid
 
     def _train_epoch(self, max_epoch):
         self._model.train()
@@ -157,7 +166,7 @@ class MonoFlowTrainer(ModelTrainer):
         return image * flow
 
 
-from nnet_models import MonoFlow1
+from ..nnet_models.nnet_models import MonoFlow1
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -194,5 +203,5 @@ if __name__ == "__main__":
     filename = str(Model)+'_SGD_Recon'
 
     modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(1)

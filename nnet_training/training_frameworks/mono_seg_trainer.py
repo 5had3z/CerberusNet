@@ -16,11 +16,11 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
-from fast_scnn import FastSCNN, Stereo_FastSCNN
-from dataset import CityScapesDataset
+from utilities.loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
+from nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
+from utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
-from metrics import SegmentationMetric
+from utilities.metrics import SegmentationMetric
 
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
@@ -267,7 +267,7 @@ def Init_Training_MonoFSCNN():
 
     return modeltrainer
 
-from fast_scnn import FastSCNN
+from ..nnet_models.fast_scnn import FastSCNN
 
 if __name__ == "__main__":
     print(Path.cwd())
