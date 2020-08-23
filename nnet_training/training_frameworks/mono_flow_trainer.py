@@ -7,17 +7,15 @@ import os, sys, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
 
-print(Path.cwd())
-
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from .utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
-from .utilities.metrics import OpticFlowMetric
-from .utilities.dataset import CityScapesDataset
+from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
+from nnet_training.utilities.metrics import OpticFlowMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['MonoFlowTrainer']
@@ -166,7 +164,7 @@ class MonoFlowTrainer(ModelTrainer):
         return image * flow
 
 
-from ..nnet_models.nnet_models import MonoFlow1
+from nnet_training.nnet_models.nnet_models import MonoFlow1
 
 if __name__ == "__main__":
     print(Path.cwd())

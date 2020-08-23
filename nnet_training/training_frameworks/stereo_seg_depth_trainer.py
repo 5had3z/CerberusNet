@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from metrics import SegmentationMetric, DepthMetric
-from dataset import CityScapesDataset
+from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegDepthTrainer']
@@ -185,8 +185,8 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from loss_functions import FocalLoss2D, InvHuberLoss, ReconstructionLossV2
-from nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
+from nnet_training.utilities.loss_functions import FocalLoss2D, InvHuberLoss, ReconstructionLossV2
+from nnet_training.nnet_models.nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
 
 if __name__ == "__main__":
     # multiprocessing.set_start_method('spawn', True)

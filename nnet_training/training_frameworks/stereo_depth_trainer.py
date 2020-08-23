@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from metrics import DepthMetric
-from dataset import CityScapesDataset
+from nnet_training.utilities.metrics import DepthMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoDisparityTrainer']
@@ -149,8 +149,8 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
-from loss_functions import DepthAwareLoss, ScaleInvariantError,\
+from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from nnet_training.utilities.loss_functions import DepthAwareLoss, ScaleInvariantError,\
                             InvHuberLoss, ReconstructionLossV2
 
 if __name__ == "__main__":

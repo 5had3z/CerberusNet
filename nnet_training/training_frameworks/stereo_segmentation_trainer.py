@@ -13,9 +13,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import FocalLoss2D
-from metrics import SegmentationMetric
-from dataset import CityScapesDataset
+from nnet_training.utilities.metrics import SegmentationMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegmentationTrainer']
@@ -146,7 +145,8 @@ class StereoSegmentationTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_models import StereoSegmentaionSeparated
+from nnet_training.utilities.loss_functions import FocalLoss2D
+from nnet_training.nnet_models.nnet_models import StereoSegmentaionSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())

@@ -13,10 +13,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import ReconstructionLoss
-from metrics import OpticFlowMetric
-from dataset import CityScapesDataset
-from trainer_base_class import ModelTrainer
+from nnet_training.utilities.metrics import OpticFlowMetric
+from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['StereoFlowTrainer']
 
@@ -163,7 +162,8 @@ class StereoFlowTrainer(ModelTrainer):
         return image * flow
 
 
-from nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from nnet_training.utilities.loss_functions import ReconstructionLossV1
+from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
 
 if __name__ == "__main__":
     print(Path.cwd())

@@ -3,10 +3,7 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os
-import time
-import platform
-import multiprocessing
+import os, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
 
@@ -16,11 +13,12 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from utilities.loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
-from nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
-from utilities.dataset import CityScapesDataset
+from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
+from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
+from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.metrics import SegmentationMetric
+
 from trainer_base_class import ModelTrainer
-from utilities.metrics import SegmentationMetric
 
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
