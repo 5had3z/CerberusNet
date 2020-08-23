@@ -1,13 +1,12 @@
 #include "correlation_cuda_kernel.cuh"
 
 #include <torch/extension.h>
-#include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
 
 #include <iostream>
 
-int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2, at::Tensor& output,
-    int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
+torch::Tensor correlation_forward_cuda(torch::Tensor& input1, torch::Tensor& input2, int pad_size,
+    int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
     const int batchSize         = input1.size(0);
     const int nInputChannels    = input1.size(1);
@@ -24,13 +23,9 @@ int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor&
     const int outputHeight      = ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(stride1));
     const int outputwidth       = ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(stride1));
 
-    rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    output.resize_({batchSize, nOutputChannels, outputHeight, outputwidth});
-
-    rInput1.fill_(0);
-    rInput2.fill_(0);
-    output.fill_(0);
+    auto rInput1 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input1.options());
+    auto rInput2 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input2.options());
+    auto output = torch::zeros({batchSize, nOutputChannels, outputHeight, outputwidth}, input1.options());
 
     const int success = correlation_forward_cuda_kernel(
         output, input1, input2, rInput1, rInput2,
@@ -40,13 +35,12 @@ int correlation_forward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor&
     );
 
     //check for errors
-    if (!success) { AT_ERROR("CUDA call failed"); }
+    if (!success) { AT_ERROR("CUDA correlation_forward_cuda_kernel failed"); }
 
-    return 1;
+    return output;
 }
 
-int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor& rInput1, at::Tensor& rInput2,
-    at::Tensor& gradOutput, at::Tensor& gradInput1, at::Tensor& gradInput2,
+std::vector<torch::Tensor> correlation_backward_cuda(torch::Tensor& input1, torch::Tensor& input2, torch::Tensor& gradOutput,
     int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
 {
     const int batchSize         = input1.size(0);
@@ -57,15 +51,11 @@ int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor
     const int paddedInputHeight = inputHeight + 2 * pad_size;
     const int paddedInputWidth  = inputWidth + 2 * pad_size;
 
-    rInput1.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    rInput2.resize_({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels});
-    gradInput1.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
-    gradInput2.resize_({batchSize, nInputChannels, inputHeight, inputWidth});
+    auto rInput1 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input1.options());
+    auto rInput2 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input2.options());
 
-    rInput1.fill_(0);
-    rInput2.fill_(0);
-    gradInput1.fill_(0);
-    gradInput2.fill_(0);
+    auto gradInput1 = torch::zeros_like(input1);
+    auto gradInput2 = torch::zeros_like(input2);
 
     const int success = correlation_backward_cuda_kernel(
         gradOutput, input1, input2, gradInput1, gradInput2, 
@@ -74,12 +64,12 @@ int correlation_backward_cuda(at::Tensor& input1, at::Tensor& input2, at::Tensor
         at::cuda::getCurrentCUDAStream()
     );
 
-    if (!success) { AT_ERROR("CUDA call failed"); }
+    if (!success) { AT_ERROR("CUDA correlation_backward_cuda_kernel failed"); }
 
-    return 1;
+    return {gradInput1, gradInput2};
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");
-  m.def("backward", &correlation_backward_cuda, "Correlation backward (CUDA)");
+    m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");
+    m.def("backward", &correlation_backward_cuda, "Correlation backward (CUDA)");
 }

@@ -42,5 +42,5 @@
 
 # Ignore correlation package build things
 nnet_training_framework/correlation_package/build/*
-nnet_training_framework/correlation_package/correlation_cuda.egg-info/*
+nnet_training_framework/correlation_package/*.egg-info/*
 nnet_training_framework/correlation_package/dist/*
