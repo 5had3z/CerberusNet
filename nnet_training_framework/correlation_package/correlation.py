@@ -1,5 +1,5 @@
 import torch
-import correlation_pkg, correlation_pwc
+import correlation_pkg
 
 class CorrelationTorch(torch.nn.Module):
     def __init__(self, max_displacement=4, *args, **kwargs):
@@ -71,8 +71,8 @@ if __name__ == '__main__':
     import random
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    corr = Correlation(max_displacement=5, kernel_size=3, stride1=1, stride2=1, corr_multiply=1).to(device)
-    # corr = CorrelationTorch(2)
+    corr = Correlation(pad_size=4, kernel_size=1, max_displacement=10, stride1=1,
+                            stride2=1, corr_multiply=1).to(device)
 
     t_sum = 0
 
