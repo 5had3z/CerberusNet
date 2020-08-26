@@ -212,16 +212,14 @@ class InvHuberLoss(nn.Module):
         return cost
 
 class ReconstructionLossV1(nn.Module):
-    def __init__(self, img_h, img_w, device=torch.device("cpu")):
+    def __init__(self, img_b, img_h, img_w, device=torch.device("cpu")):
         super(ReconstructionLossV1, self).__init__()
         self.img_h = img_h
         self.img_w = img_w
-        self.transf_base = torch.zeros([1,img_h,img_w,2])
-        for i in range(img_h):
-            for j in range(img_w):
-                self.transf_base[0,i,j,1] = i/img_h*2-1
-                self.transf_base[0,i,j,0] = j/img_w*2-1
-        self.transf_base = self.transf_base.to(device)
+
+        base_x = torch.arange(0, img_w).repeat(img_b, img_h, 1)/float(img_w)*2.-1.
+        base_y = torch.arange(0, img_h).repeat(img_b, img_w, 1).transpose(1, 2)/float(img_h)*2.-1.
+        self.transf_base = torch.stack([base_x, base_y], 3).to(device)
     
     def forward(self, source, flow, target):
         flow = flow.reshape(-1, self.img_h, self.img_w, 2)
@@ -230,7 +228,7 @@ class ReconstructionLossV1(nn.Module):
         flow += self.transf_base
         pred = F.grid_sample(source, flow, mode='bilinear', padding_mode='zeros', align_corners=None)
 
-        #debug disp
+        # debug disp
         # plt.subplot(1,2,1)
         # plt.imshow(np.moveaxis(source[0,0:3,:,:].cpu().numpy(),0,2))
         # plt.subplot(1,2,2)
@@ -373,7 +371,7 @@ if __name__ == '__main__':
     img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
     img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
-    loss_fn = ReconstructionLossV1(img1.size[1], img1.size[0])
+    loss_fn = ReconstructionLossV1(1, img1.size[1], img1.size[0])
     uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
     
     transform = torchvision.transforms.ToTensor()
