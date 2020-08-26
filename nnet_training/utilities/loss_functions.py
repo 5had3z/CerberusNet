@@ -229,6 +229,7 @@ class ReconstructionLossV1(nn.Module):
         pred = F.grid_sample(source, flow, mode='bilinear', padding_mode='zeros', align_corners=None)
 
         # debug disp
+        # import matplotlib.pyplot as plt
         # plt.subplot(1,2,1)
         # plt.imshow(np.moveaxis(source[0,0:3,:,:].cpu().numpy(),0,2))
         # plt.subplot(1,2,2)
@@ -362,12 +363,10 @@ class ReconstructionLossV2(nn.Module):
             loss = abs_diff.mean(1, True)
         return loss.mean()
 
-import PIL.Image as Image
-import torchvision.transforms
-import matplotlib.pyplot as plt
-
 if __name__ == '__main__':
-    
+    import PIL.Image as Image
+    import torchvision.transforms
+
     img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
     img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 

@@ -34,6 +34,9 @@ class FeatureExtractor(nn.Module):
             )
             self.convs.append(layer)
 
+    def __str__(self):
+        return "_FlwExt_1"
+
     def forward(self, x):
         feature_pyramid = []
         for conv in self.convs:
@@ -53,6 +56,9 @@ class FlowEstimatorDense(nn.Module):
         self.conv5 = conv(ch_in + 416, 32)
         self.feat_dim = ch_in + 448
         self.conv_last = conv(ch_in + 448, 2, isReLU=False)
+
+    def __str__(self):
+        return "_FlwEst_1"
 
     def forward(self, x):
         x1 = torch.cat([self.conv1(x), x], dim=1)
@@ -74,6 +80,9 @@ class FlowEstimatorLite(nn.Module):
         self.conv5 = conv(96 + 64, 32)
         self.feat_dim = 32
         self.predict_flow = conv(64 + 32, 2, isReLU=False)
+
+    def __str__(self):
+        return "_FlwEst_2"
 
     def forward(self, x):
         x1 = self.conv1(x)
@@ -98,6 +107,9 @@ class ContextNetwork(nn.Module):
             conv(64, 32, 3, 1, 1),
             conv(32, 2, isReLU=False)
         )
+
+    def __str__(self):
+        return "_CtxNet_1"
 
     def forward(self, x):
         return self.convs(x)
@@ -131,6 +143,10 @@ class PWCLite(nn.Module):
                                        conv(96, 32, kernel_size=1, stride=1, dilation=1),
                                        conv(64, 32, kernel_size=1, stride=1, dilation=1),
                                        conv(32, 32, kernel_size=1, stride=1, dilation=1)])
+
+    def __str__(self):
+        return "pwcnet" + str(self.feature_pyramid_extractor)\
+            + str(self.flow_estimator) + str(self.context_networks)
 
     def num_parameters(self):
         return sum(
