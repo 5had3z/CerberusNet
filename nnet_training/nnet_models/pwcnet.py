@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils.warp_utils import flow_warp
-from correlation_package.correlation import Correlation
-# from .correlation_native import Correlation
+from nnet_training.correlation_package.correlation import Correlation
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=True):
     if isReLU:
@@ -107,31 +106,25 @@ class ContextNetwork(nn.Module):
 class PWCLite(nn.Module):
     def __init__(self, cfg):
         super(PWCLite, self).__init__()
-        self.search_range = 4
-        self.num_chs = [3, 16, 32, 64, 96, 128, 192]
+        search_range = 4
+        num_chs = [3, 16, 32, 64, 96, 128, 192]
         self.output_level = 4
-        self.num_levels = 7
-        self.leakyRELU = nn.LeakyReLU(0.1, inplace=True)
 
-        self.feature_pyramid_extractor = FeatureExtractor(self.num_chs)
+        self.feature_pyramid_extractor = FeatureExtractor(num_chs)
 
-        self.upsample = cfg.upsample
-        self.n_frames = cfg.n_frames
-
-        self.corr = Correlation(pad_size=self.search_range, kernel_size=1,
-                                max_displacement=self.search_range, stride1=1,
+        self.corr = Correlation(pad_size=search_range, kernel_size=1,
+                                max_displacement=search_range, stride1=1,
                                 stride2=1, corr_multiply=1)
 
-        self.dim_corr = (self.search_range * 2 + 1) ** 2
-        self.num_ch_in = 32 + (self.dim_corr + 2) * (self.n_frames - 1)
+        dim_corr = (search_range * 2 + 1) ** 2
+        num_ch_in = 32 + (dim_corr + 2)
 
         if cfg.lite:
-            self.flow_estimator = FlowEstimatorLite(self.num_ch_in)
+            self.flow_estimator = FlowEstimatorLite(num_ch_in)
         else:
-            self.flow_estimator = FlowEstimatorDense(self.num_ch_in)
+            self.flow_estimator = FlowEstimatorDense(num_ch_in)
 
-        self.context_networks = ContextNetwork(
-            (self.flow_estimator.feat_dim + 2) * (self.n_frames - 1))
+        self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
         self.conv_1x1 = nn.ModuleList([conv(192, 32, kernel_size=1, stride=1, dilation=1),
                                        conv(128, 32, kernel_size=1, stride=1, dilation=1),
@@ -155,126 +148,43 @@ class PWCLite(nn.Module):
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
 
-    def forward_2_frames(self, x1_pyramid, x2_pyramid):
+    def forward(self, im1_pyr, im2_pyr):
         # outputs
         flows = []
 
         # init
-        b_size, _, h_x1, w_x1, = x1_pyramid[0].size()
-        init_dtype = x1_pyramid[0].dtype
-        init_device = x1_pyramid[0].device
-        flow = torch.zeros(b_size, 2, h_x1, w_x1, dtype=init_dtype,
-                           device=init_device).float()
+        b_size, _, h_x1, w_x1, = im1_pyr[0].size()
+        flow = im1_pyr.new_zeros((b_size, 2, h_x1, w_x1)).float()
 
-        for l, (x1, x2) in enumerate(zip(x1_pyramid, x2_pyramid)):
-
+        for l, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping
             if l == 0:
-                x2_warp = x2
+                im2_warp = im2
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
                                      mode='bilinear', align_corners=True)
-                x2_warp = flow_warp(x2, flow)
+                im2_warp = flow_warp(im2, flow)
 
             # correlation
-            out_corr = self.corr(x1, x2_warp)
-            out_corr_relu = self.leakyRELU(out_corr)
+            out_corr = self.corr(im1, im2_warp)
+            nn.functional.leaky_relu(out_corr, 0.1, inplace=True)
 
             # concat and estimate flow
-            x1_1by1 = self.conv_1x1[l](x1)
-            x_intm, flow_res = self.flow_estimator(
-                torch.cat([out_corr_relu, x1_1by1, flow], dim=1))
-            flow = flow + flow_res
+            im1_1by1 = self.conv_1x1[l](im1)
+            im1_intm, flow_res = self.flow_estimator(
+                torch.cat([out_corr, im1_1by1, flow], dim=1))
+            flow += flow_res
 
-            flow_fine = self.context_networks(torch.cat([x_intm, flow], dim=1))
-            flow = flow + flow_fine
+            flow_fine = self.context_networks(torch.cat([im1_intm, flow], dim=1))
+            flow += flow_fine
 
             flows.append(flow)
 
             # upsampling or post-processing
             if l == self.output_level:
                 break
+        
         if self.upsample:
             flows = [F.interpolate(flow * 4, scale_factor=4,
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
-
-    def forward_3_frames(self, x0_pyramid, x1_pyramid, x2_pyramid):
-        # outputs
-        flows = []
-
-        # init
-        b_size, _, h_x1, w_x1, = x1_pyramid[0].size()
-        init_dtype = x1_pyramid[0].dtype
-        init_device = x1_pyramid[0].device
-        flow = torch.zeros(b_size, 4, h_x1, w_x1, dtype=init_dtype,
-                           device=init_device).float()
-
-        for l, (x0, x1, x2) in enumerate(zip(x0_pyramid, x1_pyramid, x2_pyramid)):
-            # warping
-            if l == 0:
-                x0_warp = x0
-                x2_warp = x2
-            else:
-                flow = F.interpolate(flow * 2, scale_factor=2,
-                                     mode='bilinear', align_corners=True)
-                x0_warp = flow_warp(x0, flow[:, :2])
-                x2_warp = flow_warp(x2, flow[:, 2:])
-
-            # correlation
-            corr_10, corr_12 = self.corr(x1, x0_warp), self.corr(x1, x2_warp)
-            corr_relu_10, corr_relu_12 = self.leakyRELU(corr_10), self.leakyRELU(corr_12)
-
-            # concat and estimate flow
-            x1_1by1 = self.conv_1x1[l](x1)
-            feat_10 = [x1_1by1, corr_relu_10, corr_relu_12, flow[:, :2], -flow[:, 2:]]
-            feat_12 = [x1_1by1, corr_relu_12, corr_relu_10, flow[:, 2:], -flow[:, :2]]
-            x_intm_10, flow_res_10 = self.flow_estimator(torch.cat(feat_10, dim=1))
-            x_intm_12, flow_res_12 = self.flow_estimator(torch.cat(feat_12, dim=1))
-            flow_res = torch.cat([flow_res_10, flow_res_12], dim=1)
-            flow = flow + flow_res
-
-            feat_10 = [x_intm_10, x_intm_12, flow[:, :2], -flow[:, 2:]]
-            feat_12 = [x_intm_12, x_intm_10, flow[:, 2:], -flow[:, :2]]
-            flow_res_10 = self.context_networks(torch.cat(feat_10, dim=1))
-            flow_res_12 = self.context_networks(torch.cat(feat_12, dim=1))
-            flow_res = torch.cat([flow_res_10, flow_res_12], dim=1)
-            flow = flow + flow_res
-
-            flows.append(flow)
-
-            if l == self.output_level:
-                break
-        if self.upsample:
-            flows = [F.interpolate(flow * 4, scale_factor=4,
-                                   mode='bilinear', align_corners=True) for flow in flows]
-
-        flows_10 = [flo[:, :2] for flo in flows[::-1]]
-        flows_12 = [flo[:, 2:] for flo in flows[::-1]]
-        return flows_10, flows_12
-
-    def forward(self, x, with_bk=False):
-        n_frames = x.size(1) / 3
-
-        imgs = [x[:, 3 * i: 3 * i + 3] for i in range(int(n_frames))]
-        x = [self.feature_pyramid_extractor(img) + [img] for img in imgs]
-
-        res_dict = {}
-        if n_frames == 2:
-            res_dict['flows_fw'] = self.forward_2_frames(x[0], x[1])
-            if with_bk:
-                res_dict['flows_bw'] = self.forward_2_frames(x[1], x[0])
-        elif n_frames == 3:
-            flows_10, flows_12 = self.forward_3_frames(x[0], x[1], x[2])
-            res_dict['flows_fw'], res_dict['flows_bw'] = flows_12, flows_10
-        elif n_frames == 5:
-            flows_10, flows_12 = self.forward_3_frames(x[0], x[1], x[2])
-            flows_21, flows_23 = self.forward_3_frames(x[1], x[2], x[3])
-            res_dict['flows_fw'] = [flows_12, flows_23]
-            if with_bk:
-                flows_32, flows_34 = self.forward_3_frames(x[2], x[3], x[4])
-                res_dict['flows_bw'] = [flows_21, flows_32]
-        else:
-            raise NotImplementedError
-        return res_dict
-
