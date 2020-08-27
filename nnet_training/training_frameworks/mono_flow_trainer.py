@@ -9,6 +9,7 @@ from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
+from matplotlib.colors import hsv_to_rgb
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
@@ -130,6 +131,22 @@ class MonoFlowTrainer(ModelTrainer):
                             self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
                             batch_acc, loss.item(), time_elapsed, time_remain))
 
+    def flow_to_image(self, flow, max_flow=256):
+        if max_flow is not None:
+            max_flow = max(max_flow, 1.)
+        else:
+            max_flow = np.max(flow)
+
+        n = 8
+        u, v = flow[:, :, 0] * 20, flow[:, :, 1] * 20
+        mag = np.sqrt(np.square(u) + np.square(v))
+        angle = np.arctan2(v, u)
+        im_h = np.mod(angle / (2 * np.pi) + 1, 1)
+        im_s = np.clip(mag * n / max_flow, a_min=0, a_max=1)
+        im_v = np.clip(n - im_s, a_min=0, a_max=1)
+        im = hsv_to_rgb(np.stack([im_h, im_s, im_v], 2))
+        return (im * 255).astype(np.uint8)
+
     def visualize_output(self):
         """
         Forward pass over a testing batch and displays the output
@@ -141,35 +158,28 @@ class MonoFlowTrainer(ModelTrainer):
             seq_left    = data['l_seq'].to(self._device)
 
             start_time = time.time()
-            pred_l = self._model(left, seq_left)
+            flow_12 = self._model(left, seq_left)['flow_fw'][0]
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
+            np_flow_12 = flow_12.detach().cpu().numpy()
+
             for i in range(self._validation_loader.batch_size):
-                plt.subplot(2,2,1)
+                plt.subplot(1,3,1)
                 plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
 
-                plt.subplot(2,2,2)
-                plt.imshow(pred_l.cpu().numpy()[i,0,:,:])
-                plt.xlabel("Predicted Flow")
-
-                recon = self.reconstruct_flow( left[i,0:3,:,:].cpu().numpy(),
-                                pred_l.cpu().numpy()[i,0,:,:] )
-
-                plt.subplot(2,2,3)
-                plt.imshow(recon)
-                plt.xlabel("Predicted Reconstruction")
-
-                plt.subplot(2,2,4)
-                plt.imshow(seq_left[i,:,:])
+                plt.subplot(1,3,2)
+                plt.imshow(np.moveaxis(seq_left[i,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Sequential Image")
+
+                vis_flow = self.flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
+
+                plt.subplot(1,3,3)
+                plt.imshow(vis_flow)
+                plt.xlabel("Predicted Flow")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
-
-    def reconstruct_flow(self, image, flow):
-        return image * flow
-
 
 from nnet_training.nnet_models.nnet_models import MonoFlow1
 from nnet_training.nnet_models.pwcnet import PWCNet
@@ -213,5 +223,5 @@ if __name__ == "__main__":
     filename = str(Model)+'_SGD_Recon'
 
     modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(1)
+    modeltrainer.visualize_output()
+    # modeltrainer.train_model(6)
