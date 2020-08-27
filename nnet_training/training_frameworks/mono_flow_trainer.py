@@ -175,7 +175,7 @@ from nnet_training.utilities.UnFlowLoss import unFlowLoss
 
 if __name__ == "__main__":
     print(Path.cwd())
-    batch_size = 4
+    batch_size = 2
     if platform.system() == 'Windows':
         n_workers = 0
     else:

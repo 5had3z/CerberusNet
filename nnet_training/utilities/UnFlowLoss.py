@@ -188,14 +188,14 @@ class unFlowLoss(nn.modules.Module):
     def loss_photometric(self, im_orig, im_recons, occu_mask):
         loss = []
 
-        if hasattr(self, 'l1'):
-            loss += [self.l1_weight * (im_orig - im_recons).abs() * occu_mask]
+        if hasattr(self, 'l1_weight'):
+            loss += [self.l1_weight * (im_orig - im_recons).abs()]
 
-        if hasattr(self, 'ssim'):
-            loss += [self.ssim_weight * self.SSIM(im_recons * occu_mask,\
-                                            im_orig * occu_mask)]
+        if hasattr(self, 'ssim_weight'):
+            loss += [self.ssim_weight * self.SSIM(im_recons,\
+                                            im_orig)]
 
-        if hasattr(self, 'ternary'):
+        if hasattr(self, 'ternary_weight'):
             loss += [self.ternary_weight * TernaryLoss(im_recons * occu_mask,\
                                                       im_orig * occu_mask)]
 
