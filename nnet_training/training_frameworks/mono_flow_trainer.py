@@ -138,7 +138,7 @@ class MonoFlowTrainer(ModelTrainer):
             max_flow = np.max(flow)
 
         n = 8
-        u, v = flow[:, :, 0] * 20, flow[:, :, 1] * 20
+        u, v = flow[:, :, 0] * 40, flow[:, :, 1] * 40
         mag = np.sqrt(np.square(u) + np.square(v))
         angle = np.arctan2(v, u)
         im_h = np.mod(angle / (2 * np.pi) + 1, 1)
@@ -188,7 +188,7 @@ from nnet_training.utilities.UnFlowLoss import unFlowLoss
 
 if __name__ == "__main__":
     print(Path.cwd())
-    batch_size = 8
+    batch_size = 4
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -207,8 +207,8 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(512,256)),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512,256))
+        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024,512)),
+        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024,512))
     )
 
     dataloaders = dict(
@@ -217,11 +217,11 @@ if __name__ == "__main__":
     )
 
     Model = PWCNet()
-    optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
+    optimizer = torch.optim.Adam(Model.parameters(), betas=(0.9,0.99), lr=1e-4, weight_decay=1e-6)
     photometric_weights = {"l1":0.15, "ssim":0.85}
     lossfn = unFlowLoss(photometric_weights).to(torch.device("cuda"))
-    filename = str(Model)+'_SGD_Recon'
+    filename = str(Model)+'_Adam_Recon'
 
-    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
+    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=1e-4, modelname=filename)
     modeltrainer.visualize_output()
-    # modeltrainer.train_model(6)
+    # modeltrainer.train_model(5)

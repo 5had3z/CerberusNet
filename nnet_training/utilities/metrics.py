@@ -623,6 +623,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "ReLuModel_A_ReconV2_disp"
+    filename = "pwcnet_FlwExt_1_FlwEst_1_CtxNet_1_Adam_Recon"
     metric = MetricBaseClass(filename=filename)
     metric.plot_summary_data()

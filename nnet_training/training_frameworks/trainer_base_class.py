@@ -87,7 +87,7 @@ class ModelTrainer(object):
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager = LRScheduler(mode='poly', base_lr=self._base_lr, nepochs=n_epochs,
+        self._lr_manager = LRScheduler(mode='constant', base_lr=self._base_lr, nepochs=n_epochs,
                                 iters_per_epoch=len(self._training_loader), power=0.9)
 
         while self.epoch < max_epoch:
