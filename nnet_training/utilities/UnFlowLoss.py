@@ -199,7 +199,7 @@ class unFlowLoss(nn.modules.Module):
             loss += [self.ternary_weight * TernaryLoss(im_recons * occu_mask,\
                                                       im_orig * occu_mask)]
 
-        return sum([l.mean() for l in loss]) / occu_mask.mean()
+        return sum([l.mean() for l in loss]) #/ occu_mask.mean()
 
     def loss_smooth(self, flow, im_scaled):
         if self.smooth_deg == 2:

@@ -108,11 +108,14 @@ class MonoFlowTrainer(ModelTrainer):
                 pred_flow   = self._model(img, img_seq)
                 
                 # Caculate the loss and accuracy for the predictions
-                loss        = self._loss_function(img, pred_flow, img_seq)
+                flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
+                flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
+                        zip(flows_12, flows_21)]
+                loss, _, _, _  = self._loss_function(flows, img, img_seq)
 
                 self._metric._add_sample(
                     img.cpu().data.numpy(),
-                    pred_flow.cpu().data.numpy(),
+                    pred_flow['flow_fw'][0].cpu().data.numpy(),
                     img_seq.cpu().data.numpy(),
                     None,
                     loss=loss.item()
@@ -175,7 +178,7 @@ from nnet_training.utilities.UnFlowLoss import unFlowLoss
 
 if __name__ == "__main__":
     print(Path.cwd())
-    batch_size = 2
+    batch_size = 8
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -194,8 +197,8 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024,512)),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024,512))
+        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(512,256)),
+        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512,256))
     )
 
     dataloaders = dict(
