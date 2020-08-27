@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.warp_utils import flow_warp
+from nnet_training.utilities.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
+
+__all__ = ['PWCNet']
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=True):
     if isReLU:
@@ -115,15 +117,17 @@ class ContextNetwork(nn.Module):
         return self.convs(x)
 
 
-class PWCLite(nn.Module):
-    def __init__(self, cfg):
-        super(PWCLite, self).__init__()
-        search_range = 4
-        num_chs = [3, 16, 32, 64, 96, 128, 192]
+class PWCNet(nn.Module):
+    def __init__(self, lite=False, upsample=True):
+        super(PWCNet, self).__init__()
+        self.upsample = upsample
         self.output_level = 4
+        self.scale_levels = [8, 4, 2, 1]
 
+        num_chs = [3, 16, 32, 64, 96, 128, 192]
         self.feature_pyramid_extractor = FeatureExtractor(num_chs)
 
+        search_range = 4
         self.corr = Correlation(pad_size=search_range, kernel_size=1,
                                 max_displacement=search_range, stride1=1,
                                 stride2=1, corr_multiply=1)
@@ -131,7 +135,7 @@ class PWCLite(nn.Module):
         dim_corr = (search_range * 2 + 1) ** 2
         num_ch_in = 32 + (dim_corr + 2)
 
-        if cfg.lite:
+        if lite:
             self.flow_estimator = FlowEstimatorLite(num_ch_in)
         else:
             self.flow_estimator = FlowEstimatorDense(num_ch_in)
@@ -164,13 +168,16 @@ class PWCLite(nn.Module):
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
 
-    def forward(self, im1_pyr, im2_pyr):
-        # outputs
-        flows = []
+    def get_scales(self):
+        return self.scale_levels
 
+    def aux_forward(self, im1_pyr, im2_pyr):
+        # output
+        flows = []
+        
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
-        flow = im1_pyr.new_zeros((b_size, 2, h_x1, w_x1)).float()
+        flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
 
         for l, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping
@@ -178,7 +185,7 @@ class PWCLite(nn.Module):
                 im2_warp = im2
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
-                                     mode='bilinear', align_corners=True)
+                                        mode='bilinear', align_corners=True)
                 im2_warp = flow_warp(im2, flow)
 
             # correlation
@@ -204,3 +211,16 @@ class PWCLite(nn.Module):
             flows = [F.interpolate(flow * 4, scale_factor=4,
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
+
+    def forward(self, im1_rgb, im2_rgb, consistency=True):
+        # outputs
+        flows = {}
+
+        im1_pyr = self.feature_pyramid_extractor(im1_rgb)
+        im2_pyr = self.feature_pyramid_extractor(im2_rgb)
+
+        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr)
+        if consistency:
+            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr)
+
+        return flows

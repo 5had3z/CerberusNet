@@ -10,9 +10,9 @@ __all__ = ['StereoDepthSeparatedReLu', 'StereoDepthSeparatedExp',
     'StereoSegmentaionSeparated', 'StereoDepthSegSeparated',
     'StereoDepthSegSeparated2']
 
-from nnet_modules import SeparateDownsample, DownsampleFusionModule, DownsampleFusionModule2, \
-    GlobalFusionModule, UpsampleDepthOutputReLu, UpsampleDepthOutputExp, UpsampleSegmentation, \
-    UpsampleFlowOutput
+from .nnet_modules import SeparateDownsample, DownsampleFusionModule, \
+    DownsampleFusionModule2, GlobalFusionModule, UpsampleDepthOutputReLu, \
+    UpsampleDepthOutputExp, UpsampleSegmentation, UpsampleFlowOutput
 
 class StereoDepthSeparatedReLu(nn.Module):
     def __init__(self, aux=False, **kwargs):

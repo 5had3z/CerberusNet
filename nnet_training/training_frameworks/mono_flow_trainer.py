@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
 from nnet_training.utilities.metrics import OpticFlowMetric
 from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
@@ -39,11 +38,11 @@ class MonoFlowTrainer(ModelTrainer):
             self.epoch = len(self._metric)
         super(MonoFlowTrainer, self).load_checkpoint()
 
-    def build_pyramid(self, image, lvl_stp=[0.5,0.5,0.5]):
-        pyramid = [image]
+    def build_pyramid(self, image, lvl_stp=[8,4,2,1]):
+        pyramid = []
         for level in lvl_stp:
-            pyr_img = torch.nn.functional.interpolate(pyramid[-1], scale_factor=level, mode='bilinear', align_corners=True)
-            pyramid.append(pyr_img)
+            pyramid.append(torch.nn.functional.interpolate(image, scale_factor=1./level, mode='bilinear', align_corners=True))
+        
         return pyramid
 
     def _train_epoch(self, max_epoch):
@@ -61,12 +60,17 @@ class MonoFlowTrainer(ModelTrainer):
             # Put both image and target onto device
             img     = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
+
+            # img_pyr     = self.build_pyramid(img)
+            # img_seq_pyr = self.build_pyramid(img_seq)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow   = self._model(img, img_seq)
-
-            loss        = self._loss_function(img, pred_flow, img_seq)
+            pred_flow = self._model(img, img_seq)
+            flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
+            flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
+                     zip(flows_12, flows_21)]
+            loss, _, _, _  = self._loss_function(flows, img, img_seq)
 
             self._optimizer.zero_grad()
             loss.backward()
@@ -74,7 +78,7 @@ class MonoFlowTrainer(ModelTrainer):
 
             self._metric._add_sample(
                 img.cpu().data.numpy(),
-                pred_flow.cpu().data.numpy(),
+                pred_flow['flow_fw'][0].cpu().data.numpy(),
                 img_seq.cpu().data.numpy(),
                 None,
                 loss=loss.item()
@@ -129,9 +133,9 @@ class MonoFlowTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, seq_img = next(iter(self._validation_loader))
-            left        = image['l_img'].to(self._device)
-            seq_left    = seq_img['l_seq'].to(self._device)
+            data = next(iter(self._validation_loader))
+            left        = data['l_img'].to(self._device)
+            seq_left    = data['l_seq'].to(self._device)
 
             start_time = time.time()
             pred_l = self._model(left, seq_left)
@@ -165,13 +169,17 @@ class MonoFlowTrainer(ModelTrainer):
 
 
 from nnet_training.nnet_models.nnet_models import MonoFlow1
+from nnet_training.nnet_models.pwcnet import PWCNet
+from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
+from nnet_training.utilities.UnFlowLoss import unFlowLoss
 
 if __name__ == "__main__":
     print(Path.cwd())
+    batch_size = 4
     if platform.system() == 'Windows':
         n_workers = 0
     else:
-        n_workers = multiprocessing.cpu_count()
+        n_workers = min(multiprocessing.cpu_count(), batch_size)
 
     base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
     training_dir = {
@@ -191,15 +199,16 @@ if __name__ == "__main__":
     )
 
     dataloaders = dict(
-        Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training    = DataLoader(datasets["Training"], batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=batch_size, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    Model = MonoFlow1()
+    Model = PWCNet()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
-    lossfn = ReconstructionLossV1(img_w=1024, img_h=512, device=torch.device("cuda")).to(torch.device("cuda"))
+    photometric_weights = {"l1":0.15, "ssim":0.85}
+    lossfn = unFlowLoss(photometric_weights).to(torch.device("cuda"))
     filename = str(Model)+'_SGD_Recon'
 
     modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(1)
+    # modeltrainer.visualize_output()
+    modeltrainer.train_model(1)

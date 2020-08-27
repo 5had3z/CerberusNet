@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 import itertools
 
-from nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck
+from .nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck
 
 __all__ = ['SeparateDownsample', 'DownsampleFusionModule', 'DownsampleFusionModule2',
     'GlobalFusionModule', 'UpsampleDepthOutputReLu', 'UpsampleDepthOutputExp',
