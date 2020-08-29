@@ -9,13 +9,13 @@ from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
-from matplotlib.colors import hsv_to_rgb
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric
 from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.visualisation import flow_to_image
 from trainer_base_class import ModelTrainer
 
 __all__ = ['MonoFlowTrainer', 'flow_to_image']
@@ -26,25 +26,6 @@ def build_pyramid(image, lvl_stp=[8, 4, 2, 1]):
         pyramid.append(torch.nn.functional.interpolate(
             image, scale_factor=1./level, mode='bilinear', align_corners=True))
     return pyramid
-
-def flow_to_image(flow, max_flow=256):
-    '''
-    Converts optic flow to a hsv represenation and then rgb for display
-    '''
-    if max_flow is not None:
-        max_flow = max(max_flow, 1.)
-    else:
-        max_flow = np.max(flow)
-
-    n = 8
-    u, v = flow[:, :, 0] * 40, flow[:, :, 1] * 40
-    mag = np.sqrt(np.square(u) + np.square(v))
-    angle = np.arctan2(v, u)
-    im_h = np.mod(angle / (2 * np.pi) + 1, 1)
-    im_s = np.clip(mag * n / max_flow, a_min=0, a_max=1)
-    im_v = np.clip(n - im_s, a_min=0, a_max=1)
-    im = hsv_to_rgb(np.stack([im_h, im_s, im_v], 2))
-    return (im * 255).astype(np.uint8)
 
 class MonoFlowTrainer(ModelTrainer):
     '''

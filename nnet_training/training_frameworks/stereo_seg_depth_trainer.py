@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric
 from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.visualisation import get_color_pallete
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegDepthTrainer']
@@ -167,11 +168,11 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,5,2)
-                plt.imshow(seg_gt[i,:,:])
+                plt.imshow(get_color_pallete(seg_gt[i,:,:]))
                 plt.xlabel("Segmentation Ground Truth")
         
                 plt.subplot(1,5,3)
-                plt.imshow(seg_pred.cpu().numpy()[i,0,:,:])
+                plt.imshow(get_color_pallete(seg_pred.cpu().numpy()[i,0,:,:]))
                 plt.xlabel("Segmentation Prediction")
 
                 plt.subplot(1,5,4)

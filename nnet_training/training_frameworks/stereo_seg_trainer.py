@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import SegmentationMetric
 from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.visualisation import get_color_pallete
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegTrainer']
@@ -67,7 +68,7 @@ class StereoSegTrainer(ModelTrainer):
             self._optimizer.step()
 
             self._metric._add_sample(
-                torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
+                torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
             )
@@ -100,7 +101,7 @@ class StereoSegTrainer(ModelTrainer):
                 loss = self._loss_function(outputs, target)
 
                 self._metric._add_sample(
-                    torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
+                    torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
                 )
@@ -120,26 +121,28 @@ class StereoSegTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, disparity = next(iter(self._validation_loader))
-            left = image[0].to(self._device)
-            right = image[1].to(self._device)
+            data   = next(iter(self._validation_loader))
+            left   = data['l_img'].to(self._device)
+            right  = data['r_img'].to(self._device)
+            seg_gt = data['seg']
 
             start_time = time.time()
-            pred = self._model(left, right)
+            seg_pred = self._model(left, right)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            pred = torch.argmax(pred,dim=1,keepdim=True)
+            pred_cpu = torch.argmax(seg_pred, dim=1, keepdim=True).cpu().numpy()
+
             for i in range(self._validation_loader.batch_size):
-                plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
+                plt.subplot(1, 3, 1)
+                plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
         
-                plt.subplot(1,3,2)
-                plt.imshow(disparity[i,:,:])
-                plt.xlabel("Ground Truth")
+                plt.subplot(1, 3, 2)
+                plt.imshow(get_color_pallete(seg_gt.numpy()[i, :, :]))
+                plt.xlabel("Ground Truth Segmentation")
         
-                plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,:])
+                plt.subplot(1, 3, 3)
+                plt.imshow(get_color_pallete(pred_cpu[i, 0, :, :]))
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
@@ -160,13 +163,13 @@ if __name__ == "__main__":
     training_dir = {
         'images'        : base_dir + 'leftImg8bit/train',
         'right_images'  : base_dir + 'rightImg8bit/train',
-        'labels'        : base_dir + 'gtFine/train'
+        'seg'           : base_dir + 'gtFine/train'
     }
 
     validation_dir = {
         'images'        : base_dir + 'leftImg8bit/val',
         'right_images'  : base_dir + 'rightImg8bit/val',
-        'labels'        : base_dir + 'gtFine/val'
+        'seg'           : base_dir + 'gtFine/val'
     }
 
     datasets = dict(
@@ -182,9 +185,9 @@ if __name__ == "__main__":
     filename = "StereoSeg1.1_Focal"
     Model = StereoSegmentaionSeparated()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
-    lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
+    lossfn = FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda"))
 
     lr_sched = { "lr": 0.01, "mode":"poly" }
-    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
+    modeltrainer = StereoSegTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(1)

@@ -14,8 +14,8 @@ import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
 from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
 from trainer_base_class import ModelTrainer
-from mono_flow_trainer import flow_to_image
 
 __all__ = ['MonoSegFlowTrainer']
 
@@ -183,11 +183,11 @@ class MonoSegFlowTrainer(ModelTrainer):
                 plt.xlabel("Predicted Flow")
 
                 plt.subplot(2, 3, 4)
-                plt.imshow(seg_gt.numpy()[i, :, :])
+                plt.imshow(get_color_pallete(seg_gt.numpy()[i, :, :]))
                 plt.xlabel("Ground Truth Segmentation")
 
                 plt.subplot(2, 3, 5)
-                plt.imshow(pred_cpu[i, 0, :, :])
+                plt.imshow(get_color_pallete(pred_cpu[i, 0, :, :]))
                 plt.xlabel("Predicted Segmentation")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))

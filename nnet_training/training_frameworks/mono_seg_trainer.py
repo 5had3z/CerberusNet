@@ -17,6 +17,7 @@ from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss, M
 from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
 from nnet_training.utilities.dataset import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric
+from nnet_training.utilities.visualisation import get_color_pallete
 
 from trainer_base_class import ModelTrainer
 
@@ -125,11 +126,11 @@ class MonoSegmentationTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(seg[i,:,:]) #cmap=cmap
+                plt.imshow(get_color_pallete(seg[i,:,:]))
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
-                plt.imshow(pred.cpu().numpy()[i,0,:,:]) #cmap=cmap
+                plt.imshow(get_color_pallete(pred.cpu().numpy()[i,0,:,:]))
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
