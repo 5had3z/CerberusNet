@@ -156,29 +156,39 @@ class MonoSegFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             data = next(iter(self._validation_loader))
-            left        = data['l_img'].to(self._device)
-            seq_left    = data['l_seq'].to(self._device)
+            left     = data['l_img'].to(self._device)
+            seq_left = data['l_seq'].to(self._device)
+            seg_gt   = data['seg']
 
             start_time = time.time()
-            flow_12 = self._model(left, seq_left)['flow_fw'][0]
+            flow_12, seg_pred = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            np_flow_12 = flow_12.detach().cpu().numpy()
+            np_flow_12 = flow_12['flow_fw'][0].detach().cpu().numpy()
+            pred_cpu = torch.argmax(seg_pred, dim=1, keepdim=True).cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
-                plt.subplot(1, 3, 1)
+                plt.subplot(2, 3, 1)
                 plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
-                plt.subplot(1, 3, 2)
+                plt.subplot(2, 3, 2)
                 plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
                 vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
 
-                plt.subplot(1, 3, 3)
+                plt.subplot(2, 3, 3)
                 plt.imshow(vis_flow)
                 plt.xlabel("Predicted Flow")
+
+                plt.subplot(2, 3, 4)
+                plt.imshow(seg_gt.numpy()[i, :, :])
+                plt.xlabel("Ground Truth Segmentation")
+
+                plt.subplot(2, 3, 5)
+                plt.imshow(pred_cpu[i, 0, :, :])
+                plt.xlabel("Predicted Segmentation")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
@@ -206,15 +216,17 @@ if __name__ == "__main__":
         'seg'       : base_dir + 'gtFine/val',
     }
 
-    datasets = dict(
-        Training   = CityScapesDataset(training_dir, crop_fraction=1, output_size=(512, 256)),
-        Validation = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
-    )
+    datasets = {
+        'Training'   : CityScapesDataset(training_dir, crop_fraction=1, output_size=(512, 256)),
+        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
+    }
 
-    dataloaders = dict(
-        Training   = DataLoader(datasets["Training"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation = DataLoader(datasets["Validation"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
-    )
+    dataloaders = {
+        'Training'   : DataLoader(datasets["Training"], batch_size=BATCH_SIZE,
+                                  shuffle=True, num_workers=n_workers, drop_last=True),
+        'Validation' : DataLoader(datasets["Validation"], batch_size=BATCH_SIZE,
+                                  shuffle=True, num_workers=n_workers, drop_last=True),
+    }
 
     MODEL = MonoSFNet()
     OPTIM = torch.optim.Adam(MODEL.parameters(), betas=(0.9, 0.99), lr=1e-4, weight_decay=1e-6)
@@ -229,5 +241,5 @@ if __name__ == "__main__":
     MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
                                    lr_cfg=LR_SCHED, modelname=FILENAME)
 
-    # MODELTRAINER.visualize_output()
-    MODELTRAINER.train_model(5)
+    MODELTRAINER.visualize_output()
+    # MODELTRAINER.train_model(5)
