@@ -13,22 +13,21 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import FocalLoss2D
-from metrics import SegmentationMetric
-from dataset import CityScapesDataset
+from nnet_training.utilities.metrics import SegmentationMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegmentationTrainer']
 
 class StereoSegmentationTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
         self._metric = SegmentationMetric(19, filename=savefile)
-        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
+        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
 
     def save_checkpoint(self):
         super(StereoSegmentationTrainer, self).save_checkpoint()
@@ -47,15 +46,15 @@ class StereoSegmentationTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, target) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            left = data[0].to(self._device)
-            right = data[1].to(self._device)
-            target = target.to(self._device)
+            left        = data['l_img'].to(self._device)
+            right       = data['r_img'].to(self._device)
+            target      = data['seg'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
@@ -89,11 +88,11 @@ class StereoSegmentationTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                left = data[0].to(self._device)
-                right = data[1].to(self._device)
-                target = target.to(self._device)
+                left    = data['l_img'].to(self._device)
+                right   = data['r_img'].to(self._device)
+                target  = data['seg'].to(self._device)
 
                 outputs = self._model(left, right)
                 
@@ -146,7 +145,8 @@ class StereoSegmentationTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_models import StereoSegmentaionSeparated
+from nnet_training.utilities.loss_functions import FocalLoss2D
+from nnet_training.nnet_models.nnet_models import StereoSegmentaionSeparated
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -184,6 +184,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
-    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    lr_sched = { "lr": 0.01, "mode":"poly" }
+    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(1)

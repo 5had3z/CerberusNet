@@ -3,10 +3,7 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os
-import time
-import platform
-import multiprocessing
+import os, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
 
@@ -16,21 +13,22 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
-from fast_scnn import FastSCNN, Stereo_FastSCNN
-from dataset import CityScapesDataset
+from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
+from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
+from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.metrics import SegmentationMetric
+
 from trainer_base_class import ModelTrainer
-from metrics import SegmentationMetric
 
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
 class MonoSegmentationTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
+        super().__init__(model, optimizer, loss_fn, dataloaders, lr_cfg, savefile, checkpoints)
         self._metric = SegmentationMetric(19, filename=self._modelname)
 
     def _train_epoch(self, max_epoch):
@@ -40,18 +38,18 @@ class MonoSegmentationTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, target) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            data = data.to(self._device)
-            target = target.to(self._device)
+            image   = data['l_img'].to(self._device)
+            target  = data['seg'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            outputs = self._model(data)
+            outputs = self._model(image)
 
             loss = self._loss_function(outputs, target)
 
@@ -80,12 +78,12 @@ class MonoSegmentationTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                data = data.to(self._device)
-                target = target.to(self._device)
+                image   = data['l_img'].to(self._device)
+                target  = data['seg'].to(self._device)
 
-                outputs = self._model(data)
+                outputs = self._model(image)
                 
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
@@ -111,7 +109,7 @@ class MonoSegmentationTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, mask = next(iter(self._validation_loader))
+            image, seg = next(iter(self._validation_loader))
             image = image.to(self._device)
 
             start_time = time.time()
@@ -127,7 +125,7 @@ class MonoSegmentationTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(mask[i,:,:]) #cmap=cmap
+                plt.imshow(seg[i,:,:]) #cmap=cmap
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
@@ -267,7 +265,7 @@ def Init_Training_MonoFSCNN():
 
     return modeltrainer
 
-from fast_scnn import FastSCNN
+from ..nnet_models.fast_scnn import FastSCNN
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -305,6 +303,7 @@ if __name__ == "__main__":
     # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
-    modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    lr_sched = { "lr": 0.01, "mode":"poly" }
+    modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     # modeltrainer.visualize_output()
     modeltrainer.train_model(10)

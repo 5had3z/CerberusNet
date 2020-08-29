@@ -5,7 +5,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import torch
 from fast_scnn import FastSCNN
-from chat_test_model import StereoDepthSeparated
+from nnet_models import StereoDepthSeparated
 
 if __name__ == "__main__":
     print("Testing ONNX Export")

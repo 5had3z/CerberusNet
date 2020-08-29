@@ -13,22 +13,21 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from loss_functions import DepthAwareLoss, ScaleInvariantError, InvHuberLoss
-from metrics import DepthMetric
-from dataset import CityScapesDataset
+from nnet_training.utilities.metrics import DepthMetric
+from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
 __all__ = ['StereoDisparityTrainer']
 
 class StereoDisparityTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
         self._loss_function = loss_fn
-        self._metric = DepthMetric(filename=self._modelname)
+        self._metric = DepthMetric(filename=savefile)
+        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
 
     def save_checkpoint(self):
         super(StereoDisparityTrainer, self).save_checkpoint()
@@ -47,29 +46,31 @@ class StereoDisparityTrainer(ModelTrainer):
 
         start_time = time.time()
 
-        for batch_idx, (data, target) in enumerate(self._training_loader):
+        for batch_idx, data in enumerate(self._training_loader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            left = data[0].to(self._device)
-            right = data[1].to(self._device)
-            target = target.to(self._device)
+            left        = data['l_img'].to(self._device)
+            right       = data['r_img'].to(self._device)
+            depth_gt    = data['disparity'].to(self._device)
+            baseline    = data['cam']['baseline_T'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            outputs = self._model(left, right)
+            depth_pred = self._model(left, right)
 
-            loss = self._loss_function(outputs, target)
+            loss = self._loss_function(left, depth_pred, right, baseline, data['cam'])
+            loss += self._loss_function(right, depth_pred, left, -baseline, data['cam'])
 
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
 
             self._metric._add_sample(
-                outputs.cpu().data.numpy(),
-                target.cpu().data.numpy(),
+                depth_pred.cpu().data.numpy(),
+                depth_gt.cpu().data.numpy(),
                 loss=loss.item()
             )
 
@@ -89,20 +90,22 @@ class StereoDisparityTrainer(ModelTrainer):
 
             start_time = time.time()
 
-            for batch_idx, (data, target) in enumerate(self._validation_loader):
+            for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                left = data[0].to(self._device)
-                right = data[1].to(self._device)
-                target = target.to(self._device)
+                left        = data['l_img'].to(self._device)
+                right       = data['r_img'].to(self._device)
+                depth_gt    = data['disparity'].to(self._device)
+                baseline    = data['cam']['baseline_T'].to(self._device)
 
-                outputs = self._model(left, right)
+                depth_pred = self._model(left, right)
                 
                 # Caculate the loss and accuracy for the predictions
-                loss = self._loss_function(outputs, target)
+                loss = self._loss_function(left, depth_pred, right, baseline, data['cam'])
+                loss += self._loss_function(right, depth_pred, left, -baseline, data['cam'])
 
                 self._metric._add_sample(
-                    outputs.cpu().data.numpy(),
-                    target.cpu().numpy(),
+                    depth_pred.cpu().data.numpy(),
+                    depth_gt.cpu().numpy(),
                     loss=loss.item()
                 )
                 
@@ -121,9 +124,9 @@ class StereoDisparityTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            image, disparity = next(iter(self._validation_loader))
-            left = image[0].to(self._device)
-            right = image[1].to(self._device)
+            data    = next(iter(self._validation_loader))
+            left    = data['l_img'].to(self._device)
+            right   = data['r_img'].to(self._device)
 
             start_time = time.time()
             pred = self._model(left, right)
@@ -135,7 +138,7 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.xlabel("Base Image")
         
                 plt.subplot(1,3,2)
-                plt.imshow(disparity[i,:,:])
+                plt.imshow(data['disparity'][i,:,:])
                 plt.xlabel("Ground Truth")
         
                 plt.subplot(1,3,3)
@@ -146,7 +149,9 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+from nnet_training.utilities.loss_functions import DepthAwareLoss, ScaleInvariantError,\
+                            InvHuberLoss, ReconstructionLossV2
 
 if __name__ == "__main__":
     print(Path.cwd())
@@ -159,31 +164,35 @@ if __name__ == "__main__":
     training_dir = {
         'images'        : base_dir + 'leftImg8bit/train',
         'right_images'  : base_dir + 'rightImg8bit/train',
-        'disparity'     : base_dir + 'disparity/train'
+        'disparity'     : base_dir + 'disparity/train',
+        'cam'           : base_dir + 'camera/train'
     }
     validation_dir = {
         'images'        : base_dir + 'leftImg8bit/val',
         'right_images'  : base_dir + 'rightImg8bit/val',
-        'disparity'     : base_dir + 'disparity/val'
+        'disparity'     : base_dir + 'disparity/val',
+        'cam'           : base_dir + 'camera/val'
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
+        Training    = CityScapesDataset(training_dir, output_size=(512,256), crop_fraction=1, disparity_out=True),
+        Validation  = CityScapesDataset(validation_dir, output_size=(512,256), crop_fraction=1, disparity_out=True)
     )
 
     dataloaders = dict(
-        Training    = DataLoader(datasets["Training"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=8, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training    = DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation  = DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    filename = "ReLuModel_ScaleInv"
     disparityModel = StereoDepthSeparatedReLu()
-    optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
+    # optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.Adam(disparityModel.parameters(), lr=0.00001)
     # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ScaleInvariantError().to(torch.device("cuda"))
+    lossfn = ReconstructionLossV2(batch_size=16, height=256, width=512, pred_type="depth").to(torch.device("cuda"))
     # lossfn = InvHuberLoss().to(torch.device("cuda"))
+    filename = str(disparityModel) + "_A_ReconV2_disp"
 
-    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    lr_sched = { "mode":"poly", "lr":0.0001 }
+    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     modeltrainer.visualize_output()
-    # modeltrainer.train_model(5)
+    # modeltrainer.train_model(10)
