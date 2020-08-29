@@ -211,7 +211,7 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1),
+        Training    = CityScapesDataset(training_dir, crop_fraction=2),
         Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
     )
 
@@ -220,13 +220,13 @@ if __name__ == "__main__":
         Validation  = DataLoader(datasets["Validation"], batch_size=12, shuffle=True, num_workers=n_workers, drop_last=True)
     )
 
-    Model = StereoDepthSegSeparated3()
+    Model = StereoDepthSegSeparated2()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = dict(
         segmentation   = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda")),
         depth          = InvHuberLoss(ignore_index=-1).to(torch.device("cuda"))
     )
-    filename = str(Model)+'_SGD_Focal_InvH'
+    filename = str(Model)+'_SGD_Fcl_InvH_C'
     print("Loading " + filename)
 
     modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
