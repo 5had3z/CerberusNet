@@ -20,14 +20,14 @@ from trainer_base_class import ModelTrainer
 __all__ = ['StereoSegmentationTrainer']
 
 class StereoSegmentationTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
         self._metric = SegmentationMetric(19, filename=savefile)
-        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
+        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
 
     def save_checkpoint(self):
         super(StereoSegmentationTrainer, self).save_checkpoint()
@@ -184,6 +184,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
-    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    lr_sched = { "lr": 0.01, "mode":"poly" }
+    modeltrainer = StereoSegmentationTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(1)

@@ -21,7 +21,7 @@ from nnet_training.utilities.lr_scheduler import LRScheduler
 __all__ = ['ModelTrainer']
 
 class ModelTrainer(object):
-    def __init__(self, model, optimizer, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
+    def __init__(self, model, optimizer, dataloaders, lr_cfg, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -36,7 +36,7 @@ class ModelTrainer(object):
         self._model = model.to(self._device)
         self._optimizer = optimizer
         
-        self._base_lr = learning_rate
+        self._lr_cfg = lr_cfg
 
         self._checkpoints = checkpoints
 
@@ -87,7 +87,7 @@ class ModelTrainer(object):
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager = LRScheduler(mode='constant', base_lr=self._base_lr, nepochs=n_epochs,
+        self._lr_manager = LRScheduler(mode=self._lr_cfg['mode'], base_lr=self._lr_cfg['lr'], nepochs=n_epochs,
                                 iters_per_epoch=len(self._training_loader), power=0.9)
 
         while self.epoch < max_epoch:

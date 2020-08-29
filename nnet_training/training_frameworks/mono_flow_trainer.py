@@ -21,14 +21,14 @@ from trainer_base_class import ModelTrainer
 __all__ = ['MonoFlowTrainer']
 
 class MonoFlowTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
         self._metric = OpticFlowMetric(filename=modelname)
-        super(MonoFlowTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, modelname, checkpoints)
+        super(MonoFlowTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, modelname, checkpoints)
 
     def save_checkpoint(self):
         super(MonoFlowTrainer, self).save_checkpoint()
@@ -218,10 +218,11 @@ if __name__ == "__main__":
 
     Model = PWCNet()
     optimizer = torch.optim.Adam(Model.parameters(), betas=(0.9,0.99), lr=1e-4, weight_decay=1e-6)
-    photometric_weights = {"l1":0.15, "ssim":0.85}
+    photometric_weights = { "l1":0.15, "ssim":0.85 }
     lossfn = unFlowLoss(photometric_weights).to(torch.device("cuda"))
     filename = str(Model)+'_Adam_Recon'
 
-    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=1e-4, modelname=filename)
+    lr_sched = { "lr": 1e-4, "mode":"constant" }
+    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelname=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(5)

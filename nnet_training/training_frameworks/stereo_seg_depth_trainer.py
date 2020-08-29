@@ -20,7 +20,7 @@ from trainer_base_class import ModelTrainer
 __all__ = ['StereoSegDepthTrainer']
 
 class StereoSegDepthTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, modelname=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, modelname=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -30,7 +30,7 @@ class StereoSegDepthTrainer(ModelTrainer):
         self._seg_metric = SegmentationMetric(19, filename=modelname+'_seg')
         self._depth_metric = DepthMetric(filename=modelname+'_depth')
 
-        super(StereoSegDepthTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, modelname, checkpoints)
+        super(StereoSegDepthTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, modelname, checkpoints)
 
     def save_checkpoint(self):
         super(StereoSegDepthTrainer, self).save_checkpoint()
@@ -234,6 +234,7 @@ if __name__ == "__main__":
     filename = str(Model)+'_SGD_Fcl_Recon2'
     print("Loading " + filename)
 
-    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, learning_rate=0.01, modelname=filename)
+    lr_sched = { "lr": 0.01, "mode":"poly" }
+    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelname=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(3)

@@ -20,14 +20,14 @@ from trainer_base_class import ModelTrainer
 __all__ = ['StereoDisparityTrainer']
 
 class StereoDisparityTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
         self._metric = DepthMetric(filename=savefile)
-        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, learning_rate, savefile, checkpoints)
+        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
 
     def save_checkpoint(self):
         super(StereoDisparityTrainer, self).save_checkpoint()
@@ -192,6 +192,7 @@ if __name__ == "__main__":
     # lossfn = InvHuberLoss().to(torch.device("cuda"))
     filename = str(disparityModel) + "_A_ReconV2_disp"
 
-    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, learning_rate=0.0001, savefile=filename)
+    lr_sched = { "mode":"poly", "lr":0.0001 }
+    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(10)

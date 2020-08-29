@@ -23,12 +23,12 @@ from trainer_base_class import ModelTrainer
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
 class MonoSegmentationTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, learning_rate=1e-4, savefile=None, checkpoints=True):
+    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super().__init__(model, optimizer, loss_fn, dataloaders, learning_rate, savefile, checkpoints)
+        super().__init__(model, optimizer, loss_fn, dataloaders, lr_cfg, savefile, checkpoints)
         self._metric = SegmentationMetric(19, filename=self._modelname)
 
     def _train_epoch(self, max_epoch):
@@ -303,6 +303,7 @@ if __name__ == "__main__":
     # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
     lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
 
-    modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, learning_rate=0.01, savefile=filename)
+    lr_sched = { "lr": 0.01, "mode":"poly" }
+    modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
     # modeltrainer.visualize_output()
     modeltrainer.train_model(10)
