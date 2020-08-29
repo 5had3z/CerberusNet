@@ -3,21 +3,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 from nnet_training.utilities.loss_functions import SSIM
 
-def mesh_grid(B, H, W):
+def mesh_grid(batch_sz, height, width):
+    '''
+    Creates meshgrid of two dimensions which is the pixel location
+    '''
     # mesh grid
-    x_base = torch.arange(0, W).repeat(B, H, 1)  # BHW
-    y_base = torch.arange(0, H).repeat(B, W, 1).transpose(1, 2)  # BHW
+    x_base = torch.arange(0, width).repeat(batch_sz, height, 1)  # BHW
+    y_base = torch.arange(0, height).repeat(batch_sz, width, 1).transpose(1, 2)  # BHW
 
     base_grid = torch.stack([x_base, y_base], 1)  # B2HW
     return base_grid
 
 def norm_grid(v_grid):
-    _, _, H, W = v_grid.size()
+    '''
+    Normalizses a meshgrid between (-1,1)
+    '''
+    _, _, height, width = v_grid.size()
 
     # scale grid to [-1,1]
     v_grid_norm = torch.zeros_like(v_grid)
-    v_grid_norm[:, 0, :, :] = 2.0 * v_grid[:, 0, :, :] / (W - 1) - 1.0
-    v_grid_norm[:, 1, :, :] = 2.0 * v_grid[:, 1, :, :] / (H - 1) - 1.0
+    v_grid_norm[:, 0, :, :] = 2.0 * v_grid[:, 0, :, :] / (width - 1) - 1.0
+    v_grid_norm[:, 1, :, :] = 2.0 * v_grid[:, 1, :, :] / (height - 1) - 1.0
     return v_grid_norm.permute(0, 2, 3, 1)  # BHW2
 
 def get_corresponding_map(data):
@@ -69,16 +75,22 @@ def get_corresponding_map(data):
 
     return corresponding_map.unsqueeze(1)
 
-def flow_warp(x, flow12, pad='border', mode='bilinear'):
-    B, _, H, W = x.size()
+def flow_warp(image, flow12, pad='border', mode='bilinear'):
+    '''
+    Warps an image given a flow prediction using grid_sample
+    '''
+    batch_sz, _, height, width = image.size()
 
-    base_grid = mesh_grid(B, H, W).type_as(x)  # B2HW
+    base_grid = mesh_grid(batch_sz, height, width).type_as(image)  # B2HW
 
     v_grid = norm_grid(base_grid + flow12)  # BHW2
-    im1_recons = nn.functional.grid_sample(x, v_grid, mode=mode, padding_mode=pad)
+    im1_recons = nn.functional.grid_sample(image, v_grid, mode=mode, padding_mode=pad)
     return im1_recons
 
 def get_occu_mask_bidirection(flow12, flow21, scale=0.01, bias=0.5):
+    '''
+    Get an occlusion mask using both flows such that they match each other
+    '''
     flow21_warped = flow_warp(flow21, flow12, pad='zeros')
     flow12_diff = flow12 + flow21_warped
     mag = (flow12 * flow12).sum(1, keepdim=True) + \
@@ -87,12 +99,15 @@ def get_occu_mask_bidirection(flow12, flow21, scale=0.01, bias=0.5):
     occ = (flow12_diff * flow12_diff).sum(1, keepdim=True) > occ_thresh
     return occ.float()
 
-def get_occu_mask_backward(flow21, th=0.2):
+def get_occu_mask_backward(flow21, theta=0.2):
+    '''
+    Get an occlusion mask using backward propagation
+    '''
     B, _, H, W = flow21.size()
     base_grid = mesh_grid(B, H, W).type_as(flow21)  # B2HW
 
     corr_map = get_corresponding_map(base_grid + flow21)  # BHW
-    occu_mask = corr_map.clamp(min=0., max=1.) < th
+    occu_mask = corr_map.clamp(min=0., max=1.) < theta
     return occu_mask.float()
 
 # Credit: https://github.com/simonmeister/UnFlow/blob/master/src/e2eflow/core/losses.py
@@ -241,8 +256,8 @@ class unFlowLoss(nn.modules.Module):
 
             if i == 0:
                 if self.back_occ_only:
-                    occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], th=0.2)
-                    occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], th=0.2)
+                    occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], theta=0.2)
+                    occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], theta=0.2)
                 else:
                     occu_mask1 = 1 - get_occu_mask_bidirection(flow[:, :2], flow[:, 2:])
                     occu_mask2 = 1 - get_occu_mask_bidirection(flow[:, 2:], flow[:, :2])

@@ -104,7 +104,7 @@ class ModelTrainer(object):
                 self.save_checkpoint()
         
             sys.stdout.flush()
-            sys.stdout.write('\rEpoch '+ str(self.epoch)+
+            sys.stdout.write('\rEpoch '+ str(self.epoch) +
                     ' Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
     
         train_end_time = time.time()

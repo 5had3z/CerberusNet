@@ -4,16 +4,39 @@ import torch.nn.functional as F
 
 from nnet_training.utilities.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
+
 from .pwcnet_modules import *
+from .fast_scnn import Classifer
+from .nnet_ops import LinearBottleneck
 
-__all__ = ['PWCNet']
+__all__ = ['MonoSFNet']
 
-class PWCNet(nn.Module):
+class SegmentationNet(nn.Module):
     '''
-    PWCNet implementation from ARFlow-Net
+    Module for extracting semantic segmentation from encoding pyramid
     '''
-    def __init__(self, lite=False, upsample=True):
-        super(PWCNet, self).__init__()
+    def __init__(self, input_ch, num_classes, interm_ch=64):
+        super(SegmentationNet, self).__init__()
+        self.classifier = Classifer(interm_ch, num_classes)
+
+        self.feature_fusion = nn.ModuleList([LinearBottleneck(input_ch[0], interm_ch)])
+        for ch_in in input_ch[1:]:
+            self.feature_fusion.append(LinearBottleneck(ch_in+interm_ch, interm_ch))
+
+    def forward(self, img_pyr):
+        interm = self.feature_fusion[0](img_pyr[0])
+        interm = nn.functional.interpolate(interm, 2)
+        for level in enumerate(img_pyr[1:], start=1):
+            interm = self.feature_fusion(torch.cat([interm, img_pyr[level]], 1))
+            interm = nn.functional.interpolate(interm, 2)
+        return self.classifier(interm)
+
+class MonoSFNet(nn.Module):
+    '''
+    Monocular image sequence to segmentation and optic flow
+    '''
+    def __init__(self, upsample=True):
+        super(MonoSFNet, self).__init__()
         self.upsample = upsample
         self.output_level = 4
         self.scale_levels = [8, 4, 2, 1]
@@ -29,10 +52,7 @@ class PWCNet(nn.Module):
         dim_corr = (search_range * 2 + 1) ** 2
         num_ch_in = 32 + (dim_corr + 2)
 
-        if lite:
-            self.flow_estimator = FlowEstimatorLite(num_ch_in)
-        else:
-            self.flow_estimator = FlowEstimatorDense(num_ch_in)
+        self.flow_estimator = FlowEstimatorDense(num_ch_in)
 
         self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
@@ -43,43 +63,34 @@ class PWCNet(nn.Module):
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
     def __str__(self):
-        return "pwcnet" + str(self.feature_pyramid_extractor)\
+        return "mono_segflow" + str(self.feature_pyramid_extractor)\
             + str(self.flow_estimator) + str(self.context_networks)
 
-    def num_parameters(self):
-        return sum(
-            [p.data.nelement() if p.requires_grad else 0 for p in self.parameters()])
-
-    def init_weights(self):
-        for layer in self.named_modules():
-            if isinstance(layer, nn.Conv2d):
-                nn.init.kaiming_normal_(layer.weight)
-                if layer.bias is not None:
-                    nn.init.constant_(layer.bias, 0)
-
-            elif isinstance(layer, nn.ConvTranspose2d):
-                nn.init.kaiming_normal_(layer.weight)
-                if layer.bias is not None:
-                    nn.init.constant_(layer.bias, 0)
-
     def get_scales(self):
+        '''
+        Returns the subsampling scales
+        '''
         return self.scale_levels
 
-    def aux_forward(self, im1_pyr, im2_pyr):
+    def aux_forward(self, im1_pyr, im2_pyr, seg_gt):
+        '''
+        Auxillary forward method that does the flow prediction
+        @todo incorperate segmentation
+        '''
         # output
         flows = []
-        
+
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
         flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
 
-        for l, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
+        for level, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping
-            if l == 0:
+            if level == 0:
                 im2_warp = im2
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
-                                        mode='bilinear', align_corners=True)
+                                     mode='bilinear', align_corners=True)
                 im2_warp = flow_warp(im2, flow)
 
             # correlation
@@ -87,7 +98,7 @@ class PWCNet(nn.Module):
             nn.functional.leaky_relu(out_corr, 0.1, inplace=True)
 
             # concat and estimate flow
-            im1_1by1 = self.conv_1x1[l](im1)
+            im1_1by1 = self.conv_1x1[level](im1)
             im1_intm, flow_res = self.flow_estimator(
                 torch.cat([out_corr, im1_1by1, flow], dim=1))
             flow += flow_res
@@ -98,23 +109,29 @@ class PWCNet(nn.Module):
             flows.append(flow)
 
             # upsampling or post-processing
-            if l == self.output_level:
+            if level == self.output_level:
                 break
-        
+
         if self.upsample:
             flows = [F.interpolate(flow * 4, scale_factor=4,
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
 
-    def forward(self, im1_rgb, im2_rgb, consistency=True):
+    def forward(self, im1_rgb, im2_rgb, seg_gt=None, consistency=True):
+        '''
+        Forward method that returns the flow prediction and segmentation
+        '''
         # outputs
         flows = {}
 
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
-        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr)
-        if consistency:
-            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr)
+        if seg_gt is None:
+            seg_gt = self.segmentation_network(im1_pyr, im2_pyr)
 
-        return flows
+        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr, seg_gt)
+        if consistency:
+            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr, seg_gt)
+
+        return flows, seg_gt
