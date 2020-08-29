@@ -43,7 +43,7 @@ class PWCNet(nn.Module):
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
     def __str__(self):
-        return "pwcnet" + str(self.feature_pyramid_extractor)\
+        return "PWCNet" + str(self.feature_pyramid_extractor)\
             + str(self.flow_estimator) + str(self.context_networks)
 
     def num_parameters(self):

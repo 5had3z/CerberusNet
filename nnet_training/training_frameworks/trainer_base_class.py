@@ -35,21 +35,21 @@ class ModelTrainer(object):
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
-        
+
         self._lr_cfg = lr_cfg
 
         self._checkpoints = checkpoints
 
         if not os.path.isdir(Path.cwd() / "torch_models"):
             os.makedirs(Path.cwd() / "torch_models")
-        
+
         if modelname is not None:
-            self._modelname = modelname 
+            self._modelname = modelname
         else:
             self._modelname = str(datetime.now()).replace(" ", "_")
-        
+
         self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
-            
+
         if self._checkpoints:
             self.load_checkpoint()
         else:
@@ -67,7 +67,8 @@ class ModelTrainer(object):
             checkpoint = torch.load(self._path, map_location=torch.device(self._device))
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            sys.stdout.write("\nCheckpoint loaded, starting from epoch:" + str(self.epoch) + "\n")
+            sys.stdout.write("\nCheckpoint loaded from " + str(self._path)
+                             + " starting from epoch:" + str(self.epoch) + "\n")
         else:
             #Raise Error if it does not exist
             sys.stdout.write("\nCheckpoint Does Not Exist\nStarting From Scratch!")
@@ -79,7 +80,7 @@ class ModelTrainer(object):
         sys.stdout.write("\nSaving Model")
         torch.save({
             'model_state_dict':         self._model.state_dict(),
-            'optimizer_state_dict':     self._optimizer.state_dict(), 
+            'optimizer_state_dict':     self._optimizer.state_dict()
         }, self._path)
 
     def train_model(self, n_epochs):

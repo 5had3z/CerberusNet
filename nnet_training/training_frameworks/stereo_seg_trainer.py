@@ -17,9 +17,9 @@ from nnet_training.utilities.metrics import SegmentationMetric
 from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
 
-__all__ = ['StereoSegmentationTrainer']
+__all__ = ['StereoSegTrainer']
 
-class StereoSegmentationTrainer(ModelTrainer):
+class StereoSegTrainer(ModelTrainer):
     def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
@@ -27,16 +27,16 @@ class StereoSegmentationTrainer(ModelTrainer):
         '''
         self._loss_function = loss_fn
         self._metric = SegmentationMetric(19, filename=savefile)
-        super(StereoSegmentationTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
+        super(StereoSegTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
 
     def save_checkpoint(self):
-        super(StereoSegmentationTrainer, self).save_checkpoint()
+        super(StereoSegTrainer, self).save_checkpoint()
         self._metric.save_epoch()
 
     def load_checkpoint(self):
         if os.path.isfile(self._path):
             self.epoch = len(self._metric)
-        super(StereoSegmentationTrainer, self).load_checkpoint()
+        super(StereoSegTrainer, self).load_checkpoint()
 
     def _train_epoch(self, max_epoch):
         self._model.train()
@@ -52,9 +52,9 @@ class StereoSegmentationTrainer(ModelTrainer):
                 param_group['lr'] = cur_lr
             
             # Put both image and target onto device
-            left        = data['l_img'].to(self._device)
-            right       = data['r_img'].to(self._device)
-            target      = data['seg'].to(self._device)
+            left = data['l_img'].to(self._device)
+            right = data['r_img'].to(self._device)
+            target = data['seg'].to(self._device)
             
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer

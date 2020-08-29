@@ -25,10 +25,10 @@ class SegmentationNet(nn.Module):
 
     def forward(self, img_pyr):
         interm = self.feature_fusion[0](img_pyr[0])
-        interm = nn.functional.interpolate(interm, 2)
-        for level in enumerate(img_pyr[1:], start=1):
-            interm = self.feature_fusion(torch.cat([interm, img_pyr[level]], 1))
-            interm = nn.functional.interpolate(interm, 2)
+        interm = nn.functional.interpolate(interm, scale_factor=4)
+        for level, img in enumerate(img_pyr[1:], start=1):
+            interm = self.feature_fusion[level](torch.cat([interm, img], 1))
+            interm = nn.functional.interpolate(interm, scale_factor=4)
         return self.classifier(interm)
 
 class MonoSFNet(nn.Module):
@@ -43,6 +43,7 @@ class MonoSFNet(nn.Module):
 
         num_chs = [3, 16, 32, 64, 96, 128, 192]
         self.feature_pyramid_extractor = FeatureExtractor(num_chs)
+        self.segmentation_network = SegmentationNet(num_chs[:0:-1], 19)
 
         search_range = 4
         self.corr = Correlation(pad_size=search_range, kernel_size=1,
@@ -63,7 +64,7 @@ class MonoSFNet(nn.Module):
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
     def __str__(self):
-        return "mono_segflow" + str(self.feature_pyramid_extractor)\
+        return "MonoSF" + str(self.feature_pyramid_extractor)\
             + str(self.flow_estimator) + str(self.context_networks)
 
     def get_scales(self):
@@ -128,7 +129,7 @@ class MonoSFNet(nn.Module):
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
         if seg_gt is None:
-            seg_gt = self.segmentation_network(im1_pyr, im2_pyr)
+            seg_gt = self.segmentation_network(im1_pyr)
 
         flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr, seg_gt)
         if consistency:

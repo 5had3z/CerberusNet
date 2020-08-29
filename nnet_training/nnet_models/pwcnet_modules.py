@@ -38,7 +38,7 @@ class FeatureExtractor(nn.Module):
             self.convs.append(layer)
 
     def __str__(self):
-        return "_FlwExt_1"
+        return "_FlwExt1"
 
     def forward(self, x):
         feature_pyramid = []
@@ -61,7 +61,7 @@ class FlowEstimatorDense(nn.Module):
         self.conv_last = pwc_conv(ch_in + 448, 2, isReLU=False)
 
     def __str__(self):
-        return "_FlwEst_1"
+        return "_FlwEst1"
 
     def forward(self, x):
         x1 = torch.cat([self.conv1(x), x], dim=1)
@@ -85,7 +85,7 @@ class FlowEstimatorLite(nn.Module):
         self.predict_flow = pwc_conv(64 + 32, 2, isReLU=False)
 
     def __str__(self):
-        return "_FlwEst_2"
+        return "_FlwEst2"
 
     def forward(self, x):
         x1 = self.conv1(x)
@@ -112,7 +112,7 @@ class ContextNetwork(nn.Module):
         )
 
     def __str__(self):
-        return "_CtxNet_1"
+        return "_CtxNet1"
 
     def forward(self, x):
         return self.convs(x)

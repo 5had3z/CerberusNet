@@ -9,44 +9,17 @@ from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
-from matplotlib.colors import hsv_to_rgb
 from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from nnet_training.utilities.metrics import OpticFlowMetric
+from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
 from nnet_training.utilities.dataset import CityScapesDataset
 from trainer_base_class import ModelTrainer
+from mono_flow_trainer import flow_to_image
 
-__all__ = ['MonoFlowTrainer', 'flow_to_image']
+__all__ = ['MonoSegFlowTrainer']
 
-def build_pyramid(image, lvl_stp=[8, 4, 2, 1]):
-    pyramid = []
-    for level in lvl_stp:
-        pyramid.append(torch.nn.functional.interpolate(
-            image, scale_factor=1./level, mode='bilinear', align_corners=True))
-    return pyramid
-
-def flow_to_image(flow, max_flow=256):
-    '''
-    Converts optic flow to a hsv represenation and then rgb for display
-    '''
-    if max_flow is not None:
-        max_flow = max(max_flow, 1.)
-    else:
-        max_flow = np.max(flow)
-
-    n = 8
-    u, v = flow[:, :, 0] * 40, flow[:, :, 1] * 40
-    mag = np.sqrt(np.square(u) + np.square(v))
-    angle = np.arctan2(v, u)
-    im_h = np.mod(angle / (2 * np.pi) + 1, 1)
-    im_s = np.clip(mag * n / max_flow, a_min=0, a_max=1)
-    im_v = np.clip(n - im_s, a_min=0, a_max=1)
-    im = hsv_to_rgb(np.stack([im_h, im_s, im_v], 2))
-    return (im * 255).astype(np.uint8)
-
-class MonoFlowTrainer(ModelTrainer):
+class MonoSegFlowTrainer(ModelTrainer):
     '''
     Monocular Flow Training Class
     '''
@@ -55,24 +28,30 @@ class MonoFlowTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._loss_function = loss_fn
-        self._metric = OpticFlowMetric(filename=modelname)
-        super(MonoFlowTrainer, self).__init__(model, optim, dataldr,
+        self._seg_loss_fn = loss_fn['segmentation']
+        self._flow_loss_fn = loss_fn['flow']
+
+        self._seg_metric = SegmentationMetric(19, filename=modelname+'_seg')
+        self._flow_metric = OpticFlowMetric(filename=modelname+'_flow')
+
+        super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr,
                                               lr_cfg, modelname, checkpoints)
 
     def save_checkpoint(self):
-        super(MonoFlowTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
+        super(MonoSegFlowTrainer, self).save_checkpoint()
+        self._seg_metric.save_epoch()
+        self._flow_metric.save_epoch()
 
     def load_checkpoint(self):
         if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(MonoFlowTrainer, self).load_checkpoint()
+            self.epoch = len(self._seg_metric)
+        super(MonoSegFlowTrainer, self).load_checkpoint()
 
     def _train_epoch(self, max_epoch):
         self._model.train()
 
-        self._metric.new_epoch('training')
+        self._flow_metric.new_epoch('training')
+        self._seg_metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -84,76 +63,91 @@ class MonoFlowTrainer(ModelTrainer):
             # Put both image and target onto device
             img     = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
-
-            # img_pyr     = self.build_pyramid(img)
-            # img_seq_pyr = self.build_pyramid(img_seq)
+            seg_gt  = data['seg'].to(self._device)
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow = self._model(img, img_seq)
+            pred_flow, seg_pred = self._model(img, img_seq)
             flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
             flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
                      zip(flows_12, flows_21)]
-            loss, _, _, _ = self._loss_function(flows, img, img_seq)
+            flow_loss, _, _, _ = self._flow_loss_fn(flows, img, img_seq)
+            seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
+
+            loss = flow_loss + seg_loss
 
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
+            self._flow_metric._add_sample(
                 img.cpu().data.numpy(),
                 pred_flow['flow_fw'][0].cpu().data.numpy(),
                 img_seq.cpu().data.numpy(),
                 None,
-                loss=loss.item()
+                loss=flow_loss.item()
+            )
+
+            self._seg_metric._add_sample(
+                torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                seg_gt.cpu().data.numpy(),
+                loss=seg_loss.item()
             )
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
+                time_remain = time_elapsed/(batch_idx+1)*(len(self._training_loader)-(batch_idx+1))
                 sys.stdout.flush()
-                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f \
-                    || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                        self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
-        
+                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                         self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                         self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+
     def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()
 
-            self._metric.new_epoch('validation')
+            self._flow_metric.new_epoch('validation')
+            self._seg_metric.new_epoch('validation')
 
             start_time = time.time()
 
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img         = data['l_img'].to(self._device)
-                img_seq     = data['l_seq'].to(self._device)
+                img     = data['l_img'].to(self._device)
+                img_seq = data['l_seq'].to(self._device)
+                seg_gt  = data['seg'].to(self._device)
 
-                pred_flow   = self._model(img, img_seq)
-                
                 # Caculate the loss and accuracy for the predictions
+                pred_flow, seg_pred = self._model(img, img_seq)
                 flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
                 flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                        zip(flows_12, flows_21)]
-                loss, _, _, _  = self._loss_function(flows, img, img_seq)
+                         zip(flows_12, flows_21)]
+                flow_loss, _, _, _ = self._flow_loss_fn(flows, img, img_seq)
+                seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
-                self._metric._add_sample(
+                self._flow_metric._add_sample(
                     img.cpu().data.numpy(),
                     pred_flow['flow_fw'][0].cpu().data.numpy(),
                     img_seq.cpu().data.numpy(),
                     None,
-                    loss=loss.item()
+                    loss=flow_loss.item()
+                )
+
+                self._seg_metric._add_sample(
+                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    seg_gt.cpu().data.numpy(),
+                    loss=seg_loss.item()
                 )
                 
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    loss = flow_loss + seg_loss
+                    seg_acc = self._seg_metric.get_last_batch()
                     time_elapsed = time.time() - start_time
-                    time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
+                    time_remain = time_elapsed/(batch_idx+1)*(len(self._validation_loader)-(batch_idx+1))
                     sys.stdout.flush()
-                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                            self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                            batch_acc, loss.item(), time_elapsed, time_remain))
+                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Seg mIoU: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
+                        seg_acc, loss.item(), time_elapsed, time_remain))
 
     def visualize_output(self):
         """
@@ -180,7 +174,7 @@ class MonoFlowTrainer(ModelTrainer):
                 plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
-                vis_flow = self.flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
+                vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
 
                 plt.subplot(1, 3, 3)
                 plt.imshow(vis_flow)
@@ -189,14 +183,12 @@ class MonoFlowTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_training.nnet_models.nnet_models import MonoFlow1
-from nnet_training.nnet_models.pwcnet import PWCNet
-from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
+from nnet_training.nnet_models.mono_segflow import MonoSFNet
 from nnet_training.utilities.UnFlowLoss import unFlowLoss
+from nnet_training.utilities.loss_functions import FocalLoss2D
 
 if __name__ == "__main__":
-    print(Path.cwd())
-    BATCH_SIZE = 4
+    BATCH_SIZE = 6
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -206,31 +198,36 @@ if __name__ == "__main__":
     training_dir = {
         'images'    : base_dir + 'leftImg8bit/train',
         'left_seq'  : base_dir + 'leftImg8bit_sequence/train',
-        'cam'       : base_dir + 'camera/train'
+        'seg'       : base_dir + 'gtFine/train'
     }
     validation_dir = {
         'images'    : base_dir + 'leftImg8bit/val',
         'left_seq'  : base_dir + 'leftImg8bit_sequence/val',
-        'cam'       : base_dir + 'camera/val'
+        'seg'       : base_dir + 'gtFine/val',
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024, 512)),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024, 512))
+        Training   = CityScapesDataset(training_dir, crop_fraction=1, output_size=(512, 256)),
+        Validation = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
     )
 
     dataloaders = dict(
-        Training    = DataLoader(datasets["Training"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
+        Training   = DataLoader(datasets["Training"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
+        Validation = DataLoader(datasets["Validation"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
     )
 
-    Model = PWCNet()
-    optimizer = torch.optim.Adam(Model.parameters(), betas=(0.9, 0.99), lr=1e-4, weight_decay=1e-6)
-    photometric_weights = {"l1":0.15, "ssim":0.85}
-    lossfn = unFlowLoss(photometric_weights).to(torch.device("cuda"))
-    filename = str(Model)+'_Adam_Recon'
+    MODEL = MonoSFNet()
+    OPTIM = torch.optim.Adam(MODEL.parameters(), betas=(0.9, 0.99), lr=1e-4, weight_decay=1e-6)
+    PHOTOMETRIC_WEIGHTS = {"l1":0.15, "ssim":0.85}
+    LOSS_FN = {
+        "flow"          : unFlowLoss(PHOTOMETRIC_WEIGHTS).to(torch.device("cuda")),
+        "segmentation"  : FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda"))
+    }
+    FILENAME = str(MODEL)+'_Adam_Focal_Uflw'
 
-    lr_sched = {"lr": 1e-4, "mode":"constant"}
-    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelname=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(5)
+    LR_SCHED = {"lr": 1e-4, "mode":"constant"}
+    MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
+                                   lr_cfg=LR_SCHED, modelname=FILENAME)
+
+    # MODELTRAINER.visualize_output()
+    MODELTRAINER.train_model(5)

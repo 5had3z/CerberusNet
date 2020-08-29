@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 __all__ = ['FastSCNN', 'Stereo_FastSCNN']
 
-from nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck, PyramidPooling
+from .nnet_ops import _ConvBNReLU, _DSConv, _DWConv, LinearBottleneck, PyramidPooling
 
 class FastSCNN(nn.Module):
     def __init__(self, num_classes, aux=False, **kwargs):

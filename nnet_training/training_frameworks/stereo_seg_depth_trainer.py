@@ -118,10 +118,9 @@ class StereoSegDepthTrainer(ModelTrainer):
                 seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
                 l_depth_loss = self._depth_loss_fn(left, depth_pred, right, baseline, data['cam'])
                 r_depth_loss = self._depth_loss_fn(right, depth_pred, left, -baseline, data['cam'])
-                loss = seg_loss + l_depth_loss + r_depth_loss
 
                 self._seg_metric._add_sample(
-                    torch.argmax(seg_pred,dim=1,keepdim=True).cpu().data.numpy(),
+                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -133,6 +132,7 @@ class StereoSegDepthTrainer(ModelTrainer):
                 )
                 
                 if not batch_idx % 10:
+                    loss = seg_loss + l_depth_loss + r_depth_loss
                     seg_acc = self._seg_metric.get_last_batch()
                     depth_acc = self._depth_metric.get_last_batch()
                     time_elapsed = time.time() - start_time
