@@ -117,8 +117,6 @@ class MonoSegmentationTrainer(ModelTrainer):
             output = self._model(image)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            # cmap = plt.cm.get_cmap('hsv', 20)
-
             pred = torch.argmax(output,dim=1,keepdim=True)
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)

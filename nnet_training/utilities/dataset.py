@@ -240,7 +240,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if random.random() < 0.5:
             for item in epoch_data.values():
                 item = item.transpose(Image.FLIP_LEFT_RIGHT)
-        
+
         # random crop
         crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
         crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
@@ -250,8 +250,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
         for item in epoch_data.values():
             item = item.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
+        brightness_scale = random.uniform(0.8, 1.2)
+
         for key in epoch_data.keys():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                epoch_data[key] = torchvision.transforms.functional.adjust_brightness(epoch_data[key], brightness_scale)
                 epoch_data[key] = epoch_data[key].resize(self.output_size, Image.BILINEAR)
                 epoch_data[key] = self._img_transform(epoch_data[key])
             elif key is "seg":

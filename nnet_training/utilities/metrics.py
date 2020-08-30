@@ -623,6 +623,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "pwcnet_FlwExt_1_FlwEst_1_CtxNet_1_Adam_Recon"
+    filename = "MonoSF_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_Crp2_seg"
     metric = MetricBaseClass(filename=filename)
     metric.plot_summary_data()

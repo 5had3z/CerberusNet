@@ -118,44 +118,24 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
 
 class FocalLoss2D(nn.Module):
     """
-    https://github.com/doiken23/focal_segmentation/blob/master/focalloss2d.py
-    OG Source but I've modified a bit
+    Focal Loss for Imbalanced problems
     """
-    def __init__(self, gamma=0, weight=None, size_average=True, ignore_index=-100):
+    def __init__(self, gamma=2, ignore_index=-100):
         super(FocalLoss2D, self).__init__()
 
         self.gamma = gamma
-        self.weight = weight
-        self.size_average = size_average
-        self._ignore_index = ignore_index
+        self.ignore_index = ignore_index
 
-    def forward(self, input, target):
-        if input.dim()>2:
-            input = input.contiguous().view(input.size(0), input.size(1), -1)
-            input = input.transpose(1,2)
-            input = input.contiguous().view(-1, input.size(2)).squeeze()
-        if target.dim()==4:
-            target = target.contiguous().view(target.size(0), target.size(1), -1)
-            target = target.transpose(1,2)
-            target = target.contiguous().view(-1, target.size(2)).squeeze()
-        elif target.dim()==3:
-            target = target.view(-1)
-        else:
-            target = target.view(-1, 1)
-
+    def forward(self, predicted, target):
         # compute the negative likelyhood
-        # weight = Variable(self.weight)
-        logpt = -F.cross_entropy(input, target, ignore_index=self._ignore_index)
-        pt = torch.exp(logpt)
+        ce_loss = F.cross_entropy(predicted, target, ignore_index=self.ignore_index)
 
         # compute the loss
-        loss = -((1-pt)**self.gamma) * logpt
+        focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
 
-        # averaging (or not) loss
-        if self.size_average:
-            return loss.mean()
-        else:
-            return loss.sum()
+        # return the average
+        return focal_loss.mean()
+
 
 class DepthAwareLoss(nn.Module):
     def __init__(self, size_average=True, ignore_index=0):

@@ -59,7 +59,7 @@ class MonoSegFlowTrainer(ModelTrainer):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
-    
+
             # Put both image and target onto device
             img     = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
@@ -99,8 +99,8 @@ class MonoSegFlowTrainer(ModelTrainer):
                 time_remain = time_elapsed/(batch_idx+1)*(len(self._training_loader)-(batch_idx+1))
                 sys.stdout.flush()
                 sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                         self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                         self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
 
     def _validate_model(self, max_epoch):
         with torch.no_grad():
@@ -217,8 +217,8 @@ if __name__ == "__main__":
     }
 
     datasets = {
-        'Training'   : CityScapesDataset(training_dir, crop_fraction=1, output_size=(512, 256)),
-        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
+        'Training'   : CityScapesDataset(training_dir, crop_fraction=2, output_size=(512, 256)),
+        'Validation' : CityScapesDataset(validation_dir, crop_fraction=2, output_size=(512, 256))
     }
 
     dataloaders = {
@@ -233,13 +233,13 @@ if __name__ == "__main__":
     PHOTOMETRIC_WEIGHTS = {"l1":0.15, "ssim":0.85}
     LOSS_FN = {
         "flow"          : unFlowLoss(PHOTOMETRIC_WEIGHTS).to(torch.device("cuda")),
-        "segmentation"  : FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda"))
+        "segmentation"  : FocalLoss2D(gamma=2, ignore_index=-1).to(torch.device("cuda"))
     }
-    FILENAME = str(MODEL)+'_Adam_Focal_Uflw'
+    FILENAME = str(MODEL)+'_Adam_Fcl_Uflw_Crp2'
 
     LR_SCHED = {"lr": 1e-4, "mode":"constant"}
     MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
-                                   lr_cfg=LR_SCHED, modelname=FILENAME)
+                                      lr_cfg=LR_SCHED, modelname=FILENAME)
 
-    MODELTRAINER.visualize_output()
-    # MODELTRAINER.train_model(5)
+    # MODELTRAINER.visualize_output()
+    MODELTRAINER.train_model(5)
