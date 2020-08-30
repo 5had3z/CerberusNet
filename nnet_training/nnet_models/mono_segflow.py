@@ -23,12 +23,38 @@ class SegmentationNet(nn.Module):
         for ch_in in input_ch[1:]:
             self.feature_fusion.append(LinearBottleneck(ch_in+interm_ch, interm_ch))
 
+    def __str__(self):
+        return "_SegNet1"
+
     def forward(self, img_pyr):
         interm = self.feature_fusion[0](img_pyr[0])
         interm = nn.functional.interpolate(interm, scale_factor=4)
         for level, img in enumerate(img_pyr[1:], start=1):
             interm = self.feature_fusion[level](torch.cat([interm, img], 1))
             interm = nn.functional.interpolate(interm, scale_factor=4)
+        return self.classifier(interm)
+
+class SegmentationNet2(nn.Module):
+    '''
+    Module for extracting semantic segmentation from encoding pyramid
+    '''
+    def __init__(self, input_ch, num_classes, interm_ch=64):
+        super(SegmentationNet2, self).__init__()
+        self.classifier = Classifer(interm_ch, num_classes)
+
+        self.feature_fusion = nn.ModuleList([LinearBottleneck(input_ch[0], interm_ch, t=2, stride=1)])
+        for ch_in in input_ch[1:]:
+            self.feature_fusion.append(LinearBottleneck(ch_in+interm_ch, interm_ch, t=2, stride=1))
+
+    def __str__(self):
+        return "_SegNet2"
+
+    def forward(self, img_pyr):
+        interm = self.feature_fusion[0](img_pyr[0])
+        interm = nn.functional.interpolate(interm, scale_factor=2)
+        for level, img in enumerate(img_pyr[1:], start=1):
+            interm = self.feature_fusion[level](torch.cat([interm, img], 1))
+            interm = nn.functional.interpolate(interm, scale_factor=2)
         return self.classifier(interm)
 
 class MonoSFNet(nn.Module):
@@ -43,7 +69,7 @@ class MonoSFNet(nn.Module):
 
         num_chs = [3, 16, 32, 64, 96, 128, 192]
         self.feature_pyramid_extractor = FeatureExtractor(num_chs)
-        self.segmentation_network = SegmentationNet(num_chs[:0:-1], 19)
+        self.segmentation_network = SegmentationNet2(num_chs[:0:-1], 19)
 
         search_range = 4
         self.corr = Correlation(pad_size=search_range, kernel_size=1,
@@ -64,7 +90,7 @@ class MonoSFNet(nn.Module):
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
     def __str__(self):
-        return "MonoSF" + str(self.feature_pyramid_extractor)\
+        return "MonoSF" + str(self.segmentation_network) + str(self.feature_pyramid_extractor)\
             + str(self.flow_estimator) + str(self.context_networks)
 
     def get_scales(self):

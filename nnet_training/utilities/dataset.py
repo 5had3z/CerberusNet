@@ -187,8 +187,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.output_size = output_size
         self.crop_fraction = crop_fraction
 
-        self.valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
-                              23, 24, 25, 26, 27, 28, 31, 32, 33]
+        # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+        #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
         self._key = np.array([-1, -1, -1, -1, -1, -1,
                               -1, -1, 0, 1, -1, -1,
                               2, 3, 4, -1, -1, -1,

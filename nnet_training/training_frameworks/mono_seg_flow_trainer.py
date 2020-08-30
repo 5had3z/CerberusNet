@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
     datasets = {
         'Training'   : CityScapesDataset(training_dir, crop_fraction=2, output_size=(512, 256)),
-        'Validation' : CityScapesDataset(validation_dir, crop_fraction=2, output_size=(512, 256))
+        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
     }
 
     dataloaders = {
@@ -241,5 +241,5 @@ if __name__ == "__main__":
     MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
                                       lr_cfg=LR_SCHED, modelname=FILENAME)
 
-    # MODELTRAINER.visualize_output()
-    MODELTRAINER.train_model(5)
+    MODELTRAINER.visualize_output()
+    # MODELTRAINER.train_model(5)
