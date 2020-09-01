@@ -204,9 +204,9 @@ if __name__ == "__main__":
 
     dataloaders = {
         'Training'   : DataLoader(datasets["Training"], batch_size=BATCH_SIZE,
-                                 shuffle=True, num_workers=n_workers, drop_last=True),
+                                  shuffle=True, num_workers=n_workers, drop_last=True),
         'Validation' : DataLoader(datasets["Validation"], batch_size=BATCH_SIZE,
-                                 shuffle=True, num_workers=n_workers, drop_last=True),
+                                  shuffle=True, num_workers=n_workers, drop_last=True),
     }
 
     Model = PWCNet()

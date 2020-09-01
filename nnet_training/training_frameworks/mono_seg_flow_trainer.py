@@ -242,8 +242,9 @@ if __name__ == "__main__":
     BASEPATH = Path.cwd() / "torch_models" # str(MODEL)+'_Adam_Fcl_Uflw_HRes'
 
     LR_SCHED = {"lr": 1e-4, "mode":"constant"}
-    MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
-                                      lr_cfg=LR_SCHED, modelpath=BASEPATH)
+    MODELTRAINER = MonoSegFlowTrainer(model=MODEL, optim=OPTIM, loss_fn=LOSS_FN,
+                                      dataldr=dataloaders, lr_cfg=LR_SCHED,
+                                      modelpath=BASEPATH)
 
     # MODELTRAINER.visualize_output()
     MODELTRAINER.train_model(3)

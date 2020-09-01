@@ -54,6 +54,12 @@ class ModelTrainer(object):
             else:
                 sys.stdout.write("\nStarting From Scratch!")
 
+    def get_learning_rate(self) -> float:
+        return self._lr_manager.get_lr()
+
+    def set_learning_rate(self, new_lr: float) -> None:
+        self._lr_manager.base_lr = new_lr
+
     def load_checkpoint(self):
         '''
         Loads previous progress of the model if available
@@ -117,6 +123,9 @@ class ModelTrainer(object):
         raise NotImplementedError
 
     def _test_model(self):
+        raise NotImplementedError
+
+    def plot_data(self):
         raise NotImplementedError
 
 def get_trainer(trainer_name: str) -> ModelTrainer:

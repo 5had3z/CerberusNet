@@ -7,6 +7,7 @@ import json, os, argparse, hashlib
 from pathlib import Path
 from easydict import EasyDict
 
+from nnet_training.utilities.dataset import get_cityscapse_dataset
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
 def initialise_training_network(config_json) -> ModelTrainer:
@@ -21,6 +22,8 @@ def initialise_training_network(config_json) -> ModelTrainer:
 
     trainer = get_trainer(config_json.trainer)
 
+    datasets = get_cityscapse_dataset(config_json.dataset)
+
     return trainer
 
 if __name__ == "__main__":
@@ -31,26 +34,28 @@ if __name__ == "__main__":
     with open(args.config) as f:
         cfg = EasyDict(json.load(f))
 
-    MODELTRAINER = initialise_training_network(cfg)
+    TRAINER = initialise_training_network(cfg)
 
     #   User Input Training loop
     LOOP_COND = 1
     while LOOP_COND == 1:
-        n_epochs = int(input("Number of Training Epochs: "))
-        MODELTRAINER.train_model(n_epochs)
+        TRAINER.train_model(int(input("Number of Training Epochs: ")))
 
         if int(input("Show Training Statistics? (1/0): ")) == 1:
-            MODELTRAINER.plot_data()
+            # I should do this sometime
+            TRAINER.plot_data()
 
         if int(input("Show Example Output? (1/0): ")) == 1:
-            MODELTRAINER.visualize_output()
+            TRAINER.visualize_output()
 
         if int(input("Pass Specific Image? (1/0): ")) == 1:
-            MODELTRAINER.custom_image(str(input("Enter Path: ")))
+            raise NotImplementedError
+            # @todo but I don't really care
+            # TRAINER.custom_image(str(input("Enter Path: ")))
 
-        print("Current Base Learning Rate: ", MODELTRAINER.get_learning_rate())
+        print("Current Base Learning Rate: ", TRAINER.get_learning_rate())
 
-        if int(input("New Learning Rate? (1/0): ")) == 1:
-            MODELTRAINER.set_learning_rate(float(input("New Learning Rate Value: ")))
+        if int(input("New Base Learning Rate? (1/0): ")) == 1:
+            TRAINER.set_learning_rate(float(input("New Learning Rate Value: ")))
 
         LOOP_COND = int(input("Continue Training? (1/0): "))

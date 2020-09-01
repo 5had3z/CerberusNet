@@ -3,20 +3,24 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
+import platform
+import os
+import random
+import json
+import multiprocessing
+from pathlib import Path
+from typing import Dict
+
 import torch
 import torchvision
 from PIL import Image
 
-import os
-import random
-from pathlib import Path
-
-import csv
-import json
 import numpy as np
 import matplotlib.pyplot as plt
 
-imgextension = '.png'
+__all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
+
+IMG_EXT = '.png'
 
 class CityScapesDataset(torch.utils.data.Dataset):
     """
@@ -26,13 +30,15 @@ class CityScapesDataset(torch.utils.data.Dataset):
     Get Item will return the corresponding dictionary with keys:
         [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
-    def __init__(self, directories, output_size=(1024,512), crop_fraction=2, id_vector=None,\
+    def __init__(self, directories: Path, output_size=(1024, 512), crop_fraction=2, id_vector=None,\
             transform=torchvision.transforms.ToTensor(), disparity_out=False):
         '''
         Initializer for Cityscapes dataset\n
-        @input dictionary that contain paths of datasets as [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
-        @param disparity_out determines whether the disparity is given or a direct depth estimation\n
-        @param crop_fraction determines if the image is randomly cropped to by a fraction\
+        @input dictionary that contain paths of datasets as
+        [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
+        @param disparity_out determines whether the disparity is
+        given or a direct depth estimation\n
+        @param crop_fraction determines if the image is randomly cropped to by a fraction
             e.g. 2 results in width/2 by height/2 random crop of original image\n
         '''
         l_img_key = None
@@ -79,11 +85,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
             print("Left Image Key Error")
 
         #Get all file names
-        for dirName, _, fileList in os.walk(directories[l_img_key]):
-            for filename in fileList:
-                if filename.endswith(imgextension):
+        for dir_name, _, file_list in os.walk(directories[l_img_key]):
+            for filename in file_list:
+                if filename.endswith(IMG_EXT):
                     read_check = True
-                    l_imgpath = os.path.join(dirName, filename)
+                    l_imgpath = os.path.join(dir_name, filename)
                     foldername = os.path.basename(os.path.dirname(l_imgpath))
 
                     if self.enable_right:
@@ -312,7 +318,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
 def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
     num_images = 0
-    for file in os.listdir(directory): num_images += file.endswith(imgextension)
+    for file in os.listdir(directory): num_images += file.endswith(IMG_EXT)
 
     print("Number of Images:\t", num_images)
     image_ids = list(range(num_images))
@@ -325,9 +331,59 @@ def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
 
     train_ids = image_ids[0:n_train]
     val_ids = image_ids[n_train+1:n_train+n_val]
-    test_ids  = image_ids[n_train+n_val:-1]
+    test_ids = image_ids[n_train+n_val:-1]
 
     return train_ids, val_ids, test_ids
+
+def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
+    """
+    Returns a cityscapes dataset given a config
+    """
+    if platform.system() == 'Windows':
+        n_workers = 0
+    else:
+        n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
+
+    crop_fraction = dataset_config.augmentations.crop_fraction
+    output_size = dataset_config.augmentations.output_size
+
+    training_dirs = {}
+    for subset in dataset_config.train_subdirs:
+        training_dirs[str(subset)] = dataset_config.rootdir +\
+                                        dataset_config.train_subdirs[str(subset)]
+
+    validation_dirs = {}
+    for subset in dataset_config.val_subdirs:
+        validation_dirs[str(subset)] = dataset_config.rootdir +\
+                                        dataset_config.val_subdirs[str(subset)]
+
+    datasets = {
+        'Training'   : CityScapesDataset(training_dirs,
+                                         crop_fraction=crop_fraction,
+                                         output_size=output_size),
+        'Validation' : CityScapesDataset(validation_dirs,
+                                         crop_fraction=crop_fraction,
+                                         output_size=output_size)
+    }
+
+    dataloaders = {
+        'Training'   : torch.utils.data.DataLoader(
+            datasets["Training"],
+            batch_size=dataset_config.batch_size,
+            shuffle=dataset_config.shuffle,
+            num_workers=n_workers,
+            drop_last=dataset_config.drop_last
+        ),
+        'Validation' : torch.utils.data.DataLoader(
+            datasets["Validation"],
+            batch_size=dataset_config.batch_size,
+            shuffle=dataset_config.shuffle,
+            num_workers=n_workers,
+            drop_last=dataset_config.drop_last
+        ),
+    }
+
+    return dataloaders
 
 if __name__ == '__main__':
     print("Testing Folder Traversal and Image Extraction!")
