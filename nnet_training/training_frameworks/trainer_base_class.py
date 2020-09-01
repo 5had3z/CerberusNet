@@ -7,20 +7,21 @@ import os
 import time
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, TypeVar
+T = TypeVar('T')
 
 import torch
 
 from nnet_training.utilities.lr_scheduler import LRScheduler
 
-__all__ = ['ModelTrainer']
+__all__ = ['ModelTrainer', 'get_trainer']
 
 class ModelTrainer(object):
     """
     Base class that various model trainers inherit from
     """
-    def __init__(self, model: torch.nn.Module, optimizer: torch.nn.Optimizer,
-                 dataloaders: Dict[torch.utils.data.DataLoader], lr_cfg: Dict,
+    def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
+                 dataloaders: Dict[str, torch.utils.data.DataLoader], lr_cfg: Dict[str, T],
                  basepath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
@@ -36,7 +37,7 @@ class ModelTrainer(object):
         self._model = model.to(self._device)
         self._optimizer = optimizer
 
-        self._lr_cfg = lr_cfg
+        self._lr_manager = LRScheduler(mode=lr_cfg['mode'], base_lr=lr_cfg['lr'], power=0.9)
 
         self._checkpoints = checkpoints
 
@@ -74,18 +75,19 @@ class ModelTrainer(object):
         '''
         sys.stdout.write("\nSaving Model")
         torch.save({
-            'model_state_dict':         self._model.state_dict(),
-            'optimizer_state_dict':     self._optimizer.state_dict()
+            'model_state_dict'    : self._model.state_dict(),
+            'optimizer_state_dict': self._optimizer.state_dict()
         }, self._path)
 
     def train_model(self, n_epochs):
+        """
+        Train the model for a number of epochs
+        """
         train_start_time = time.time()
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager = LRScheduler(mode=self._lr_cfg['mode'], base_lr=self._lr_cfg['lr'],
-                                       nepochs=n_epochs, iters_per_epoch=len(self._training_loader),
-                                       power=0.9)
+        self._lr_manager.set_epochs(nepochs=n_epochs, iters_per_epoch=len(self._training_loader))
 
         while self.epoch < max_epoch:
             self.epoch += 1
@@ -116,3 +118,31 @@ class ModelTrainer(object):
 
     def _test_model(self):
         raise NotImplementedError
+
+def get_trainer(trainer_name: str) -> ModelTrainer:
+    """
+    Returns the corresponding network trainer given a string
+    """
+    from nnet_training.training_frameworks import mono_flow_trainer,\
+        mono_seg_flow_trainer, mono_seg_trainer,\
+        stereo_depth_trainer, stereo_flow_trainer,\
+        stereo_seg_depth_trainer, stereo_seg_trainer
+
+    if trainer_name == "MonoFlowTrainer":
+        trainer = mono_flow_trainer.MonoFlowTrainer
+    elif trainer_name == "MonoSegFlowTrainer":
+        trainer = mono_seg_flow_trainer.MonoSegFlowTrainer
+    elif trainer_name == "MonoSegmentationTrainer":
+        trainer = mono_seg_trainer.MonoSegmentationTrainer
+    elif trainer_name == "StereoDisparityTrainer":
+        trainer = stereo_depth_trainer.StereoDisparityTrainer
+    elif trainer_name == "StereoFlowTrainer":
+        trainer = stereo_flow_trainer.StereoFlowTrainer
+    elif trainer_name == "StereoSegDepthTrainer":
+        trainer = stereo_seg_depth_trainer.StereoSegDepthTrainer
+    elif trainer_name == "StereoSegTrainer":
+        trainer = stereo_seg_trainer.StereoSegTrainer
+    else:
+        raise NotImplementedError(trainer_name)
+
+    return trainer

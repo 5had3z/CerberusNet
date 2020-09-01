@@ -7,9 +7,9 @@ import json, os, argparse, hashlib
 from pathlib import Path
 from easydict import EasyDict
 
-import nnet_training.training_frameworks as frameworks
+from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
-def initialise_training_network(config_json):
+def initialise_training_network(config_json) -> ModelTrainer:
     """
     Sets up the network and training configurations
     Returns initialised training framework class
@@ -19,22 +19,9 @@ def initialise_training_network(config_json):
     if not os.path.isdir(Path.cwd() / "torch_models" / str(encoding.hexdigest())):
         os.makedirs(Path.cwd() / "torch_models" / str(encoding.hexdigest()))
 
-    if config_json.trainer == "MonoFlowTrainer":
-        TRAINER = frameworks.mono_flow_trainer.MonoFlowTrainer
-    elif config_json.trainer == "MonoSegFlowTrainer":
-        TRAINER = frameworks.mono_seg_flow_trainer.MonoSegFlowTrainer
-    elif config_json.trainer == "MonoSegmentationTrainer":
-        TRAINER = frameworks.mono_seg_trainer.MonoSegmentationTrainer
-    elif config_json.trainer == "StereoDisparityTrainer":
-        TRAINER = frameworks.stereo_depth_trainer.StereoDisparityTrainer
-    elif config_json.trainer == "StereoFlowTrainer":
-        TRAINER = frameworks.stereo_flow_trainer.StereoFlowTrainer
-    elif config_json.trainer == "StereoSegDepthTrainer":
-        TRAINER = frameworks.stereo_seg_depth_trainer.StereoSegDepthTrainer
-    elif config_json.trainer == "StereoSegTrainer":
-        TRAINER = frameworks.stereo_seg_trainer.StereoSegTrainer
+    trainer = get_trainer(config_json.trainer)
 
-    return TRAINER
+    return trainer
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -49,7 +36,8 @@ if __name__ == "__main__":
     #   User Input Training loop
     LOOP_COND = 1
     while LOOP_COND == 1:
-        MODELTRAINER.train_model(int(input("Number of Training Epochs: ")))
+        n_epochs = int(input("Number of Training Epochs: "))
+        MODELTRAINER.train_model(n_epochs)
 
         if int(input("Show Training Statistics? (1/0): ")) == 1:
             MODELTRAINER.plot_data()
@@ -60,7 +48,7 @@ if __name__ == "__main__":
         if int(input("Pass Specific Image? (1/0): ")) == 1:
             MODELTRAINER.custom_image(str(input("Enter Path: ")))
 
-        print("Current Learning Rate: ", MODELTRAINER.get_learning_rate)
+        print("Current Base Learning Rate: ", MODELTRAINER.get_learning_rate())
 
         if int(input("New Learning Rate? (1/0): ")) == 1:
             MODELTRAINER.set_learning_rate(float(input("New Learning Rate Value: ")))

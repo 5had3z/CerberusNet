@@ -5,7 +5,8 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
 from pathlib import Path
-from typing import Dict
+from typing import Dict, TypeVar
+T = TypeVar('T')
 import numpy as np
 
 import torch
@@ -14,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import DepthMetric
 from nnet_training.utilities.dataset import CityScapesDataset
-from trainer_base_class import ModelTrainer
+from .trainer_base_class import ModelTrainer
 
 __all__ = ['StereoDisparityTrainer']
 
@@ -22,9 +23,10 @@ class StereoDisparityTrainer(ModelTrainer):
     '''
     Training stereo models
     '''
-    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
-                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
-                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 dataldr: Dict[str, torch.utils.data.DataLoader],
+                 modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders

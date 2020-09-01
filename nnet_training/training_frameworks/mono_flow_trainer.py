@@ -4,20 +4,18 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
-import numpy as np
 from pathlib import Path
-from typing import Dict
+from typing import Dict, TypeVar
+T = TypeVar('T')
+import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric
-from nnet_training.utilities.dataset import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image
-from trainer_base_class import ModelTrainer
+from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['MonoFlowTrainer', 'flow_to_image']
 
@@ -32,9 +30,10 @@ class MonoFlowTrainer(ModelTrainer):
     '''
     Monocular Flow Training Class
     '''
-    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
-                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
-                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 dataldr: Dict[str, torch.utils.data.DataLoader],
+                 modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -115,12 +114,12 @@ class MonoFlowTrainer(ModelTrainer):
                 img_seq     = data['l_seq'].to(self._device)
 
                 pred_flow   = self._model(img, img_seq)
-                
+
                 # Caculate the loss and accuracy for the predictions
                 flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
                 flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
                         zip(flows_12, flows_21)]
-                loss, _, _, _  = self._loss_function(flows, img, img_seq)
+                loss, _, _, _ = self._loss_function(flows, img, img_seq)
 
                 self._metric._add_sample(
                     img.cpu().data.numpy(),
@@ -129,15 +128,15 @@ class MonoFlowTrainer(ModelTrainer):
                     None,
                     loss=loss.item()
                 )
-                
+
                 if not batch_idx % 10:
                     batch_acc = self._metric.get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
                     sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                            self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                            batch_acc, loss.item(), time_elapsed, time_remain))
+                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
+                        batch_acc, loss.item(), time_elapsed, time_remain))
 
     def visualize_output(self):
         """
@@ -173,13 +172,13 @@ class MonoFlowTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_training.nnet_models.nnet_models import MonoFlow1
-from nnet_training.nnet_models.pwcnet import PWCNet
-from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
-from nnet_training.utilities.UnFlowLoss import unFlowLoss
-
 if __name__ == "__main__":
-    print(Path.cwd())
+    from nnet_training.nnet_models.nnet_models import MonoFlow1
+    from nnet_training.nnet_models.pwcnet import PWCNet
+    from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
+    from nnet_training.utilities.UnFlowLoss import unFlowLoss
+    from nnet_training.utilities.dataset import CityScapesDataset
+
     BATCH_SIZE = 4
     if platform.system() == 'Windows':
         n_workers = 0
@@ -198,23 +197,27 @@ if __name__ == "__main__":
         'cam'       : base_dir + 'camera/val'
     }
 
-    datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024, 512)),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024, 512))
-    )
+    datasets = {
+        'Training'   : CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024, 512)),
+        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024, 512))
+    }
 
-    dataloaders = dict(
-        Training    = DataLoader(datasets["Training"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=BATCH_SIZE, shuffle=True, num_workers=n_workers, drop_last=True),
-    )
+    dataloaders = {
+        'Training'   : DataLoader(datasets["Training"], batch_size=BATCH_SIZE,
+                                 shuffle=True, num_workers=n_workers, drop_last=True),
+        'Validation' : DataLoader(datasets["Validation"], batch_size=BATCH_SIZE,
+                                 shuffle=True, num_workers=n_workers, drop_last=True),
+    }
 
     Model = PWCNet()
     optimizer = torch.optim.Adam(Model.parameters(), betas=(0.9, 0.99), lr=1e-4, weight_decay=1e-6)
     photometric_weights = {"l1":0.15, "ssim":0.85}
     lossfn = unFlowLoss(photometric_weights).to(torch.device("cuda"))
-    filename = str(Model)+'_Adam_Recon'
+
+    BASEPATH = Path.cwd() / "torch_models"
 
     lr_sched = {"lr": 1e-4, "mode":"constant"}
-    modeltrainer = MonoFlowTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelname=filename)
+    modeltrainer = MonoFlowTrainer(model=Model, optim=optimizer, loss_fn=lossfn,
+                                   dataldr=dataloaders, lr_cfg=lr_sched, modelpath=BASEPATH)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(5)

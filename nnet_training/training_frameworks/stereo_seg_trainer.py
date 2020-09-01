@@ -5,7 +5,8 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
 from pathlib import Path
-from typing import Dict
+from typing import Dict, TypeVar
+T = TypeVar('T')
 import numpy as np
 
 import torch
@@ -13,16 +14,16 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import SegmentationMetric
-from nnet_training.utilities.dataset import CityScapesDataset
 from nnet_training.utilities.visualisation import get_color_pallete
-from trainer_base_class import ModelTrainer
+from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['StereoSegTrainer']
 
 class StereoSegTrainer(ModelTrainer):
-    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
-                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
-                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 dataldr: Dict[str, torch.utils.data.DataLoader],
+                 modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -154,6 +155,7 @@ class StereoSegTrainer(ModelTrainer):
 if __name__ == "__main__":
     from nnet_training.utilities.loss_functions import FocalLoss2D
     from nnet_training.nnet_models.nnet_models import StereoSegmentaionSeparated
+    from nnet_training.utilities.dataset import CityScapesDataset
 
     BATCH_SIZE = 8
     if platform.system() == 'Windows':
@@ -193,6 +195,7 @@ if __name__ == "__main__":
     lossfn = FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda"))
 
     lr_sched = {"lr": 0.01, "mode":"poly"}
-    modeltrainer = StereoSegTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelpath=BASEPATH)
+    modeltrainer = StereoSegTrainer(model=Model, optim=optimizer, loss_fn=lossfn,
+                                    dataldr=dataloaders, lr_cfg=lr_sched, modelpath=BASEPATH)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(1)
