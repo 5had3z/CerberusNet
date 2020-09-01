@@ -198,7 +198,7 @@ from nnet_training.utilities.UnFlowLoss import unFlowLoss
 from nnet_training.utilities.loss_functions import FocalLoss2D
 
 if __name__ == "__main__":
-    BATCH_SIZE = 6
+    BATCH_SIZE = 2
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -217,8 +217,8 @@ if __name__ == "__main__":
     }
 
     datasets = {
-        'Training'   : CityScapesDataset(training_dir, crop_fraction=2, output_size=(512, 256)),
-        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(512, 256))
+        'Training'   : CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024, 512)),
+        'Validation' : CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024, 512))
     }
 
     dataloaders = {
@@ -235,11 +235,11 @@ if __name__ == "__main__":
         "flow"          : unFlowLoss(PHOTOMETRIC_WEIGHTS).to(torch.device("cuda")),
         "segmentation"  : FocalLoss2D(gamma=2, ignore_index=-1).to(torch.device("cuda"))
     }
-    FILENAME = str(MODEL)+'_Adam_Fcl_Uflw_Crp2'
+    FILENAME = str(MODEL)+'_Adam_Fcl_Uflw_HRes'
 
     LR_SCHED = {"lr": 1e-4, "mode":"constant"}
     MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
                                       lr_cfg=LR_SCHED, modelname=FILENAME)
 
-    MODELTRAINER.visualize_output()
-    # MODELTRAINER.train_model(5)
+    # MODELTRAINER.visualize_output()
+    MODELTRAINER.train_model(3)
