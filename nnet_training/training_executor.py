@@ -7,6 +7,11 @@ import json, os, argparse, hashlib
 from pathlib import Path
 from easydict import EasyDict
 
+import torch
+from nnet_training.utilities.loss_functions import FocalLoss2D
+from nnet_training.utilities.UnFlowLoss import unFlowLoss
+from nnet_training.nnet_models import MonoSFNet
+
 from nnet_training.utilities.dataset import get_cityscapse_dataset
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
@@ -17,12 +22,29 @@ def initialise_training_network(config_json) -> ModelTrainer:
     """
     encoding = hashlib.md5(json.dumps(config_json).encode('utf-8'))
 
-    if not os.path.isdir(Path.cwd() / "torch_models" / str(encoding.hexdigest())):
-        os.makedirs(Path.cwd() / "torch_models" / str(encoding.hexdigest()))
-
-    trainer = get_trainer(config_json.trainer)
+    training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
+    if not os.path.isdir(training_path):
+        os.makedirs(training_path)
 
     datasets = get_cityscapse_dataset(config_json.dataset)
+    model = MonoSFNet()
+
+    loss_fns = {
+        "flow"          : unFlowLoss({"l1":0.15, "ssim":0.85}).to(torch.device("cuda")),
+        "segmentation"  : FocalLoss2D(gamma=2, ignore_index=-1).to(torch.device("cuda"))
+    }
+
+    if config_json.optimiser.type in ['adam', 'Adam']:
+        optimiser = torch.optim.Adam(
+            model.parameters(),
+            betas=config_json.optimiser.args.betas,
+            weight_decay=config_json.optimiser.args.weight_decay
+        )
+
+    trainer = get_trainer(config_json.trainer)(
+        model=model, optim=optimiser, loss_fn=loss_fns,
+        dataldr=datasets, lr_cfg=config_json.lr_scheduler,
+        modelpath=training_path)
 
     return trainer
 
