@@ -11,21 +11,22 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['MetricBaseClass','SegmentationMetric', 'DepthMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
+__all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
+           'BoundaryBoxMetric', 'ClassificationMetric']
 
 class MetricBaseClass(object):
     """
     Provides basic functionality for statistics tracking classes
     """
-    def __init__(self, mode='training', filename=None):
-        assert mode == 'training' or mode == 'validation'
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        assert mode in ['training', 'validation']
         self.mode = mode
         self.metric_data = dict()
 
-        if filename is not None:
-            if filename[-5:] != '.hdf5':
-                filename = filename + '.hdf5'
-            self._path = Path.cwd() / "torch_models" / filename
+        if savefile != "":
+            if savefile[-5:] != '.hdf5':
+                savefile = savefile + '.hdf5'
+            self._path = base_dir / savefile
             if not os.path.isfile(self._path):
                 with h5py.File(self._path, 'a') as hf:
                     hf.create_group('cache')
@@ -36,7 +37,7 @@ class MetricBaseClass(object):
                         del hf['cache']
         else:
             self._path = None
-        
+
     def __len__(self):
         """
         Return Number of Epochs Recorded
@@ -48,7 +49,7 @@ class MetricBaseClass(object):
             if 'cache' in list(hf) and 'training' in list(hf['cache']):
                 n_epochs += len(list(hf['cache/training']))
             return n_epochs
-    
+
     def __del__(self):
         with h5py.File(self._path, 'a') as hf:
             if 'cache' in list(hf):
@@ -63,7 +64,7 @@ class MetricBaseClass(object):
                 # Clear any Cached data from previous first into main
                 if 'cache' in list(hf) and len(list(hf['cache'])) > 0:
                     self._flush_to_main()
-                
+
                 if self.mode in list(hf):
                     group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
                 else:
@@ -76,7 +77,8 @@ class MetricBaseClass(object):
                 summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
 
-                #   Flush current data as its now in long term storage and we're ready for next dataset
+                # Flush current data as its now in long term
+                # storage and we're ready for next dataset
                 self._reset_metric()
 
         else:
@@ -88,7 +90,7 @@ class MetricBaseClass(object):
         """
         if mode is None:
             mode = self.mode
-        
+
         if self._path is not None:
             with h5py.File(self._path, 'r') as hf:
                 group_name = 'Epoch_' + str(epoch_idx)
@@ -97,9 +99,10 @@ class MetricBaseClass(object):
             return self.metric_data
         else:
             print("No File Specified for Segmentation Metric Manager")
+            return None
 
     def new_epoch(self, mode='training'):
-        assert mode == 'training' or mode == 'validation'
+        assert mode in ['training', 'validation']
 
         # Cache data if it hasn't been saved yet (probably not a best epoch or
         # something, but the next might be, so we want to keep this data)
@@ -122,7 +125,7 @@ class MetricBaseClass(object):
         with h5py.File(self._path, 'r') as hf:
             num_metrics = len(list(hf['training'][group_name]))
             for idx, metric in enumerate(list(hf['training'][group_name])):
-                plt.subplot(1,num_metrics,idx+1)
+                plt.subplot(1, num_metrics, idx+1)
                 plt.plot(hf['training'][group_name][metric][:])
                 plt.plot(hf['validation'][group_name][metric][:])
                 plt.legend(["Training", "Validation"])
@@ -143,7 +146,8 @@ class MetricBaseClass(object):
                     n_cached = len(list(hf['cache/'+self.mode])) + 1
 
                 if self.mode in list(hf):
-                    group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
+                    group_name = 'cache/' + self.mode + '/Epoch_' +\
+                        str(len(list(hf[self.mode])) + n_cached)
                 else:
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
 
@@ -180,7 +184,7 @@ class MetricBaseClass(object):
             for metric in list(hf['training/Epoch_1']):
                 if metric != 'Summary':
                     metrics.append(metric)
-            
+
             training_data = np.zeros((len(list(hf['training'])), len(metrics)))
             testing_data = np.zeros((len(list(hf['validation'])), len(metrics)))
 
@@ -190,12 +194,13 @@ class MetricBaseClass(object):
             for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
                 testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
 
-            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
-        
+            print("# Training, ", len(list(hf['training'])),
+                  "\t# Validation", len(list(hf['validation'])))
+
         for idx, metric in enumerate(metrics):
-            plt.subplot(1,len(metrics),idx+1)
-            plt.plot(training_data[:,idx])
-            plt.plot(testing_data[:,idx])
+            plt.subplot(1, len(metrics), idx+1)
+            plt.plot(training_data[:, idx])
+            plt.plot(testing_data[:, idx])
             plt.legend(["Training", "Validation"])
             plt.title(metric + ' over Epochs')
             plt.xlabel('Epoch #')
@@ -211,31 +216,32 @@ class MetricBaseClass(object):
 
         with h5py.File(self._path, 'r') as hf:
             training_metrics = {}
-            validation_metrics  = {}
+            validation_metrics = {}
             for metric in list(hf['training/Epoch_1']):
                 if metric != 'Summary':
                     training_metrics[metric] = np.zeros((1,1))
-                    validation_metrics[metric]  = np.zeros((1,1))
+                    validation_metrics[metric] = np.zeros((1,1))
 
             for epoch in list(hf['training']):
                 for metric in list(hf['training/'+epoch]):
                     if metric != 'Summary':
                         training_metrics[metric] = np.append(
-                                training_metrics[metric],
-                                hf['training/'+epoch+'/'+metric][:])
+                            training_metrics[metric],
+                            hf['training/'+epoch+'/'+metric][:])
 
             for epoch in list(hf['validation']):
                 for metric in list(hf['validation/'+epoch]):
                     if metric != 'Summary':
                         validation_metrics[metric] = np.append(
-                                validation_metrics[metric],
-                                hf['validation/'+epoch+'/'+metric][:])
+                            validation_metrics[metric],
+                            hf['validation/'+epoch+'/'+metric][:])
 
-            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
-        
+            print("# Training, ", len(list(hf['training'])),
+                  "\t# Validation", len(list(hf['validation'])))
+
         num_metrics = len(training_metrics.keys())
         for idx, metric in enumerate(training_metrics):
-            plt.subplot(1,num_metrics, idx+1)
+            plt.subplot(1, num_metrics, idx+1)
             plt.plot(training_metrics[metric])
             plt.plot(validation_metrics[metric])
             plt.legend(["Training", "Validation"])
@@ -254,7 +260,7 @@ class MetricBaseClass(object):
         @param  main_metric, only main metric\n
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
-        """ 
+        """
         raise NotImplementedError
 
     def max_accuracy(self):
@@ -267,8 +273,8 @@ class SegmentationMetric(MetricBaseClass):
     """
     Accuracy and Loss Staticstics tracking for semantic segmentation networks
     """
-    def __init__(self, num_classes, mode='training', filename=None):
-        super(SegmentationMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, num_classes, savefile: str, base_dir: Path, mode='training'):
+        super(SegmentationMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._n_classes = num_classes
         self._reset_metric()
 
@@ -387,8 +393,8 @@ class DepthMetric(MetricBaseClass):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks
     """
-    def __init__(self, mode='training', filename=None):
-        super(DepthMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(DepthMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._reset_metric()
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
@@ -505,8 +511,8 @@ class OpticFlowMetric(MetricBaseClass):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks
     """
-    def __init__(self, mode='training', filename=None):
-        super(OpticFlowMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(OpticFlowMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._reset_metric()
 
     def _add_sample(self, orig_img, seq_img, flow_pred, flow_target, loss=None):
@@ -591,8 +597,8 @@ class OpticFlowMetric(MetricBaseClass):
         )
 
 class BoundaryBoxMetric(MetricBaseClass):
-    def __init__(self, mode='training', filename=None):
-        super(BoundaryBoxMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(BoundaryBoxMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
@@ -608,13 +614,13 @@ class BoundaryBoxMetric(MetricBaseClass):
         raise NotImplementedError
 
 class ClassificationMetric(MetricBaseClass):
-    def __init__(self, mode='training', filename=None):
-        super(ClassificationMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(ClassificationMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
