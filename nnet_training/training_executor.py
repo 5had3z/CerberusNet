@@ -7,7 +7,7 @@ import json, os, argparse, hashlib
 from pathlib import Path
 from easydict import EasyDict
 
-import nnet_training.training_frameworks as framework
+import nnet_training.training_frameworks as frameworks
 
 def initialise_training_network(config_json):
     """
@@ -19,7 +19,22 @@ def initialise_training_network(config_json):
     if not os.path.isdir(Path.cwd() / "torch_models" / str(encoding.hexdigest())):
         os.makedirs(Path.cwd() / "torch_models" / str(encoding.hexdigest()))
 
-    return framework.trainer_base_class.ModelTrainer
+    if config_json.trainer == "MonoFlowTrainer":
+        TRAINER = frameworks.mono_flow_trainer.MonoFlowTrainer
+    elif config_json.trainer == "MonoSegFlowTrainer":
+        TRAINER = frameworks.mono_seg_flow_trainer.MonoSegFlowTrainer
+    elif config_json.trainer == "MonoSegmentationTrainer":
+        TRAINER = frameworks.mono_seg_trainer.MonoSegmentationTrainer
+    elif config_json.trainer == "StereoDisparityTrainer":
+        TRAINER = frameworks.stereo_depth_trainer.StereoDisparityTrainer
+    elif config_json.trainer == "StereoFlowTrainer":
+        TRAINER = frameworks.stereo_flow_trainer.StereoFlowTrainer
+    elif config_json.trainer == "StereoSegDepthTrainer":
+        TRAINER = frameworks.stereo_seg_depth_trainer.StereoSegDepthTrainer
+    elif config_json.trainer == "StereoSegTrainer":
+        TRAINER = frameworks.stereo_seg_trainer.StereoSegTrainer
+
+    return TRAINER
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

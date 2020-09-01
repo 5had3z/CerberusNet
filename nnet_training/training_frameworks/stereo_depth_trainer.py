@@ -4,14 +4,13 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
-import numpy as np
 from pathlib import Path
+from typing import Dict
+import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import DepthMetric
 from nnet_training.utilities.dataset import CityScapesDataset
@@ -20,14 +19,20 @@ from trainer_base_class import ModelTrainer
 __all__ = ['StereoDisparityTrainer']
 
 class StereoDisparityTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
+    '''
+    Training stereo models
+    '''
+    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
+                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
+                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
-        self._metric = DepthMetric(filename=savefile)
-        super(StereoDisparityTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, savefile, checkpoints)
+        self._metric = DepthMetric(base_dir=modelpath, savefile='depth_data')
+        super(StereoDisparityTrainer, self).__init__(model, optim, dataldr,
+                                                     lr_cfg, modelpath, checkpoints)
 
     def save_checkpoint(self):
         super(StereoDisparityTrainer, self).save_checkpoint()

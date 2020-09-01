@@ -6,6 +6,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import os, sys, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
+from typing import Dict
 
 import torch
 import matplotlib.pyplot as plt
@@ -31,15 +32,17 @@ class MonoFlowTrainer(ModelTrainer):
     '''
     Monocular Flow Training Class
     '''
-    def __init__(self, model, optim, loss_fn, dataldr, lr_cfg, modelname=None, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
+                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
+                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
-        self._metric = OpticFlowMetric(filename=modelname)
+        self._metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
         super(MonoFlowTrainer, self).__init__(model, optim, dataldr,
-                                              lr_cfg, modelname, checkpoints)
+                                              lr_cfg, modelpath, checkpoints)
 
     def save_checkpoint(self):
         super(MonoFlowTrainer, self).save_checkpoint()

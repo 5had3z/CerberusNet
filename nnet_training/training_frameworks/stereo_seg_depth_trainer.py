@@ -4,8 +4,9 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
-import numpy as np
 from pathlib import Path
+from typing import Dict
+import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
@@ -21,17 +22,20 @@ from trainer_base_class import ModelTrainer
 __all__ = ['StereoSegDepthTrainer']
 
 class StereoSegDepthTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, modelname=None, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
+                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
+                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
         self._seg_loss_fn = loss_fn['segmentation']
         self._depth_loss_fn = loss_fn['depth']
-        self._seg_metric = SegmentationMetric(19, filename=modelname+'_seg')
-        self._depth_metric = DepthMetric(filename=modelname+'_depth')
+        self._seg_metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
+        self._depth_metric = DepthMetric(base_dir=modelpath, savefile='depth_data')
 
-        super(StereoSegDepthTrainer, self).__init__(model, optimizer, dataloaders, lr_cfg, modelname, checkpoints)
+        super(StereoSegDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                    modelpath, checkpoints)
 
     def save_checkpoint(self):
         super(StereoSegDepthTrainer, self).save_checkpoint()
@@ -55,7 +59,7 @@ class StereoSegDepthTrainer(ModelTrainer):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
-            
+
             # Put both image and target onto device
             left        = data['l_img'].to(self._device)
             right       = data['r_img'].to(self._device)
@@ -77,7 +81,7 @@ class StereoSegDepthTrainer(ModelTrainer):
             self._optimizer.step()
 
             self._seg_metric._add_sample(
-                torch.argmax(seg_pred,dim=1,keepdim=True).cpu().data.numpy(),
+                torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                 seg_gt.cpu().data.numpy(),
                 loss=seg_loss.item()
             )
@@ -93,8 +97,8 @@ class StereoSegDepthTrainer(ModelTrainer):
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
                 sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                        self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
         
     def _validate_model(self, max_epoch):
         with torch.no_grad():

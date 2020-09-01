@@ -4,14 +4,13 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
-import numpy as np
 from pathlib import Path
 from typing import Dict
+import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
 from nnet_training.utilities.dataset import CityScapesDataset
@@ -37,8 +36,8 @@ class MonoSegFlowTrainer(ModelTrainer):
         self._seg_metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
         self._flow_metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
-        super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr,
-                                                 lr_cfg, modelpath, checkpoints)
+        super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                 modelpath, checkpoints)
 
     def save_checkpoint(self):
         super(MonoSegFlowTrainer, self).save_checkpoint()

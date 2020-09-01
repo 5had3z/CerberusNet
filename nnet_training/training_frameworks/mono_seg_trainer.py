@@ -4,8 +4,9 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, time, platform, multiprocessing
-import numpy as np
 from pathlib import Path
+from typing import Dict
+import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
@@ -13,7 +14,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss, MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
+from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss,\
+    MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
 from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
 from nnet_training.utilities.dataset import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric
@@ -24,13 +26,15 @@ from trainer_base_class import ModelTrainer
 __all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
 
 class MonoSegmentationTrainer(ModelTrainer):
-    def __init__(self, model, optimizer, loss_fn, dataloaders, lr_cfg, savefile=None, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
+                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
+                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super().__init__(model, optimizer, loss_fn, dataloaders, lr_cfg, savefile, checkpoints)
-        self._metric = SegmentationMetric(19, filename=self._modelname)
+        super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
+        self._metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
