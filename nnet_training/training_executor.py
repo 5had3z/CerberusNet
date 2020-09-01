@@ -3,11 +3,33 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-from training_frameworks.mono_seg_trainer import MonoSegmentationTrainer, Init_Training_MonoFSCNN
+import json, os, argparse, hashlib
+from pathlib import Path
+from easydict import EasyDict
+
+import nnet_training.training_frameworks as framework
+
+def initialise_training_network(config_json):
+    """
+    Sets up the network and training configurations
+    Returns initialised training framework class
+    """
+    encoding = hashlib.md5(json.dumps(config_json).encode('utf-8'))
+
+    if not os.path.isdir(Path.cwd() / "torch_models" / str(encoding.hexdigest())):
+        os.makedirs(Path.cwd() / "torch_models" / str(encoding.hexdigest()))
+
+    return framework.trainer_base_class.ModelTrainer
 
 if __name__ == "__main__":
-    if int(input("1: Mono FSCNN\nUser Input:")) == 1:
-        MODELTRAINER = Init_Training_MonoFSCNN()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', default='configs/MonoSF_gauss.json')
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        cfg = EasyDict(json.load(f))
+
+    MODELTRAINER = initialise_training_network(cfg)
 
     #   User Input Training loop
     LOOP_COND = 1

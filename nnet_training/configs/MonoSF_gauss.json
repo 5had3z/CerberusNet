@@ -20,21 +20,21 @@
             "seg" : "gtFine/val"
         }
     },
-    "loss_functions" : {
-        "flow" : {
+    "loss_functions" : [
+        {"flow" : {
             "function" : "unFlowLoss",
             "args" : {
                 "l1":0.15, "ssim":0.85
             }
-        },
-        "segmentation" : {
+        }},
+        {"segmentation" : {
             "function" : "FocalLoss2D",
             "args" : {
                 "gamma": 2, "ignore_index" : -1,
                 "dynamic_weights" : true, "weight_scale" : 0.125
             }
-        }
-    },
+        }}
+    ],
     "trainer" : "MonoSegFlowTrainer",
     "model" : {
         "name" : "MonoSFNet",

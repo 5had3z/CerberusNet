@@ -3,30 +3,30 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-from datetime import datetime
-import torch
 import os
 import time
 import sys
 from pathlib import Path
+from typing import Dict
 
-import torchvision.transforms
-import numpy as np
-from PIL import Image
-import torchvision.transforms as transforms
+import torch
 
-from nnet_training.utilities.metrics import MetricBaseClass
 from nnet_training.utilities.lr_scheduler import LRScheduler
 
 __all__ = ['ModelTrainer']
 
 class ModelTrainer(object):
-    def __init__(self, model, optimizer, dataloaders, lr_cfg, modelname=None, checkpoints=True):
+    """
+    Base class that various model trainers inherit from
+    """
+    def __init__(self, model: torch.nn.Module, optimizer: torch.nn.Optimizer,
+                 dataloaders: Dict[torch.utils.data.DataLoader], lr_cfg: Dict,
+                 basepath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._device = torch.device( "cuda" if torch.cuda.is_available() else "cpu" )
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self._training_loader = dataloaders["Training"]
         self._validation_loader = dataloaders["Validation"]
@@ -40,15 +40,10 @@ class ModelTrainer(object):
 
         self._checkpoints = checkpoints
 
-        if not os.path.isdir(Path.cwd() / "torch_models"):
-            os.makedirs(Path.cwd() / "torch_models")
+        if not os.path.isdir(basepath):
+            os.makedirs(basepath)
 
-        if modelname is not None:
-            self._modelname = modelname
-        else:
-            self._modelname = str(datetime.now()).replace(" ", "_")
-
-        self._path = Path.cwd() / "torch_models" / str(self._modelname + ".pth")
+        self._path = basepath / (str(self._model) + ".pth")
 
         if self._checkpoints:
             self.load_checkpoint()
@@ -88,8 +83,9 @@ class ModelTrainer(object):
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager = LRScheduler(mode=self._lr_cfg['mode'], base_lr=self._lr_cfg['lr'], nepochs=n_epochs,
-                                iters_per_epoch=len(self._training_loader), power=0.9)
+        self._lr_manager = LRScheduler(mode=self._lr_cfg['mode'], base_lr=self._lr_cfg['lr'],
+                                       nepochs=n_epochs, iters_per_epoch=len(self._training_loader),
+                                       power=0.9)
 
         while self.epoch < max_epoch:
             self.epoch += 1
@@ -103,18 +99,18 @@ class ModelTrainer(object):
 
             if self._checkpoints:
                 self.save_checkpoint()
-        
+
             sys.stdout.flush()
             sys.stdout.write('\rEpoch '+ str(self.epoch) +
-                    ' Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
-    
+                             ' Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
+
         train_end_time = time.time()
 
         print('\nTotal Traning Time:\t', train_end_time - train_start_time)
 
     def _train_epoch(self, max_epoch):
         raise NotImplementedError
-        
+
     def _validate_model(self, max_epoch):
         raise NotImplementedError
 

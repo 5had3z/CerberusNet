@@ -264,7 +264,7 @@ def Init_Training_MonoFSCNN():
 
     return modeltrainer
 
-from ..nnet_models.fast_scnn import FastSCNN
+from nnet_training.nnet_models.fast_scnn import FastSCNN
 
 if __name__ == "__main__":
     print(Path.cwd())

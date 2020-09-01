@@ -6,6 +6,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import os, sys, time, platform, multiprocessing
 import numpy as np
 from pathlib import Path
+from typing import Dict
 
 import torch
 import matplotlib.pyplot as plt
@@ -23,7 +24,9 @@ class MonoSegFlowTrainer(ModelTrainer):
     '''
     Monocular Flow Training Class
     '''
-    def __init__(self, model, optim, loss_fn, dataldr, lr_cfg, modelname=None, checkpoints=True):
+    def __init__(self, model: torch.nn.Module, optim: torch.nn.Optimizer,
+                 loss_fn: Dict[torch.nn.Module], dataldr: Dict[torch.utils.data.DataLoader],
+                 lr_cfg: Dict, modelpath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -31,11 +34,11 @@ class MonoSegFlowTrainer(ModelTrainer):
         self._seg_loss_fn = loss_fn['segmentation']
         self._flow_loss_fn = loss_fn['flow']
 
-        self._seg_metric = SegmentationMetric(19, filename=modelname+'_seg')
-        self._flow_metric = OpticFlowMetric(filename=modelname+'_flow')
+        self._seg_metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
+        self._flow_metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
         super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr,
-                                              lr_cfg, modelname, checkpoints)
+                                                 lr_cfg, modelpath, checkpoints)
 
     def save_checkpoint(self):
         super(MonoSegFlowTrainer, self).save_checkpoint()
@@ -138,7 +141,7 @@ class MonoSegFlowTrainer(ModelTrainer):
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
-                
+
                 if not batch_idx % 10:
                     loss = flow_loss + seg_loss
                     seg_acc = self._seg_metric.get_last_batch()
@@ -235,11 +238,11 @@ if __name__ == "__main__":
         "flow"          : unFlowLoss(PHOTOMETRIC_WEIGHTS).to(torch.device("cuda")),
         "segmentation"  : FocalLoss2D(gamma=2, ignore_index=-1).to(torch.device("cuda"))
     }
-    FILENAME = str(MODEL)+'_Adam_Fcl_Uflw_HRes'
+    BASEPATH = Path.cwd() / "torch_models" # str(MODEL)+'_Adam_Fcl_Uflw_HRes'
 
     LR_SCHED = {"lr": 1e-4, "mode":"constant"}
     MODELTRAINER = MonoSegFlowTrainer(MODEL, OPTIM, LOSS_FN, dataloaders,
-                                      lr_cfg=LR_SCHED, modelname=FILENAME)
+                                      lr_cfg=LR_SCHED, modelpath=BASEPATH)
 
     # MODELTRAINER.visualize_output()
     MODELTRAINER.train_model(3)
