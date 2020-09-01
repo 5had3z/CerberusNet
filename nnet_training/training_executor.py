@@ -6,35 +6,26 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 from training_frameworks.mono_seg_trainer import MonoSegmentationTrainer, Init_Training_MonoFSCNN
 
 if __name__ == "__main__":
-
-    usr_input = int(input("1: Mono FSCNN\nUser Input:"))
-    if (usr_input == 1):
-        modeltrainer = Init_Training_MonoFSCNN()
+    if int(input("1: Mono FSCNN\nUser Input:")) == 1:
+        MODELTRAINER = Init_Training_MonoFSCNN()
 
     #   User Input Training loop
-    while_cond = 1
-    while(while_cond == 1):
-        n_epochs = int(input("Number of Training Epochs: "))
-        modeltrainer.train_model(n_epochs)
+    LOOP_COND = 1
+    while LOOP_COND == 1:
+        MODELTRAINER.train_model(int(input("Number of Training Epochs: ")))
 
-        usr_input = int(input("Show Training Statistics? (1/0): "))
-        if (usr_input == 1):
-            modeltrainer.plot_data()
-    
-        usr_input = int(input("Show Example Output? (1/0): "))
-        if (usr_input == 1):
-            modeltrainer.visualize_output()
+        if int(input("Show Training Statistics? (1/0): ")) == 1:
+            MODELTRAINER.plot_data()
 
-        usr_input = int(input("Pass Specific Image? (1/0): "))
-        if (usr_input == 1):
-            usr_input = str(input("Enter Path: "))
-            modeltrainer.custom_image(usr_input)
-        
-        print("Current Learning Rate: ", modeltrainer.get_learning_rate)
-        
-        usr_input = int(input("New Learning Rate? (1/0): "))
-        if (usr_input == 1):
-            usr_input = float(input("New Learning Rate Value: "))
-            modeltrainer.set_learning_rate(usr_input)
+        if int(input("Show Example Output? (1/0): ")) == 1:
+            MODELTRAINER.visualize_output()
 
-        while_cond = int(input("Continue Training? (1/0): "))
+        if int(input("Pass Specific Image? (1/0): ")) == 1:
+            MODELTRAINER.custom_image(str(input("Enter Path: ")))
+
+        print("Current Learning Rate: ", MODELTRAINER.get_learning_rate)
+
+        if int(input("New Learning Rate? (1/0): ")) == 1:
+            MODELTRAINER.set_learning_rate(float(input("New Learning Rate Value: ")))
+
+        LOOP_COND = int(input("Continue Training? (1/0): "))

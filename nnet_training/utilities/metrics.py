@@ -412,10 +412,11 @@ class DepthMetric(MetricBaseClass):
         eqn1 = np.mean(np.square(log_diff))
         eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
         self.metric_data['Batch_Invariant'].append(eqn1 - eqn2)
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
-        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative, rmse linear, rmse log]\n
+        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative,
+        rmse linear, rmse log]\n
         @todo   get a specified epoch instead of only currently loaded one\n
         @param  main_metric, returns scale invariant\n
         @param  loss_metric, returns recorded loss\n
@@ -429,8 +430,9 @@ class DepthMetric(MetricBaseClass):
             rmse_log = np.asarray(self.metric_data["Batch_RMSE_Log"]).mean()
             invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-            print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\tRMSE Log: %.4f\
-                \tScale Invariant: %.4f\tLoss: %.4f\n" % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
+            print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\t\
+                  RMSE Log: %.4f\tScale Invariant: %.4f\tLoss: %.4f\n"
+                  % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
         else:
             ret_val = ()
             if main_metric:
@@ -488,7 +490,7 @@ class DepthMetric(MetricBaseClass):
                 if key != "Batch_Loss":
                     ret_val += (self.metric_data[key][-1],)
             return ret_val
-        
+   
     def _reset_metric(self):
         self.metric_data = dict(
             Batch_Loss = [],
@@ -623,6 +625,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "MonoSF_SegNet2_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_Crp2_seg"
+    filename = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_flow"
     metric = MetricBaseClass(filename=filename)
     metric.plot_summary_data()

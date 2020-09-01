@@ -118,17 +118,28 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
 
 class FocalLoss2D(nn.Module):
     """
-    Focal Loss for Imbalanced problems
+    Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=2, ignore_index=-100):
+    def __init__(self, gamma=2, ignore_index=-100, dynamic_weights=False, scale_factor=0.125):
         super(FocalLoss2D, self).__init__()
 
         self.gamma = gamma
         self.ignore_index = ignore_index
+        self.dynamic_weights = dynamic_weights
+        self.scale_factor = scale_factor
 
-    def forward(self, predicted, target):
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        '''
+        Forward implementation that returns focal loss between prediciton and target
+        '''
+        weights = torch.ones(predicted.shape[1]).to(predicted.get_device())
+        if self.dynamic_weights:
+            class_ids, counts = target.unique(return_counts=True)
+            weights[class_ids] = self.scale_factor / \
+                    (self.scale_factor + counts/float(target.nelement()))
+
         # compute the negative likelyhood
-        ce_loss = F.cross_entropy(predicted, target, ignore_index=self.ignore_index)
+        ce_loss = F.cross_entropy(predicted, target, ignore_index=self.ignore_index, weight=weights)
 
         # compute the loss
         focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
@@ -347,12 +358,14 @@ if __name__ == '__main__':
     import PIL.Image as Image
     import torchvision.transforms
 
-    img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
-    img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
+    BASE_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
+    transform = torchvision.transforms.ToTensor()
+
+    img1 = Image.open(BASE_DIR+'leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+    img2 = Image.open(BASE_DIR+'leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
     loss_fn = ReconstructionLossV1(1, img1.size[1], img1.size[0])
-    uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
-    
-    transform = torchvision.transforms.ToTensor()
+    uniform = torch.zeros([1, img1.size[1], img1.size[0], 2])
+
     loss = loss_fn(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0))
     print(loss)
