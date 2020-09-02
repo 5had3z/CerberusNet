@@ -132,25 +132,24 @@ def get_trainer(trainer_name: str) -> ModelTrainer:
     """
     Returns the corresponding network trainer given a string
     """
-    from nnet_training.training_frameworks import mono_flow_trainer,\
-        mono_seg_flow_trainer, mono_seg_trainer,\
-        stereo_depth_trainer, stereo_flow_trainer,\
-        stereo_seg_depth_trainer, stereo_seg_trainer
+    from nnet_training.training_frameworks import MonoFlowTrainer,\
+        MonoSegFlowTrainer, MonoSegmentationTrainer, StereoDisparityTrainer,\
+        StereoFlowTrainer, StereoSegDepthTrainer, StereoSegTrainer
 
     if trainer_name == "MonoFlowTrainer":
-        trainer = mono_flow_trainer.MonoFlowTrainer
+        trainer = MonoFlowTrainer
     elif trainer_name == "MonoSegFlowTrainer":
-        trainer = mono_seg_flow_trainer.MonoSegFlowTrainer
+        trainer = MonoSegFlowTrainer
     elif trainer_name == "MonoSegmentationTrainer":
-        trainer = mono_seg_trainer.MonoSegmentationTrainer
+        trainer = MonoSegmentationTrainer
     elif trainer_name == "StereoDisparityTrainer":
-        trainer = stereo_depth_trainer.StereoDisparityTrainer
+        trainer = StereoDisparityTrainer
     elif trainer_name == "StereoFlowTrainer":
-        trainer = stereo_flow_trainer.StereoFlowTrainer
+        trainer = StereoFlowTrainer
     elif trainer_name == "StereoSegDepthTrainer":
-        trainer = stereo_seg_depth_trainer.StereoSegDepthTrainer
+        trainer = StereoSegDepthTrainer
     elif trainer_name == "StereoSegTrainer":
-        trainer = stereo_seg_trainer.StereoSegTrainer
+        trainer = StereoSegTrainer
     else:
         raise NotImplementedError(trainer_name)
 

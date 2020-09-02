@@ -1,4 +1,6 @@
 """Custom losses."""
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,9 +8,9 @@ from torch.autograd import Variable
 
 import numpy as np
 
-__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D',
-    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss', 'ReconstructionLossV1',
-    'ReconstructionLossV2']
+__all__ = ['get_loss_function', 'MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss',
+           'FocalLoss2D', 'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
+           'ReconstructionLossV1', 'ReconstructionLossV2']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -120,13 +122,21 @@ class FocalLoss2D(nn.Module):
     """
     Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=2, ignore_index=-100, dynamic_weights=False, scale_factor=0.125):
+    def __init__(self, gamma=2, ignore_index=-100, dynamic_weights=False,
+                 scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 
-        self.gamma = gamma
-        self.ignore_index = ignore_index
-        self.dynamic_weights = dynamic_weights
-        self.scale_factor = scale_factor
+        if kwargs:
+            args = kwargs['kwargs']
+            self.gamma = args['gamma']
+            self.ignore_index = args['ignore_index']
+            self.dynamic_weights = args['dynamic_weights']
+            self.scale_factor = args['scale_factor']
+        else:
+            self.gamma = gamma
+            self.ignore_index = ignore_index
+            self.dynamic_weights = dynamic_weights
+            self.scale_factor = scale_factor
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         '''
@@ -185,11 +195,17 @@ class ScaleInvariantError(nn.Module):
         return (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
-    def __init__(self, ignore_index=-1):
+    """
+    Inverse Huber Loss for Depth/Disparity Training
+    """
+    def __init__(self, ignore_index=-1, **kwargs):
         super(InvHuberLoss, self).__init__()
-        self.ignore_index = ignore_index
-    
-    def forward(self, pred, target):
+        if kwargs:
+            self.ignore_index = kwargs['kwargs']['ignore_index']
+        else:
+            self.ignore_index = ignore_index
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         pred_relu = F.relu(pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - target
         mask = target != self.ignore_index
@@ -247,7 +263,7 @@ class SSIM(nn.Module):
         self.C1 = 0.01 ** 2
         self.C2 = 0.03 ** 2
 
-    def forward(self, x, y):
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         x = self.refl(x)
         y = self.refl(y)
 
@@ -353,6 +369,23 @@ class ReconstructionLossV2(nn.Module):
         else:
             loss = abs_diff.mean(1, True)
         return loss.mean()
+
+def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
+    """
+    Returns a dictionary of loss functions given a config
+    """
+    from nnet_training.utilities.UnFlowLoss import unFlowLoss
+
+    loss_fn_dict = {}
+    for loss_fn in loss_config:
+        if loss_fn['function'] == "FocalLoss2D":
+            loss_fn_dict[loss_fn['type']] = FocalLoss2D(kwargs=loss_fn.args)
+        elif loss_fn['function'] == "unFlowLoss":
+            loss_fn_dict[loss_fn['type']] = unFlowLoss(kwargs=loss_fn.args)
+        elif loss_fn['function'] == "InvHuberLoss":
+            loss_fn_dict[loss_fn['type']] = InvHuberLoss(kwargs=loss_fn.args)
+
+    return loss_fn_dict
 
 if __name__ == '__main__':
     import PIL.Image as Image

@@ -8,11 +8,10 @@ from pathlib import Path
 from easydict import EasyDict
 
 import torch
-from nnet_training.utilities.loss_functions import FocalLoss2D
-from nnet_training.utilities.UnFlowLoss import unFlowLoss
 from nnet_training.nnet_models import MonoSFNet
 
 from nnet_training.utilities.dataset import get_cityscapse_dataset
+from nnet_training.utilities.loss_functions import get_loss_function
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
 def initialise_training_network(config_json) -> ModelTrainer:
@@ -29,10 +28,7 @@ def initialise_training_network(config_json) -> ModelTrainer:
     datasets = get_cityscapse_dataset(config_json.dataset)
     model = MonoSFNet()
 
-    loss_fns = {
-        "flow"          : unFlowLoss({"l1":0.15, "ssim":0.85}).to(torch.device("cuda")),
-        "segmentation"  : FocalLoss2D(gamma=2, ignore_index=-1).to(torch.device("cuda"))
-    }
+    loss_fns = get_loss_function(config_json.loss_functions)
 
     if config_json.optimiser.type in ['adam', 'Adam']:
         optimiser = torch.optim.Adam(

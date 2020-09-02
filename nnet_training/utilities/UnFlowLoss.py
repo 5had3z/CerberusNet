@@ -181,24 +181,45 @@ def smooth_grad_2nd(flow, image, alpha):
     return loss_x.mean()/2. + loss_y.mean() / 2.
 
 class unFlowLoss(nn.modules.Module):
-    def __init__(self, weights, smooth_deg=2, smooth_alpha=0.2, consistency=True, back_occ_only=False):
+    """
+    Loss function adopted by ARFlow from originally Unflow.
+    """
+    def __init__(self, weights=None, smooth_deg=2, smooth_alpha=0.2,
+                 consistency=True, back_occ_only=False, **kwargs):
         super(unFlowLoss, self).__init__()
 
-        if "l1" in weights:
-            self.l1_weight = weights["l1"]
-        if "ssim" in weights:
-            self.ssim_weight = weights["ssim"]
-            self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
-        if "ternary" in weights:
-            self.ternary_weight = weights["ternary"]
-        
-        self.smooth_deg     = smooth_deg
-        self.smooth_alpha   = smooth_alpha
-        self.smooth_w       = 75.0
-        self.w_scales       = [1.0, 1.0, 1.0, 1.0, 0.0]
-        self.w_sm_scales    = [1.0, 0.0, 0.0, 0.0, 0.0]
-        self.consistency    = consistency
-        self.back_occ_only  = back_occ_only
+        if kwargs:
+            args = kwargs['kwargs']
+            if "l1" in args["weights"]:
+                self.l1_weight = args["weights"]["l1"]
+            if "ssim" in args["weights"]:
+                self.ssim_weight = args["weights"]["ssim"]
+                self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+            if "ternary" in args["weights"]:
+                self.ternary_weight = args["weights"]["ternary"]
+
+            self.smooth_args   = args['smooth']
+            self.w_wrp_scales  = args['w_wrp_scales']
+            self.w_sm_scales   = args['w_sm_scales']
+            self.consistency   = args['consistency']
+            self.back_occ_only = args['back_occ_only']
+
+        else:
+            if "l1" in weights:
+                self.l1_weight = weights["l1"]
+            if "ssim" in weights:
+                self.ssim_weight = weights["ssim"]
+                self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+            if "ternary" in weights:
+                self.ternary_weight = weights["ternary"]
+
+            self.smooth_deg    = smooth_deg
+            self.smooth_alpha  = smooth_alpha
+            self.smooth_w      = 75.0
+            self.w_wrp_scales  = [1.0, 1.0, 1.0, 1.0, 0.0]
+            self.w_sm_scales   = [1.0, 0.0, 0.0, 0.0, 0.0]
+            self.consistency   = consistency
+            self.back_occ_only = back_occ_only
 
     def loss_photometric(self, im_orig, im_recons, occu_mask):
         loss = []
@@ -207,25 +228,24 @@ class unFlowLoss(nn.modules.Module):
             loss += [self.l1_weight * (im_orig - im_recons).abs()]
 
         if hasattr(self, 'ssim_weight'):
-            loss += [self.ssim_weight * self.SSIM(im_recons,\
-                                            im_orig)]
+            loss += [self.ssim_weight * self.SSIM(im_recons, im_orig)]
 
         if hasattr(self, 'ternary_weight'):
-            loss += [self.ternary_weight * TernaryLoss(im_recons * occu_mask,\
-                                                      im_orig * occu_mask)]
+            loss += [self.ternary_weight *\
+                     TernaryLoss(im_recons * occu_mask, im_orig * occu_mask)]
 
         return sum([l.mean() for l in loss]) #/ occu_mask.mean()
 
     def loss_smooth(self, flow, im_scaled):
-        if self.smooth_deg == 2:
+        if self.smooth_args['deg'] == 2:
             func_smooth = smooth_grad_2nd
-        elif self.smooth_deg == 1:
+        elif self.smooth_args['deg'] == 1:
             func_smooth = smooth_grad_1st
         else:
             raise NotImplementedError
 
         loss = []
-        loss += [func_smooth(flow, im_scaled, self.smooth_alpha)]
+        loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
         return sum([l.mean() for l in loss])
 
     def forward(self, pyramid_flows, im1_origin, im2_origin):
@@ -283,12 +303,12 @@ class unFlowLoss(nn.modules.Module):
             pyramid_smooth_losses.append(loss_smooth)
 
         pyramid_warp_losses = [l * w for l, w in
-                               zip(pyramid_warp_losses, self.w_scales)]
+                               zip(pyramid_warp_losses, self.w_wrp_scales)]
         pyramid_smooth_losses = [l * w for l, w in
                                  zip(pyramid_smooth_losses, self.w_sm_scales)]
 
         warp_loss = sum(pyramid_warp_losses)
-        smooth_loss = self.smooth_w * sum(pyramid_smooth_losses)
+        smooth_loss = self.smooth_args['weighting'] * sum(pyramid_smooth_losses)
         total_loss = warp_loss + smooth_loss
 
         return total_loss, warp_loss, smooth_loss, pyramid_flows[0].abs().mean()

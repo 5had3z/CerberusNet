@@ -21,19 +21,26 @@
         }
     },
     "loss_functions" : [
-        {"flow" : {
+        {   
+            "type" : "flow",
             "function" : "unFlowLoss",
             "args" : {
-                "l1":0.15, "ssim":0.85
+                "weights" : {"l1":0.15, "ssim":0.85},
+                "smooth" : {"degree": 2, "alpha" : 0.2, "weighting": 75.0},
+                "w_wrp_scales" : [1.0, 1.0, 1.0, 1.0, 0.0],
+                "w_sm_scales" : [1.0, 0.0, 0.0, 0.0, 0.0],
+                "consistency" : true,
+                "back_occ_only" : false
             }
-        }},
-        {"segmentation" : {
+        }, 
+        {
+            "type" :"segmentation",
             "function" : "FocalLoss2D",
             "args" : {
                 "gamma": 2, "ignore_index" : -1,
                 "dynamic_weights" : true, "weight_scale" : 0.125
             }
-        }}
+        }
     ],
     "trainer" : "MonoSegFlowTrainer",
     "model" : {
