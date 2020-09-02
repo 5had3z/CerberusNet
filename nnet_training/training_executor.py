@@ -8,7 +8,7 @@ from pathlib import Path
 from easydict import EasyDict
 
 import torch
-from nnet_training.nnet_models import MonoSFNet
+from nnet_training.nnet_models import get_model
 
 from nnet_training.utilities.dataset import get_cityscapse_dataset
 from nnet_training.utilities.loss_functions import get_loss_function
@@ -26,7 +26,7 @@ def initialise_training_network(config_json) -> ModelTrainer:
         os.makedirs(training_path)
 
     datasets = get_cityscapse_dataset(config_json.dataset)
-    model = MonoSFNet()
+    model = get_model(config_json.model)
 
     loss_fns = get_loss_function(config_json.loss_functions)
 
@@ -36,6 +36,14 @@ def initialise_training_network(config_json) -> ModelTrainer:
             betas=config_json.optimiser.args.betas,
             weight_decay=config_json.optimiser.args.weight_decay
         )
+    elif config_json.optimiser.type in ['sgd', 'SGD']:
+        optimiser = torch.optim.SGD(
+            model.parameters(),
+            momentum=config_json.optimiser.args.momentum,
+            weight_decay=config_json.optimiser.args.weight_decay
+        )
+    else:
+        raise NotImplementedError(config_json.optimiser.type)
 
     trainer = get_trainer(config_json.trainer)(
         model=model, optim=optimiser, loss_fn=loss_fns,

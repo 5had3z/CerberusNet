@@ -38,7 +38,7 @@
             "function" : "FocalLoss2D",
             "args" : {
                 "gamma": 2, "ignore_index" : -1,
-                "dynamic_weights" : true, "weight_scale" : 0.125
+                "dynamic_weights" : true, "scale_factor" : 0.125
             }
         }
     ],
@@ -53,17 +53,21 @@
                 }
             },
             "segmentation_network": {
-                "type" : "SegmentationNet3",
+                "type" : "SegmentationNet1",
                 "args" : {
-                    "classes" : 19
+                    "classes"   : 19,
+                    "interm_ch" : 32,
+                    "stride"    : 1,
+                    "t"         : 1,
+                    "g_noise"   : false
                 }
             },
             "correlation_args" : {
                 "pad_size" : 4,
                 "max_displacement" : 4,
                 "kernel_size" : 1,
-                "stride 1" : 1,
-                "stride 2" : 1,
+                "stride1" : 1,
+                "stride2" : 1,
                 "corr_multiply" : 1
             },
             "flow_est_network" : {

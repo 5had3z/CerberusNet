@@ -237,12 +237,12 @@ class unFlowLoss(nn.modules.Module):
         return sum([l.mean() for l in loss]) #/ occu_mask.mean()
 
     def loss_smooth(self, flow, im_scaled):
-        if self.smooth_args['deg'] == 2:
+        if self.smooth_args['degree'] == 2:
             func_smooth = smooth_grad_2nd
-        elif self.smooth_args['deg'] == 1:
+        elif self.smooth_args['degree'] == 1:
             func_smooth = smooth_grad_1st
         else:
-            raise NotImplementedError
+            raise NotImplementedError(self.smooth_args['degree'])
 
         loss = []
         loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
@@ -260,7 +260,7 @@ class unFlowLoss(nn.modules.Module):
 
         s = 1.
         for i, flow in enumerate(pyramid_flows):
-            if self.w_scales[i] == 0:
+            if self.w_wrp_scales[i] == 0:
                 pyramid_warp_losses.append(0)
                 pyramid_smooth_losses.append(0)
                 continue
