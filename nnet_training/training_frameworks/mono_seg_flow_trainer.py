@@ -32,14 +32,16 @@ class MonoSegFlowTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
-                                                 modelpath, checkpoints)
-
         self._seg_loss_fn = loss_fn['segmentation']
         self._flow_loss_fn = loss_fn['flow']
 
-        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath, savefile='seg_data')
-        self.metric_loggers['flow'] = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
+        self.metric_loggers = {
+            'seg' : SegmentationMetric(19, base_dir=modelpath, savefile='seg_data'),
+            'flow': OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
+        }
+
+        super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                 modelpath, checkpoints)
 
     def _train_epoch(self, max_epoch):
         self._model.train()

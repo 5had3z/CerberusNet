@@ -31,8 +31,9 @@ class StereoDisparityTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._loss_function = loss_fn
-        self.metric_loggers['depth'] = DepthMetric(base_dir=modelpath, savefile='depth_data')
+        self._loss_function = loss_fn['depth']
+        self.metric_loggers = {'depth' : DepthMetric(base_dir=modelpath, savefile='depth_data')}
+
         super(StereoDisparityTrainer, self).__init__(model, optim, dataldr,
                                                      lr_cfg, modelpath, checkpoints)
 

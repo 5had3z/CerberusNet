@@ -35,11 +35,11 @@ class MonoSegmentationTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
+        self.metric_loggers = {'seg': SegmentationMetric(19, base_dir=modelpath,
+                                                         savefile='segmentation_data')}
+        self._loss_function = loss_fn['segmentation']
 
-        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath,
-                                                        savefile='segmentation_data')
-        self._loss_function = loss_fn['seg']
+        super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
 
     def _train_epoch(self, max_epoch):
         self._model.train()

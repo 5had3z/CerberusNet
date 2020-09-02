@@ -37,10 +37,11 @@
 # Misc
 /.vscode/*
 *.pyc
-*.pth
-*.hdf5
 
 # Ignore correlation package build things
 nnet_training/correlation_package/build/*
 nnet_training/correlation_package/*.egg-info/*
 nnet_training/correlation_package/dist/*
+
+# Models, Configs and statistics
+nnet_training/torch_models/*

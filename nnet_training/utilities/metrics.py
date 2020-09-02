@@ -196,7 +196,7 @@ class MetricBaseClass(object):
 
             print("# Training, ", len(list(hf['training'])),
                   "\t# Validation", len(list(hf['validation'])))
-
+        
         for idx, metric in enumerate(metrics):
             plt.subplot(1, len(metrics), idx+1)
             plt.plot(training_data[:, idx])
@@ -205,7 +205,7 @@ class MetricBaseClass(object):
             plt.title(metric + ' over Epochs')
             plt.xlabel('Epoch #')
 
-        plt.show()
+        plt.show(block=False)
 
     def plot_iteration_data(self):
         """

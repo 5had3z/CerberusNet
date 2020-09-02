@@ -31,15 +31,17 @@ class StereoSegDepthTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        super(StereoSegDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
-                                                    modelpath, checkpoints)
-
         self._seg_loss_fn = loss_fn['segmentation']
         self._depth_loss_fn = loss_fn['depth']
 
-        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath,
-                                                        savefile='segmentation_data')
-        self.metric_loggers['depth'] = DepthMetric(base_dir=modelpath, savefile='depth_data')
+        self.metric_loggers = {
+            'seg': SegmentationMetric(19, base_dir=modelpath,
+                                      savefile='segmentation_data'),
+            'depth': DepthMetric(base_dir=modelpath, savefile='depth_data')
+        }
+
+        super(StereoSegDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                    modelpath, checkpoints)
 
     def _train_epoch(self, max_epoch):
         self._model.train()

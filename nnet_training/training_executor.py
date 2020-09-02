@@ -5,6 +5,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import json, os, argparse, hashlib
 from pathlib import Path
+from shutil import copy
 from easydict import EasyDict
 
 import torch
@@ -14,16 +15,11 @@ from nnet_training.utilities.dataset import get_cityscapse_dataset
 from nnet_training.utilities.loss_functions import get_loss_function
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
-def initialise_training_network(config_json: EasyDict) -> ModelTrainer:
+def initialise_training_network(config_json: EasyDict, train_path: Path) -> ModelTrainer:
     """
     Sets up the network and training configurations
     Returns initialised training framework class
     """
-    encoding = hashlib.md5(json.dumps(config_json).encode('utf-8'))
-
-    training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
-    if not os.path.isdir(training_path):
-        os.makedirs(training_path)
 
     datasets = get_cityscapse_dataset(config_json.dataset)
     model = get_model(config_json.model)
@@ -48,7 +44,7 @@ def initialise_training_network(config_json: EasyDict) -> ModelTrainer:
     trainer = get_trainer(config_json.trainer)(
         model=model, optim=optimiser, loss_fn=loss_fns,
         dataldr=datasets, lr_cfg=config_json.lr_scheduler,
-        modelpath=training_path)
+        modelpath=train_path)
 
     return trainer
 
@@ -60,7 +56,14 @@ if __name__ == "__main__":
     with open(args.config) as f:
         cfg = EasyDict(json.load(f))
 
-    TRAINER = initialise_training_network(cfg)
+    encoding = hashlib.md5(json.dumps(cfg).encode('utf-8'))
+    training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
+    if not os.path.isdir(training_path):
+        os.makedirs(training_path)
+
+    copy(args.config, training_path / os.path.basename(args.config))
+
+    TRAINER = initialise_training_network(cfg, training_path)
 
     #   User Input Training loop
     LOOP_COND = 1

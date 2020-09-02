@@ -42,11 +42,11 @@ class MonoFlowTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
+        self._loss_function = loss_fn['flow']
+        self.metric_loggers = {'flow' : OpticFlowMetric(base_dir=modelpath, savefile='flow_data')}
+
         super(MonoFlowTrainer, self).__init__(model, optim, dataldr,
                                               lr_cfg, modelpath, checkpoints)
-
-        self._loss_function = loss_fn
-        self.metric_loggers['flow'] = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
