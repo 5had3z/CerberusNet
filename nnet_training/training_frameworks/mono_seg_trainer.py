@@ -36,12 +36,13 @@ class MonoSegmentationTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
-        self._metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
+
+        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath,
+                                                        savefile='segmentation_data')
+        self._loss_function = loss_fn['seg']
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -49,11 +50,11 @@ class MonoSegmentationTrainer(ModelTrainer):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
-            
+
             # Put both image and target onto device
             image   = data['l_img'].to(self._device)
             target  = data['seg'].to(self._device)
-            
+
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             outputs = self._model(image)
@@ -64,8 +65,8 @@ class MonoSegmentationTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
-                torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
+            self.metric_loggers['seg']._add_sample(
+                torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
             )
@@ -76,12 +77,10 @@ class MonoSegmentationTrainer(ModelTrainer):
                 print('Train Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                         self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
                         self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
-        
+
     def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()
-
-            self._metric.new_epoch('validation')
 
             start_time = time.time()
 
@@ -91,24 +90,23 @@ class MonoSegmentationTrainer(ModelTrainer):
                 target  = data['seg'].to(self._device)
 
                 outputs = self._model(image)
-                
+
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                self._metric._add_sample(
-                    torch.argmax(outputs,dim=1,keepdim=True).cpu().data.numpy(),
+                self.metric_loggers['seg']._add_sample(
+                    torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
                 )
                 
-                self._metric._get_epoch_statistics
                 if batch_idx % 10 == 0:
-                    batch_acc = self._metric.get_last_batch()
+                    batch_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     print('Validaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                            self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                            batch_acc, loss.item(), time_elapsed, time_remain))
+                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
+                        batch_acc, loss.item(), time_elapsed, time_remain))
 
     def visualize_output(self):
         """
@@ -126,15 +124,15 @@ class MonoSegmentationTrainer(ModelTrainer):
             pred = torch.argmax(output,dim=1,keepdim=True)
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,3,1)
-                plt.imshow(np.moveaxis(image[i,0:3,:,:].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(image[i,0:3,:,:].cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
-        
-                plt.subplot(1,3,2)
-                plt.imshow(get_color_pallete(seg[i,:,:]))
+
+                plt.subplot(1, 3, 2)
+                plt.imshow(get_color_pallete(seg[i, :, :]))
                 plt.xlabel("Ground Truth")
-        
-                plt.subplot(1,3,3)
-                plt.imshow(get_color_pallete(pred.cpu().numpy()[i,0,:,:]))
+
+                plt.subplot(1, 3, 3)
+                plt.imshow(get_color_pallete(pred.cpu().numpy()[i, 0, :, :]))
                 plt.xlabel("Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
@@ -145,6 +143,8 @@ class MonoSegmentationTrainer(ModelTrainer):
         Forward Pass on a single image
         """
         with torch.no_grad():
+            from PIL import Image
+
             self._model.eval()
 
             image = Image.open(filename)
@@ -152,7 +152,7 @@ class MonoSegmentationTrainer(ModelTrainer):
             img_transform = transforms.Compose([
                 transforms.ToTensor(),
                 transforms.ToPILImage(),
-                transforms.Resize([1024,2048]),
+                transforms.Resize([1024, 2048]),
                 transforms.ToTensor()
             ])
             image = img_transform(image).unsqueeze(0)
@@ -162,14 +162,14 @@ class MonoSegmentationTrainer(ModelTrainer):
             output = self._model(image)
             propagation_time = (time.time() - start_time)
 
-            pred = torch.argmax(output[0],dim=1,keepdim=True)
+            pred = torch.argmax(output[0], dim=1, keepdim=True)
 
-            plt.subplot(1,2,1)
-            plt.imshow(np.moveaxis(image[0,:,:,:].cpu().numpy(),0,2))
+            plt.subplot(1, 2, 1)
+            plt.imshow(np.moveaxis(image[0, :, :, :].cpu().numpy(), 0, 2))
             plt.xlabel("Base Image")
-        
-            plt.subplot(1,2,2)
-            plt.imshow(pred.cpu().numpy()[0,0,:,:])
+
+            plt.subplot(1, 2, 2)
+            plt.imshow(pred.cpu().numpy()[0, 0, :, :])
             plt.xlabel("Prediction")
 
             plt.suptitle("Propagation time: " + str(propagation_time))
@@ -199,7 +199,7 @@ def Init_Training_MonoFSCNN():
         Validation=CityScapesDataset(validation_dir),
     )
 
-    dataloaders=dict(
+    dataloaders = dict(
         Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers),
         Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers),
     )
@@ -234,10 +234,10 @@ def Init_Training_MonoFSCNN():
     
     if (str_optim == 1):
         optimizer = torch.optim.SGD(model_params, lr=1e-2, momentum=0.9, weight_decay=1e-4)
-        filename+="_SGD"
+        filename += "_SGD"
     elif (str_optim == 2):
         optimizer = torch.optim.Adam(model_params, lr=0.004)
-        filename+="_ADAM"
+        filename += "_ADAM"
     else:
         raise AssertionError("Wrong INPUT!")
     
@@ -251,17 +251,17 @@ def Init_Training_MonoFSCNN():
     
     if (str_lossfn == 1):
         lossfn = torch.nn.CrossEntropyLoss(ignore_index=-1).to(torch.device(device))
-        filename+="_CE"
+        filename += "_CE"
     elif (str_lossfn == 2):
         raise NotImplementedError
         # lossfn = torch.nn.CrossEntropyLoss(weight=torch.Tensor([0.1,5.0,5.0]).to(torch.device(device)))
         # filename+="_WeightedCE"
     elif (str_lossfn == 3):
-        lossfn = MixSoftmaxCrossEntropyOHEMLoss(aux=False, aux_weight=0.4,ignore_index=-1).to(torch.device(device))
-        filename+="_CE_OHEM"
+        lossfn = MixSoftmaxCrossEntropyOHEMLoss(aux=False, aux_weight=0.4, ignore_index=-1).to(torch.device(device))
+        filename += "_CE_OHEM"
     elif (str_lossfn == 4):
-        lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device(device))
-        filename+="_Focal"
+        lossfn = FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device(device))
+        filename += "_Focal"
     else:
         raise AssertionError("Wrong INPUT!")
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         Validation=CityScapesDataset(validation_dir)
     )
 
-    dataloaders=dict(
+    dataloaders = dict(
         Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
         Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
     )

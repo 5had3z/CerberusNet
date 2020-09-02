@@ -14,7 +14,7 @@ from nnet_training.utilities.dataset import get_cityscapse_dataset
 from nnet_training.utilities.loss_functions import get_loss_function
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 
-def initialise_training_network(config_json) -> ModelTrainer:
+def initialise_training_network(config_json: EasyDict) -> ModelTrainer:
     """
     Sets up the network and training configurations
     Returns initialised training framework class

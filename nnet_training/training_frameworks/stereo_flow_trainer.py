@@ -16,6 +16,7 @@ from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric
+from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.utilities.dataset import CityScapesDataset
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
@@ -36,21 +37,10 @@ class StereoFlowTrainer(ModelTrainer):
         super(StereoFlowTrainer, self).__init__(model, optim, dataldr,
                                                 lr_cfg, modelpath, checkpoints)
         self._loss_function = loss_fn
-        self._metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
-
-    def save_checkpoint(self):
-        super(StereoFlowTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
-
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(StereoFlowTrainer, self).load_checkpoint()
+        self.metric_loggers['flow'] = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -76,7 +66,7 @@ class StereoFlowTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
+            self.metric_loggers['flow']._add_sample(
                 [left.cpu().data.numpy(), right.cpu().data.numpy()],
                 [left_seq.cpu().data.numpy(), right_seq.cpu().data.numpy()],
                 [output_left.cpu().data.numpy(), output_right.cpu().data.numpy()],
@@ -96,8 +86,6 @@ class StereoFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
 
-            self._metric.new_epoch('validation')
-
             start_time = time.time()
 
             for batch_idx, data in enumerate(self._validation_loader):
@@ -113,7 +101,7 @@ class StereoFlowTrainer(ModelTrainer):
                 loss =  self._loss_function(left, output_left, left_seq)
                 loss += self._loss_function(right, output_right, right_seq)
 
-                self._metric._add_sample(
+                self.metric_loggers['flow']._add_sample(
                     [left.cpu().data.numpy(), right.cpu().data.numpy()],
                     [left_seq.cpu().data.numpy(), right_seq.cpu().data.numpy()],
                     [output_left.cpu().data.numpy(), output_right.cpu().data.numpy()],
@@ -122,7 +110,7 @@ class StereoFlowTrainer(ModelTrainer):
                 )
 
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    batch_acc = self.metric_loggers['flow'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
@@ -145,32 +133,25 @@ class StereoFlowTrainer(ModelTrainer):
             pred_l, _ = self._model(left, right)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
+            np_flow_12 = pred_l.detach().cpu().numpy()
+
             for i in range(self._validation_loader.batch_size):
-                plt.subplot(2, 2, 1)
+                plt.subplot(1, 3, 1)
                 plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
-                plt.subplot(2, 2, 2)
-                plt.imshow(pred_l.cpu().numpy()[i, 0, :, :])
-                plt.xlabel("Predicted Flow")
-
-                recon = self.reconstruct_flow(left[i, 0:3, :, :].cpu().numpy(),
-                                              pred_l.cpu().numpy()[i, 0, :, :])
-
-                plt.subplot(2, 2, 3)
-                plt.imshow(recon)
-                plt.xlabel("Predicted Reconstruction")
-
-                plt.subplot(2, 2, 4)
-                plt.imshow(left_seq[i, :, :])
+                plt.subplot(1, 3, 2)
+                plt.imshow(np.moveaxis(left_seq[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
+
+                vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
+
+                plt.subplot(1, 3, 3)
+                plt.imshow(vis_flow)
+                plt.xlabel("Predicted Flow")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
-
-    def reconstruct_flow(self, image, flow):
-        return image * flow
-
 
 if __name__ == "__main__":
     from nnet_training.utilities.loss_functions import ReconstructionLossV1

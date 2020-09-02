@@ -32,30 +32,17 @@ class MonoSegFlowTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._seg_loss_fn = loss_fn['segmentation']
-        self._flow_loss_fn = loss_fn['flow']
-
-        self._seg_metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
-        self._flow_metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
-
         super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
                                                  modelpath, checkpoints)
 
-    def save_checkpoint(self):
-        super(MonoSegFlowTrainer, self).save_checkpoint()
-        self._seg_metric.save_epoch()
-        self._flow_metric.save_epoch()
+        self._seg_loss_fn = loss_fn['segmentation']
+        self._flow_loss_fn = loss_fn['flow']
 
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._seg_metric)
-        super(MonoSegFlowTrainer, self).load_checkpoint()
+        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath, savefile='seg_data')
+        self.metric_loggers['flow'] = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._flow_metric.new_epoch('training')
-        self._seg_metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -84,7 +71,7 @@ class MonoSegFlowTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._flow_metric._add_sample(
+            self.metric_loggers['flow']._add_sample(
                 img.cpu().data.numpy(),
                 pred_flow['flow_fw'][0].cpu().data.numpy(),
                 img_seq.cpu().data.numpy(),
@@ -92,7 +79,7 @@ class MonoSegFlowTrainer(ModelTrainer):
                 loss=flow_loss.item()
             )
 
-            self._seg_metric._add_sample(
+            self.metric_loggers['seg']._add_sample(
                 torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                 seg_gt.cpu().data.numpy(),
                 loss=seg_loss.item()
@@ -110,9 +97,6 @@ class MonoSegFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
 
-            self._flow_metric.new_epoch('validation')
-            self._seg_metric.new_epoch('validation')
-
             start_time = time.time()
 
             for batch_idx, data in enumerate(self._validation_loader):
@@ -129,7 +113,7 @@ class MonoSegFlowTrainer(ModelTrainer):
                 flow_loss, _, _, _ = self._flow_loss_fn(flows, img, img_seq)
                 seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
-                self._flow_metric._add_sample(
+                self.metric_loggers['flow']._add_sample(
                     img.cpu().data.numpy(),
                     pred_flow['flow_fw'][0].cpu().data.numpy(),
                     img_seq.cpu().data.numpy(),
@@ -137,7 +121,7 @@ class MonoSegFlowTrainer(ModelTrainer):
                     loss=flow_loss.item()
                 )
 
-                self._seg_metric._add_sample(
+                self.metric_loggers['seg']._add_sample(
                     torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
@@ -145,7 +129,7 @@ class MonoSegFlowTrainer(ModelTrainer):
 
                 if not batch_idx % 10:
                     loss = flow_loss + seg_loss
-                    seg_acc = self._seg_metric.get_last_batch()
+                    seg_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed/(batch_idx+1)*(len(self._validation_loader)-(batch_idx+1))
                     sys.stdout.flush()

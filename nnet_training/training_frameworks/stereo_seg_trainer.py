@@ -28,25 +28,14 @@ class StereoSegTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._loss_function = loss_fn
-        self._metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
         super(StereoSegTrainer, self).__init__(model, optim, dataldr, lr_cfg,
                                                modelpath, checkpoints)
 
-    def save_checkpoint(self):
-        super(StereoSegTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
-
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(StereoSegTrainer, self).load_checkpoint()
+        self._loss_function = loss_fn
+        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._metric.new_epoch('training')
-        torch.autograd.set_detect_anomaly(True)
 
         start_time = time.time()
 
@@ -70,7 +59,7 @@ class StereoSegTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
+            self.metric_loggers['seg']._add_sample(
                 torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
@@ -88,8 +77,6 @@ class StereoSegTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
 
-            self._metric.new_epoch('validation')
-
             start_time = time.time()
 
             for batch_idx, data in enumerate(self._validation_loader):
@@ -103,14 +90,14 @@ class StereoSegTrainer(ModelTrainer):
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                self._metric._add_sample(
+                self.metric_loggers['seg']._add_sample(
                     torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()
                 )
 
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    batch_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()

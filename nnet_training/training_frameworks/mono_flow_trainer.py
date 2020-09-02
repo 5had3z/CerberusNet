@@ -5,7 +5,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os, sys, time, platform, multiprocessing
 from pathlib import Path
-from typing import Dict, TypeVar
+from typing import Dict, List, TypeVar
 T = TypeVar('T')
 import numpy as np
 
@@ -19,7 +19,11 @@ from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['MonoFlowTrainer', 'flow_to_image']
 
-def build_pyramid(image, lvl_stp=[8, 4, 2, 1]):
+def build_pyramid(image: torch.Tensor, lvl_stp: List[int]) -> List[torch.Tensor]:
+    """
+    Given an base image and list of steps, creates a image pyramid\n
+    For example (1920,1080), [4,2,1] will give a pyramid [(512,256),(1024,512),(2048,1024)]
+    """
     pyramid = []
     for level in lvl_stp:
         pyramid.append(torch.nn.functional.interpolate(
@@ -38,24 +42,14 @@ class MonoFlowTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._loss_function = loss_fn
-        self._metric = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
         super(MonoFlowTrainer, self).__init__(model, optim, dataldr,
                                               lr_cfg, modelpath, checkpoints)
 
-    def save_checkpoint(self):
-        super(MonoFlowTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
-
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(MonoFlowTrainer, self).load_checkpoint()
+        self._loss_function = loss_fn
+        self.metric_loggers['flow'] = OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -83,7 +77,7 @@ class MonoFlowTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
+            self.metric_loggers['flow']._add_sample(
                 img.cpu().data.numpy(),
                 pred_flow['flow_fw'][0].cpu().data.numpy(),
                 img_seq.cpu().data.numpy(),
@@ -104,8 +98,6 @@ class MonoFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
 
-            self._metric.new_epoch('validation')
-
             start_time = time.time()
 
             for batch_idx, data in enumerate(self._validation_loader):
@@ -121,7 +113,7 @@ class MonoFlowTrainer(ModelTrainer):
                         zip(flows_12, flows_21)]
                 loss, _, _, _ = self._loss_function(flows, img, img_seq)
 
-                self._metric._add_sample(
+                self.metric_loggers['flow']._add_sample(
                     img.cpu().data.numpy(),
                     pred_flow['flow_fw'][0].cpu().data.numpy(),
                     img_seq.cpu().data.numpy(),
@@ -130,7 +122,7 @@ class MonoFlowTrainer(ModelTrainer):
                 )
 
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    batch_acc = self.metric_loggers['flow'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
@@ -163,7 +155,7 @@ class MonoFlowTrainer(ModelTrainer):
                 plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
-                vis_flow = self.flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
+                vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
 
                 plt.subplot(1, 3, 3)
                 plt.imshow(vis_flow)

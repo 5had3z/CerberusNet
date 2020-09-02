@@ -32,24 +32,12 @@ class StereoDisparityTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn
-        self._metric = DepthMetric(base_dir=modelpath, savefile='depth_data')
+        self.metric_loggers['depth'] = DepthMetric(base_dir=modelpath, savefile='depth_data')
         super(StereoDisparityTrainer, self).__init__(model, optim, dataldr,
                                                      lr_cfg, modelpath, checkpoints)
 
-    def save_checkpoint(self):
-        super(StereoDisparityTrainer, self).save_checkpoint()
-        self._metric.save_epoch()
-
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._metric)
-        super(StereoDisparityTrainer, self).load_checkpoint()
-
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._metric.new_epoch('training')
-        torch.autograd.set_detect_anomaly(True)
 
         start_time = time.time()
 
@@ -75,7 +63,7 @@ class StereoDisparityTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._metric._add_sample(
+            self.metric_loggers['depth']._add_sample(
                 depth_pred.cpu().data.numpy(),
                 depth_gt.cpu().data.numpy(),
                 loss=loss.item()
@@ -86,14 +74,12 @@ class StereoDisparityTrainer(ModelTrainer):
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
                 sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                        self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
-        
+                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+
     def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()
-
-            self._metric.new_epoch('validation')
 
             start_time = time.time()
 
@@ -105,19 +91,19 @@ class StereoDisparityTrainer(ModelTrainer):
                 baseline    = data['cam']['baseline_T'].to(self._device)
 
                 depth_pred = self._model(left, right)
-                
+
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(left, depth_pred, right, baseline, data['cam'])
                 loss += self._loss_function(right, depth_pred, left, -baseline, data['cam'])
 
-                self._metric._add_sample(
+                self.metric_loggers['depth']._add_sample(
                     depth_pred.cpu().data.numpy(),
                     depth_gt.cpu().numpy(),
                     loss=loss.item()
                 )
-                
+
                 if not batch_idx % 10:
-                    batch_acc = self._metric.get_last_batch()
+                    batch_acc = self.metric_loggers['depth'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()

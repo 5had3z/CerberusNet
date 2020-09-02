@@ -31,29 +31,18 @@ class StereoSegDepthTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._seg_loss_fn = loss_fn['segmentation']
-        self._depth_loss_fn = loss_fn['depth']
-        self._seg_metric = SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
-        self._depth_metric = DepthMetric(base_dir=modelpath, savefile='depth_data')
-
         super(StereoSegDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
                                                     modelpath, checkpoints)
 
-    def save_checkpoint(self):
-        super(StereoSegDepthTrainer, self).save_checkpoint()
-        self._seg_metric.save_epoch()
-        self._depth_metric.save_epoch()
+        self._seg_loss_fn = loss_fn['segmentation']
+        self._depth_loss_fn = loss_fn['depth']
 
-    def load_checkpoint(self):
-        if os.path.isfile(self._path):
-            self.epoch = len(self._seg_metric)
-        super(StereoSegDepthTrainer, self).load_checkpoint()
+        self.metric_loggers['seg'] = SegmentationMetric(19, base_dir=modelpath,
+                                                        savefile='segmentation_data')
+        self.metric_loggers['depth'] = DepthMetric(base_dir=modelpath, savefile='depth_data')
 
     def _train_epoch(self, max_epoch):
         self._model.train()
-
-        self._seg_metric.new_epoch('training')
-        self._depth_metric.new_epoch('training')
 
         start_time = time.time()
 
@@ -82,13 +71,13 @@ class StereoSegDepthTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self._seg_metric._add_sample(
+            self.metric_loggers['seg']._add_sample(
                 torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                 seg_gt.cpu().data.numpy(),
                 loss=seg_loss.item()
             )
 
-            self._depth_metric._add_sample(
+            self.metric_loggers['depth']._add_sample(
                 depth_pred.cpu().data.numpy(),
                 depth_gt.cpu().data.numpy(),
                 loss=l_depth_loss.item() + r_depth_loss.item()
@@ -105,9 +94,6 @@ class StereoSegDepthTrainer(ModelTrainer):
     def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()
-
-            self._seg_metric.new_epoch('validation')
-            self._depth_metric.new_epoch('validation')
 
             start_time = time.time()
 
@@ -126,22 +112,22 @@ class StereoSegDepthTrainer(ModelTrainer):
                 l_depth_loss = self._depth_loss_fn(left, depth_pred, right, baseline, data['cam'])
                 r_depth_loss = self._depth_loss_fn(right, depth_pred, left, -baseline, data['cam'])
 
-                self._seg_metric._add_sample(
+                self.metric_loggers['seg']._add_sample(
                     torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
 
-                self._depth_metric._add_sample(
+                self.metric_loggers['depth']._add_sample(
                     depth_pred.cpu().data.numpy(),
                     depth_gt.cpu().data.numpy(),
                     loss=l_depth_loss.item() + r_depth_loss.item()
                 )
-                
+
                 if not batch_idx % 10:
                     loss = seg_loss + l_depth_loss + r_depth_loss
-                    seg_acc = self._seg_metric.get_last_batch()
-                    depth_acc = self._depth_metric.get_last_batch()
+                    seg_acc = self.metric_loggers['seg'].get_last_batch()
+                    depth_acc = self.metric_loggers['depth'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
@@ -172,11 +158,11 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.subplot(1,5,1)
                 plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
-        
+
                 plt.subplot(1,5,2)
                 plt.imshow(get_color_pallete(seg_gt[i,:,:]))
                 plt.xlabel("Segmentation Ground Truth")
-        
+
                 plt.subplot(1,5,3)
                 plt.imshow(get_color_pallete(seg_pred.cpu().numpy()[i,0,:,:]))
                 plt.xlabel("Segmentation Prediction")
@@ -184,7 +170,7 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.subplot(1,5,4)
                 plt.imshow(depth_gt[i,:,:])
                 plt.xlabel("Depth Ground Truth")
-        
+
                 plt.subplot(1,5,5)
                 plt.imshow(depth_pred.cpu().numpy()[i,0,:,:])
                 plt.xlabel("Depth Prediction")

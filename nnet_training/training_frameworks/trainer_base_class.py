@@ -33,6 +33,7 @@ class ModelTrainer(object):
         self._validation_loader = dataloaders["Validation"]
 
         self.epoch = 0
+        self.metric_loggers = {}
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
@@ -66,6 +67,7 @@ class ModelTrainer(object):
         '''
         if os.path.isfile(self._path):
             #Load Checkpoint
+            self.epoch = len(self.metric_loggers[0])
             checkpoint = torch.load(self._path, map_location=torch.device(self._device))
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -80,6 +82,8 @@ class ModelTrainer(object):
         Saves progress of the model
         '''
         sys.stdout.write("\nSaving Model")
+        for metric in self.metric_loggers:
+            metric.save_epoch()
         torch.save({
             'model_state_dict'    : self._model.state_dict(),
             'optimizer_state_dict': self._optimizer.state_dict()
@@ -100,7 +104,14 @@ class ModelTrainer(object):
             epoch_start_time = time.time()
 
             # Calculate the training loss, training duration for each epoch, and validation accuracy
+            for metric in self.metric_loggers:
+                metric.new_epoch('training')
+
             self._train_epoch(max_epoch)
+
+            for metric in self.metric_loggers:
+                metric.new_epoch('validation')
+
             self._validate_model(max_epoch)
 
             epoch_end_time = time.time()
