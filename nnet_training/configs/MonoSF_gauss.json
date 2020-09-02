@@ -59,7 +59,7 @@
                     "interm_ch" : 32,
                     "stride"    : 1,
                     "t"         : 1,
-                    "g_noise"   : false
+                    "g_noise"   : true
                 }
             },
             "correlation_args" : {

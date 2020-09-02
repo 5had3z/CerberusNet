@@ -48,12 +48,13 @@ class ModelTrainer(object):
         if not os.path.isdir(basepath):
             os.makedirs(basepath)
 
-        self._path = basepath / (str(self._model) + ".pth")
+        self._best_path = basepath / (str(self._model) + "_best.pth")
+        self._latest_path = basepath / (str(self._model) + "_latest.pth")
 
         if self._checkpoints:
-            self.load_checkpoint()
+            self.load_checkpoint(self._latest_path)
         else:
-            if os.path.isfile(self._path):
+            if os.path.isfile(self._latest_path):
                 sys.stdout.write("\nWarning: Checkpoint Already Exists!")
             else:
                 sys.stdout.write("\nStarting From Scratch!")
@@ -64,35 +65,36 @@ class ModelTrainer(object):
     def set_learning_rate(self, new_lr: float) -> None:
         self._lr_manager.base_lr = new_lr
 
-    def load_checkpoint(self):
+    def load_checkpoint(self, path: Path):
         '''
         Loads previous progress of the model if available
         '''
-        if os.path.isfile(self._path):
+        if os.path.isfile(path):
             #Load Checkpoint
-            for metric in self.metric_loggers.values():
-                self.epoch = len(metric)
-                continue
-            checkpoint = torch.load(self._path, map_location=torch.device(self._device))
+            checkpoint = torch.load(path, map_location=torch.device(self._device))
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            sys.stdout.write("\nCheckpoint loaded from " + str(self._path)
+            self.epoch = checkpoint['epochs']
+            sys.stdout.write("\nCheckpoint loaded from " + str(path)
                              + " starting from epoch:" + str(self.epoch) + "\n")
         else:
             #Raise Error if it does not exist
             sys.stdout.write("\nCheckpoint Does Not Exist\nStarting From Scratch!")
 
-    def save_checkpoint(self):
+    def save_checkpoint(self, path: Path, metrics=False):
         '''
         Saves progress of the model
         '''
         sys.stdout.write("\nSaving Model")
-        for metric in self.metric_loggers:
-            metric.save_epoch()
+        if metrics:
+            for metric in self.metric_loggers.values():
+                metric.save_epoch()
+
         torch.save({
             'model_state_dict'    : self._model.state_dict(),
-            'optimizer_state_dict': self._optimizer.state_dict()
-        }, self._path)
+            'optimizer_state_dict': self._optimizer.state_dict(),
+            'epochs'              : self.epoch
+        }, path)
 
     def train_model(self, n_epochs):
         """
@@ -122,7 +124,7 @@ class ModelTrainer(object):
             epoch_end_time = time.time()
 
             if self._checkpoints:
-                self.save_checkpoint()
+                self.save_checkpoint(self._latest_path, metrics=True)
 
             sys.stdout.flush()
             sys.stdout.write('\rEpoch '+ str(self.epoch) +
