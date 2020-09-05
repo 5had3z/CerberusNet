@@ -41,7 +41,7 @@ class ModelTrainer(object):
         self._model = model.to(self._device)
         self._optimizer = optimizer
 
-        self._lr_manager = LRScheduler(mode=lr_cfg['mode'], base_lr=lr_cfg['lr'], power=0.9)
+        self._lr_manager = LRScheduler(**lr_cfg)
 
         self._checkpoints = checkpoints
 

@@ -184,42 +184,36 @@ class unFlowLoss(nn.modules.Module):
     """
     Loss function adopted by ARFlow from originally Unflow.
     """
-    def __init__(self, weights=None, smooth_deg=2, smooth_alpha=0.2,
-                 consistency=True, back_occ_only=False, **kwargs):
+    def __init__(self, weights=None, consistency=True, back_occ_only=False, **kwargs):
         super(unFlowLoss, self).__init__()
 
-        if kwargs:
-            args = kwargs['kwargs']
-            if "l1" in args["weights"]:
-                self.l1_weight = args["weights"]["l1"]
-            if "ssim" in args["weights"]:
-                self.ssim_weight = args["weights"]["ssim"]
-                self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
-            if "ternary" in args["weights"]:
-                self.ternary_weight = args["weights"]["ternary"]
+        if "l1" in weights:
+            self.l1_weight = weights["l1"]
+        if "ssim" in weights:
+            self.ssim_weight = weights["ssim"]
+            self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+        if "ternary" in weights:
+            self.ternary_weight = weights["ternary"]
 
-            self.smooth_args   = args['smooth']
-            self.w_wrp_scales  = args['w_wrp_scales']
-            self.w_sm_scales   = args['w_sm_scales']
-            self.consistency   = args['consistency']
-            self.back_occ_only = args['back_occ_only']
-
+        if 'smooth' in kwargs:
+            self.smooth_args = kwargs['smooth']
         else:
-            if "l1" in weights:
-                self.l1_weight = weights["l1"]
-            if "ssim" in weights:
-                self.ssim_weight = weights["ssim"]
-                self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
-            if "ternary" in weights:
-                self.ternary_weight = weights["ternary"]
+            self.smooth_args = {"degree": 2, "alpha" : 0.2, "weighting": 75.0}
 
-            self.smooth_deg    = smooth_deg
-            self.smooth_alpha  = smooth_alpha
-            self.smooth_w      = 75.0
-            self.w_wrp_scales  = [1.0, 1.0, 1.0, 1.0, 0.0]
-            self.w_sm_scales   = [1.0, 0.0, 0.0, 0.0, 0.0]
-            self.consistency   = consistency
-            self.back_occ_only = back_occ_only
+        self.smooth_w = 75.0 if 'smooth_w' not in kwargs else kwargs['smooth_w']
+
+        if 'w_sm_scales' in kwargs:
+            self.w_sm_scales = kwargs['w_sm_scales']
+        else:
+            self.w_sm_scales = [1.0, 0.0, 0.0, 0.0, 0.0]
+
+        if 'w_wrp_scales' in kwargs:
+            self.w_wrp_scales = kwargs['w_wrp_scales']
+        else:
+            self.w_wrp_scales = [1.0, 1.0, 1.0, 1.0, 0.0]
+
+        self.consistency = consistency
+        self.back_occ_only = back_occ_only
 
     def loss_photometric(self, im_orig, im_recons, occu_mask):
         loss = []

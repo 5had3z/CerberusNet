@@ -29,14 +29,12 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     if config_json.optimiser.type in ['adam', 'Adam']:
         optimiser = torch.optim.Adam(
             model.parameters(),
-            betas=config_json.optimiser.args.betas,
-            weight_decay=config_json.optimiser.args.weight_decay
+            **config_json.optimiser.args
         )
     elif config_json.optimiser.type in ['sgd', 'SGD']:
         optimiser = torch.optim.SGD(
             model.parameters(),
-            momentum=config_json.optimiser.args.momentum,
-            weight_decay=config_json.optimiser.args.weight_decay
+            **config_json.optimiser.args
         )
     else:
         raise NotImplementedError(config_json.optimiser.type)

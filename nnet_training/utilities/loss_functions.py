@@ -126,17 +126,10 @@ class FocalLoss2D(nn.Module):
                  scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 
-        if kwargs:
-            args = kwargs['kwargs']
-            self.gamma = args['gamma']
-            self.ignore_index = args['ignore_index']
-            self.dynamic_weights = args['dynamic_weights']
-            self.scale_factor = args['scale_factor']
-        else:
-            self.gamma = gamma
-            self.ignore_index = ignore_index
-            self.dynamic_weights = dynamic_weights
-            self.scale_factor = scale_factor
+        self.gamma = gamma
+        self.ignore_index = ignore_index
+        self.dynamic_weights = dynamic_weights
+        self.scale_factor = scale_factor
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         '''
@@ -200,10 +193,7 @@ class InvHuberLoss(nn.Module):
     """
     def __init__(self, ignore_index=-1, **kwargs):
         super(InvHuberLoss, self).__init__()
-        if kwargs:
-            self.ignore_index = kwargs['kwargs']['ignore_index']
-        else:
-            self.ignore_index = ignore_index
+        self.ignore_index = ignore_index
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         pred_relu = F.relu(pred.squeeze(dim=1)) # depth predictions must be >=0
@@ -379,11 +369,11 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
     loss_fn_dict = {}
     for loss_fn in loss_config:
         if loss_fn['function'] == "FocalLoss2D":
-            loss_fn_dict[loss_fn['type']] = FocalLoss2D(kwargs=loss_fn.args)
+            loss_fn_dict[loss_fn['type']] = FocalLoss2D(**loss_fn.args)
         elif loss_fn['function'] == "unFlowLoss":
-            loss_fn_dict[loss_fn['type']] = unFlowLoss(kwargs=loss_fn.args)
+            loss_fn_dict[loss_fn['type']] = unFlowLoss(**loss_fn.args)
         elif loss_fn['function'] == "InvHuberLoss":
-            loss_fn_dict[loss_fn['type']] = InvHuberLoss(kwargs=loss_fn.args)
+            loss_fn_dict[loss_fn['type']] = InvHuberLoss(**loss_fn.args)
 
     return loss_fn_dict
 

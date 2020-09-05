@@ -9,7 +9,7 @@ def get_model(model_args):
     name and args/configuration
     """
     if model_args.name == "MonoSFNet":
-        model = MonoSFNet(kwargs=model_args.args)
+        model = MonoSFNet(**model_args.args)
     else:
         raise NotImplementedError(model_args.name)
 
