@@ -2,12 +2,14 @@
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/",
-        "batch_size" : 2,
+        "batch_size" : 8,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "crop_fraction" : 1,
-            "output_size" : [1024, 512]
+            "crop_fraction" : 1.5,
+            "output_size" : [512, 256],
+            "rand_brightness" : 20,
+            "rand_rotation" : 5
         },
         "train_subdirs" : {
             "images" : "leftImg8bit/train",
@@ -56,7 +58,7 @@
                 "type" : "SegmentationNet1",
                 "args" : {
                     "classes"   : 19,
-                    "interm_ch" : 32,
+                    "interm_ch" : 48,
                     "stride"    : 1,
                     "t"         : 1,
                     "g_noise"   : true

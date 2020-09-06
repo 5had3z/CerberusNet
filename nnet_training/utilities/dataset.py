@@ -36,9 +36,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
         @input dictionary that contain paths of datasets as
         [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
         @param disparity_out determines whether the disparity is
-        given or a direct depth estimation\n
+        given or a direct depth estimation.\n
         @param crop_fraction determines if the image is randomly cropped to by a fraction
             e.g. 2 results in width/2 by height/2 random crop of original image\n
+        @param rand_rotation randomly rotates an image a maximum number of degrees.\n
+        @param rand_brightness, the maximum random increase or decrease as a percentage.
         '''
         l_img_key = None
 
@@ -240,10 +242,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
             for key in epoch_data.keys():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     item = torchvision.transforms.functional.rotate(
-                        epoch_data['key'], angle, resample=Image.BILINEAR)
+                        epoch_data[key], angle, resample=Image.BILINEAR)
                 else:
                     item = torchvision.transforms.functional.rotate(
-                        epoch_data['key'], angle, resample=Image.NEAREST, fill=-1)
+                        epoch_data[key], angle, resample=Image.NEAREST, fill=-1)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
@@ -338,9 +340,6 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
     else:
         n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
 
-    crop_fraction = dataset_config.augmentations.crop_fraction
-    output_size = dataset_config.augmentations.output_size
-
     training_dirs = {}
     for subset in dataset_config.train_subdirs:
         training_dirs[str(subset)] = dataset_config.rootdir +\
@@ -352,12 +351,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
                                         dataset_config.val_subdirs[str(subset)]
 
     datasets = {
-        'Training'   : CityScapesDataset(training_dirs,
-                                         crop_fraction=crop_fraction,
-                                         output_size=output_size),
-        'Validation' : CityScapesDataset(validation_dirs,
-                                         crop_fraction=crop_fraction,
-                                         output_size=output_size)
+        'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
+        'Validation' : CityScapesDataset(validation_dirs, **dataset_config.augmentations)
     }
 
     dataloaders = {
