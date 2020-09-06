@@ -63,26 +63,23 @@ if __name__ == "__main__":
 
     TRAINER = initialise_training_network(cfg, training_path)
 
+    MAIN_MENU = {
+        1 : lambda: TRAINER.train_model(int(input("Number of Training Epochs: "))),
+        2 : TRAINER.plot_data,
+        3 : TRAINER.visualize_output,
+        4 : lambda: print("Current Base Learning Rate: " + str(TRAINER.get_learning_rate())),
+        5 : lambda: TRAINER.set_learning_rate(float(input("New Learning Rate Value: "))),
+        6 : quit
+    }
+
     #   User Input Training loop
-    LOOP_COND = 1
-    while LOOP_COND == 1:
-        TRAINER.train_model(int(input("Number of Training Epochs: ")))
+    while True:
+        USR_INPUT = int(input("Main Menu:\n1: Train Model\n2: Plot Statistics\n3: Visualise Output\
+            \n4: Show LR\n5: Change LR\n6: Exit\nInput: "))
 
-        if int(input("Show Training Statistics? (1/0): ")) == 1:
-            # I should do this sometime
-            TRAINER.plot_data()
+        FUNC = MAIN_MENU.get(USR_INPUT, None)
 
-        if int(input("Show Example Output? (1/0): ")) == 1:
-            TRAINER.visualize_output()
-
-        if int(input("Pass Specific Image? (1/0): ")) == 1:
-            raise NotImplementedError
-            # @todo but I don't really care
-            # TRAINER.custom_image(str(input("Enter Path: ")))
-
-        print("Current Base Learning Rate: ", TRAINER.get_learning_rate())
-
-        if int(input("New Base Learning Rate? (1/0): ")) == 1:
-            TRAINER.set_learning_rate(float(input("New Learning Rate Value: ")))
-
-        LOOP_COND = int(input("Continue Training? (1/0): "))
+        if FUNC is not None:
+            FUNC()
+        else:
+            print("Invalid Input")
