@@ -68,10 +68,7 @@ class MonoFlowTrainer(ModelTrainer):
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             pred_flow = self._model(img, img_seq)
-            flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
-            flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                     zip(flows_12, flows_21)]
-            loss, _, _, _ = self._loss_function(flows, img, img_seq)
+            loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
 
             self._optimizer.zero_grad()
             loss.backward()
@@ -89,10 +86,9 @@ class MonoFlowTrainer(ModelTrainer):
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
-                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f \
-                    || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                        self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
+                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
+                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
         
     def _validate_model(self, max_epoch):
         with torch.no_grad():
@@ -108,10 +104,7 @@ class MonoFlowTrainer(ModelTrainer):
                 pred_flow   = self._model(img, img_seq)
 
                 # Caculate the loss and accuracy for the predictions
-                flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
-                flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                        zip(flows_12, flows_21)]
-                loss, _, _, _ = self._loss_function(flows, img, img_seq)
+                loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
 
                 self.metric_loggers['flow']._add_sample(
                     img.cpu().data.numpy(),

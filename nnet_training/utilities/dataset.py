@@ -8,6 +8,7 @@ import os
 import random
 import json
 import multiprocessing
+from shutil import copy
 from pathlib import Path
 from typing import Dict
 
@@ -287,9 +288,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
             # Ignore sides and bottom of frame as these are patchy/glitchy
             side_clip   = int(disparity.shape[1]/20)
             bottom_clip = int(disparity.shape[0]/10)
-            disparity[-bottom_clip:-1,:]    = -1    #bottom
-            disparity[:,:side_clip]         = -1    #lhs
-            disparity[:,-side_clip:-1]      = -1    #rhs
+            disparity[-bottom_clip:-1, :] = -1    #bottom
+            disparity[:, :side_clip]      = -1    #lhs
+            disparity[:, -side_clip:-1]   = -1    #rhs
         return  torch.FloatTensor(disparity.astype('float32'))
 
     def json_to_intrinsics(self, json_path):
@@ -297,16 +298,16 @@ class CityScapesDataset(torch.utils.data.Dataset):
             #   Camera Intrinsic Matrix
             K = np.eye(4, dtype=np.float32) #Idk why size 4? (To match translation?)
             json_data = json.load(json_file)
-            K[0,0] = json_data["intrinsic"]["fx"]
-            K[1,1] = json_data["intrinsic"]["fy"]
-            K[0,2] = json_data["intrinsic"]["u0"]
-            K[1,2] = json_data["intrinsic"]["v0"]
+            K[0, 0] = json_data["intrinsic"]["fx"]
+            K[1, 1] = json_data["intrinsic"]["fy"]
+            K[0, 2] = json_data["intrinsic"]["u0"]
+            K[1, 2] = json_data["intrinsic"]["v0"]
 
             #   Transformation Mat between cameras
-            stereo_T = np.eye(4, dtype=np.float32)
-            stereo_T[0,3] = json_data["extrinsic"]["baseline"]
+            stereo_t = np.eye(4, dtype=np.float32)
+            stereo_t[0, 3] = json_data["extrinsic"]["baseline"]
 
-        return {"K":K, "inv_K":np.linalg.pinv(K), "baseline_T":stereo_T}
+        return {"K":K, "inv_K":np.linalg.pinv(K), "baseline_T":stereo_t}
 
     def json_to_pose(self, json_path):
         raise NotImplementedError
@@ -374,22 +375,63 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     return dataloaders
 
-if __name__ == '__main__':
+def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
+    """
+    Tool for copying over a subset of data to a new place i.e. HDD mass storage to SSD\n
+    Requires you at least have l_img in the dictionary to act as a base for checking
+    correct corresponding subsets are being copied.
+    """
+    assert 'l_img' in subsets
+
+    print("Copying ", subsets.keys(), " from ", base_dir, " to ", dest_dir)
+
+    regex_map = {
+        'l_img' : ['leftImg8bit', 'leftImg8bit'],
+        'r_img' : ['leftImg8bit', 'rightImg8bit'],
+        'seg' : ['leftImg8bit', 'gtFine_labelIds'],
+        'disp' : ['leftImg8bit', 'disparity'],
+        'l_seq' : ['19_leftImg8bit', '20_leftImg8bit'],
+        'r_seq' : ['19_leftImg8bit', '20_rightImg8bit'],
+        'cam' : ['leftImg8bit.png', 'camera.json'],
+        'pose' : ['leftImg8bit.png', 'vehicle.json']
+    }
+
+    for dir_name, _, file_list in os.walk(os.path.join(base_dir, subsets['l_img'])):
+        for filename in file_list:
+            if filename.endswith(IMG_EXT):
+                l_imgpath = os.path.join(dir_name, filename)
+                foldername = os.path.basename(os.path.dirname(l_imgpath))
+
+                for datatype, directory in subsets.items():
+                    img_name = filename.replace(regex_map[datatype][0], regex_map[datatype][1])
+                    src_path = os.path.join(base_dir, directory, foldername, img_name)
+                    dst_path = os.path.join(dest_dir, directory, foldername, img_name)
+                    if not os.path.isfile(src_path):
+                        print("Error finding corresponding data to ", l_imgpath)
+                        continue
+                    if os.path.isfile(dst_path):
+                        continue
+                    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                    copy(src_path, dst_path)
+
+    print("success copying: ", subsets.keys())
+
+def some_test_idk():
     print("Testing Folder Traversal and Image Extraction!")
 
     mono_training_data = {
-        'images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        'labels': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train'
+        'images': HDD_DIR + 'leftImg8bit/train',
+        'labels': HDD_DIR + 'gtFine/train'
     }
 
     full_training_data = {
-        'left_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/train',
-        'right_images': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/rightImg8bit/train',
-        'seg': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/gtFine/train',
-        'disparity': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/disparity/train',
-        'cam': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/camera/train',
-        'left_seq': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/train',
-        'pose': '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/vehicle/train'
+        'left_images': HDD_DIR + 'leftImg8bit/train',
+        'right_images': HDD_DIR + 'rightImg8bit/train',
+        'seg': HDD_DIR + 'gtFine/train',
+        'disparity': HDD_DIR + 'disparity/train',
+        'cam': HDD_DIR + 'camera/train',
+        'left_seq': HDD_DIR + 'leftImg8bit_sequence/train',
+        'pose': HDD_DIR + 'vehicle/train'
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
@@ -406,7 +448,7 @@ if __name__ == '__main__':
 
     for idx, data in enumerate(testLoader):
         print("yes")
-    
+
     data = next(iter(testLoader))
 
     image = data["l_img"].numpy()
@@ -414,13 +456,13 @@ if __name__ == '__main__':
 
     for i in range(batch_size):
         plt.subplot(121)
-        plt.imshow(np.moveaxis(image[i,0:3,:,:],0,2))    
+        plt.imshow(np.moveaxis(image[i, 0:3, :, :], 0, 2))
 
         plt.subplot(122)
-        plt.imshow(seg[i,:,:])
+        plt.imshow(seg[i, :, :])
 
         plt.show()
-    
+
     # classes = {}
     # for i in range(batch_size):
     #     # # Get class for each individual pixel
@@ -437,3 +479,17 @@ if __name__ == '__main__':
     #     plt.show()
 
     # print(classes)
+
+if __name__ == '__main__':
+
+    HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
+    SSD_DIR = '/home/bryce/Documents/Cityscapes Data'
+
+    SUBSETS = {
+        'l_img': 'leftImg8bit/val',
+        'r_img': 'rightImg8bit/val',
+        'l_seq': 'leftImg8bit_sequence/val',
+        'seg': 'gtFine/val',
+    }
+
+    copy_cityscapes(HDD_DIR, SUBSETS, SSD_DIR)

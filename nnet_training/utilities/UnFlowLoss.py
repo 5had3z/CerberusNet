@@ -242,15 +242,17 @@ class unFlowLoss(nn.modules.Module):
         loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
         return sum([l.mean() for l in loss])
 
-    def forward(self, pyramid_flows, im1_origin, im2_origin):
+    def forward(self, pred_flow, im1_origin, im2_origin):
         """
         :param output: Multi-scale forward/backward flows n * [B x 4 x h x w]
         :param target: image pairs Nx6xHxW
         :return:
         """
+        pyramid_flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
+                         zip(pred_flow['flow_fw'], pred_flow['flow_bw'])]
 
-        pyramid_smooth_losses = []
         pyramid_warp_losses = []
+        pyramid_smooth_losses = []
 
         s = 1.
         for i, flow in enumerate(pyramid_flows):

@@ -61,10 +61,7 @@ class MonoSegFlowTrainer(ModelTrainer):
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             pred_flow, seg_pred = self._model(img, img_seq)
-            flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
-            flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                     zip(flows_12, flows_21)]
-            flow_loss, _, _, _ = self._flow_loss_fn(flows, img, img_seq)
+            flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
             seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
             loss = flow_loss + seg_loss
@@ -109,10 +106,7 @@ class MonoSegFlowTrainer(ModelTrainer):
 
                 # Caculate the loss and accuracy for the predictions
                 pred_flow, seg_pred = self._model(img, img_seq)
-                flows_12, flows_21 = pred_flow['flow_fw'], pred_flow['flow_bw']
-                flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                         zip(flows_12, flows_21)]
-                flow_loss, _, _, _ = self._flow_loss_fn(flows, img, img_seq)
+                flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
                 seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
                 self.metric_loggers['flow']._add_sample(

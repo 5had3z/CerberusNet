@@ -21,20 +21,21 @@ class SegmentationNet1(nn.Module):
         super(SegmentationNet1, self).__init__()
         self.classifier = Classifer(interm_ch, classes)
 
-        if 'g_noise' in kwargs and kwargs['g_noise'] is True:
+        if 'g_noise' in kwargs and kwargs['g_noise'] != 0.0:
             bottleneck_module = LinearBottleneckAGN
         else:
             bottleneck_module = LinearBottleneck
 
         t = 1 if 't' not in kwargs else kwargs['t']
         stride = 1 if 'stride' not in kwargs else kwargs['stride']
+        sigma = 0 if 'g_noise' not in kwargs else kwargs['g_noise']
 
         self.feature_fusion = nn.ModuleList(
-            [bottleneck_module(input_ch[0], interm_ch, t=t, stride=stride)]
+            [bottleneck_module(input_ch[0], interm_ch, t=t, stride=stride, sigma=sigma)]
         )
         for ch_in in input_ch[1:]:
             self.feature_fusion.append(
-                bottleneck_module(ch_in+interm_ch, interm_ch, t=t, stride=stride)
+                bottleneck_module(ch_in+interm_ch, interm_ch, t=t, stride=stride, sigma=sigma)
             )
 
         self.scale_factor = 2 * stride
