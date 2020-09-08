@@ -5,6 +5,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import platform
 import os
+import re
 import random
 import json
 import multiprocessing
@@ -102,14 +103,19 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             print("Error finding corresponding disparity image to ", l_imgpath)
 
                     if hasattr(self, 'l_seq'):
-                        left_seq_name = filename.replace('19_leftImg8bit', '20_leftImg8bit')
+                        frame_n = int(re.split("_", filename)[2])
+                        left_seq_name = filename.replace(str(frame_n).zfill(6), str(frame_n+1).zfill(6))
                         left_seq_path = os.path.join(directories['left_seq'], foldername, left_seq_name)
                         if not os.path.isfile(left_seq_path):
                             read_check = False
                             print("Error finding corresponding left sequence image to ", l_imgpath)
 
                     if hasattr(self, 'r_seq'):
-                        right_seq_name = filename.replace('19_leftImg8bit', '20_rightImg8bit')
+                        frame_n = int(re.split("_", filename)[2])
+                        right_seq_name = filename.replace(
+                            str(frame_n).zfill(6)+"_leftImg8bit",
+                            str(frame_n+1).zfill(6)+"_rightImg8bit"
+                        )
                         right_seq_path = os.path.join(directories['right_seq'], foldername, right_seq_name)
                         if not os.path.isfile(right_seq_path):
                             read_check = False
@@ -390,8 +396,8 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
         'r_img' : ['leftImg8bit', 'rightImg8bit'],
         'seg' : ['leftImg8bit', 'gtFine_labelIds'],
         'disp' : ['leftImg8bit', 'disparity'],
-        'l_seq' : ['19_leftImg8bit', '20_leftImg8bit'],
-        'r_seq' : ['19_leftImg8bit', '20_rightImg8bit'],
+        'l_seq' : ['leftImg8bit', 'leftImg8bit'],
+        'r_seq' : ['leftImg8bit', 'rightImg8bit'],
         'cam' : ['leftImg8bit.png', 'camera.json'],
         'pose' : ['leftImg8bit.png', 'vehicle.json']
     }
@@ -403,7 +409,13 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
                 foldername = os.path.basename(os.path.dirname(l_imgpath))
 
                 for datatype, directory in subsets.items():
-                    img_name = filename.replace(regex_map[datatype][0], regex_map[datatype][1])
+                    if datatype in ['l_seq', 'r_seq']:
+                        frame_n = int(re.split("_", filename)[2])
+                        img_name = filename.replace(
+                            str(frame_n).zfill(6)+"_"+regex_map[datatype][0],
+                            str(frame_n+1).zfill(6)+"_"+regex_map[datatype][1])
+                    else:
+                        img_name = filename.replace(regex_map[datatype][0], regex_map[datatype][1])
                     src_path = os.path.join(base_dir, directory, foldername, img_name)
                     dst_path = os.path.join(dest_dir, directory, foldername, img_name)
                     if not os.path.isfile(src_path):
@@ -418,6 +430,9 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
 
 def some_test_idk():
     print("Testing Folder Traversal and Image Extraction!")
+
+    HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
+    SSD_DIR = '/home/bryce/Documents/Cityscapes Data'
 
     mono_training_data = {
         'images': HDD_DIR + 'leftImg8bit/train',
@@ -480,16 +495,34 @@ def some_test_idk():
 
     # print(classes)
 
-if __name__ == '__main__':
-
+def move_hdd_to_ssd():
     HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
     SSD_DIR = '/home/bryce/Documents/Cityscapes Data'
 
     SUBSETS = {
-        'l_img': 'leftImg8bit/val',
-        'r_img': 'rightImg8bit/val',
-        'l_seq': 'leftImg8bit_sequence/val',
-        'seg': 'gtFine/val',
+        'l_img': 'leftImg8bit/train',
+        'r_img': 'rightImg8bit/train',
+        'l_seq': 'leftImg8bit_sequence/train',
+        'seg': 'gtFine/train',
     }
 
     copy_cityscapes(HDD_DIR, SUBSETS, SSD_DIR)
+
+def regex_rep_test():
+    testsrc = 'frankfurt_000001_000099_leftImg8bit'
+    testseq = 'frankfurt_000001_000100_leftImg8bit'
+    testrseq = 'frankfurt_000001_000100_rightImg8bit'
+
+    frame_no = int(re.split("_", testsrc)[2])
+    testdst = testsrc.replace(str(frame_no).zfill(6), str(frame_no+1).zfill(6))
+    print(testdst)
+    assert testdst == testseq
+
+    testdst = testsrc.replace(
+        str(frame_no).zfill(6)+"_leftImg8bit",
+        str(frame_no+1).zfill(6)+"_rightImg8bit")
+    print(testrseq)
+    assert testdst == testrseq
+
+if __name__ == '__main__':
+    move_hdd_to_ssd()
