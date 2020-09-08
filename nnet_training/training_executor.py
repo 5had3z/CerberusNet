@@ -11,7 +11,7 @@ from easydict import EasyDict
 import torch
 from nnet_training.nnet_models import get_model
 
-from nnet_training.utilities.dataset import get_cityscapse_dataset
+from nnet_training.utilities.CityScapes import get_cityscapse_dataset
 from nnet_training.utilities.loss_functions import get_loss_function
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
 

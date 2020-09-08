@@ -559,7 +559,7 @@ class OpticFlowMetric(MetricBaseClass):
         super(OpticFlowMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._reset_metric()
 
-    def _add_sample(self, orig_img, seq_img, flow_pred, flow_target, loss=None):
+    def _add_sample(self, orig_img, seq_img, flow_pred, flow_target=None, loss=None):
         """
         @input list of original, prediction and sequence images i.e. [left, right]
         @todo write reconstruction error and endpoint error
@@ -567,7 +567,11 @@ class OpticFlowMetric(MetricBaseClass):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
 
-        self.metric_data["Batch_EPE"].append(1)
+        if flow_target is not None:
+            self.metric_data["Batch_EPE"].append(flow_pred-flow_target)
+        else:
+            self.metric_data["Batch_EPE"].append(1)
+
         self.metric_data["Batch_SAD"].append((flow_warp(orig_img, flow_pred)-seq_img).abs().mean())
 
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):

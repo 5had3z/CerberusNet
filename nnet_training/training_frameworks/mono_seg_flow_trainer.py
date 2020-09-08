@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
-from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 

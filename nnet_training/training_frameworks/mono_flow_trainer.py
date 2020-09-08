@@ -157,7 +157,7 @@ if __name__ == "__main__":
     from nnet_training.nnet_models.pwcnet import PWCNet
     from nnet_training.utilities.loss_functions import ReconstructionLossV1, ReconstructionLossV2
     from nnet_training.utilities.UnFlowLoss import unFlowLoss
-    from nnet_training.utilities.dataset import CityScapesDataset
+    from nnet_training.utilities.CityScapes import CityScapesDataset
 
     BATCH_SIZE = 4
     if platform.system() == 'Windows':

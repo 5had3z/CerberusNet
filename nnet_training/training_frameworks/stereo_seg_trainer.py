@@ -144,7 +144,7 @@ class StereoSegTrainer(ModelTrainer):
 if __name__ == "__main__":
     from nnet_training.utilities.loss_functions import FocalLoss2D
     from nnet_training.nnet_models.nnet_models import StereoSegmentaionSeparated
-    from nnet_training.utilities.dataset import CityScapesDataset
+    from nnet_training.utilities.CityScapes import CityScapesDataset
 
     BATCH_SIZE = 8
     if platform.system() == 'Windows':

@@ -17,7 +17,7 @@ import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric
 from nnet_training.utilities.visualisation import flow_to_image
-from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['StereoFlowTrainer']

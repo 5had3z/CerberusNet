@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import DepthMetric
-from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from .trainer_base_class import ModelTrainer
 
 __all__ = ['StereoDisparityTrainer']

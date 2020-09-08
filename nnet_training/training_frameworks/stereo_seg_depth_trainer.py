@@ -16,7 +16,7 @@ from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric
-from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 

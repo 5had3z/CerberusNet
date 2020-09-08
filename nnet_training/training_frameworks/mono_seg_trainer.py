@@ -18,7 +18,7 @@ import torchvision.transforms as transforms
 from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss,\
     MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
 from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
-from nnet_training.utilities.dataset import CityScapesDataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric
 from nnet_training.utilities.visualisation import get_color_pallete
 
