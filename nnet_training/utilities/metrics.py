@@ -310,20 +310,24 @@ class SegmentationMetric(MetricBaseClass):
 
         if print_only:
             pixel_acc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
-            miou = np.asarray(self.metric_data["Batch_IoU"].mean()).mean()
+            miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
             print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixel_acc, miou, loss))
         else:
             ret_val = ()
             if main_metric:
-                miou = np.asarray(self.metric_data["Batch_IoU"].mean()).mean()
+                miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
                 ret_val += (miou,)
                 if loss_metric:
                     loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                     ret_val += (loss,)
             else:
-                for metric in self.metric_data.values():
-                    mean_data = np.asarray(metric).mean()
+                for metric, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                    if metric == 'Batch_IoU':
+                        test = np.asarray(data)
+                        mean_data = np.asarray(data).mean(axis=(0, 1))
+                    else:
+                        mean_data = np.asarray(data).mean()
                     ret_val += (mean_data,)
             return ret_val
 
@@ -333,29 +337,35 @@ class SegmentationMetric(MetricBaseClass):
         @param  main_metric, if true only returns mIoU\n
         @output PixelWise Accuracy, mIoU
         """
-        mIoU = 0
-        PixelAcc = 0
+        cost_func = {
+            "Batch_IoU" : [max, 0],
+            "Batch_PixelAcc" : [max, 0],
+            "Batch_Loss" : [min, 99999]
+        }
+
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
                 for epoch in hf['validation']:
                     summary_data = hf['validation/'+epoch+'/Summary'][:]
-                    if summary_data[1] > mIoU:
-                        mIoU = summary_data[1]
-                    if summary_data[0] > PixelAcc:
-                        PixelAcc = summary_data[0]
+                    for idx, (_, data) in enumerate(sorted(cost_func.items(), key=lambda x: x[0])):
+                        data[1] = data[0](data[1], summary_data[idx])
 
         else:
             print("No File Specified for Segmentation Metric Manager")
         if main_metric:
-            return mIoU
+            return cost_func["Batch_IoU"][1]
         else:
-            return PixelAcc, mIoU
+            return cost_func["Batch_PixelAcc"][1], cost_func["Batch_IoU"][1]
 
     def get_last_batch(self, main_metric=True):
         if main_metric:
             return self.metric_data["Batch_IoU"][-1].mean()
         else:
-            return self.metric_data["Batch_IoU"][-1].mean(), self.metric_data["Batch_PixelAcc"][-1]
+            ret_val = ()
+            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                if key != "Batch_Loss":
+                    ret_val += (data[-1],)
+            return ret_val
 
     def _iou(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
@@ -460,7 +470,7 @@ class DepthMetric(MetricBaseClass):
         @param  main_metric, returns scale invariant\n
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
-        """ 
+        """
 
         if print_only:
             abs_rel = np.asarray(self.metric_data["Batch_Absolute_Relative"]).mean()
@@ -481,8 +491,8 @@ class DepthMetric(MetricBaseClass):
                     loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                     ret_val += (loss,)
             else:
-                for metric in self.metric_data.keys():
-                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                for _, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                    mean_data = np.asarray(data).mean()
                     ret_val += (mean_data,)
             return ret_val
 
@@ -525,9 +535,9 @@ class DepthMetric(MetricBaseClass):
             return self.metric_data["Batch_Invariant"][-1]
         else:
             ret_val = ()
-            for key in self.metric_data.keys():
+            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key != "Batch_Loss":
-                    ret_val += (self.metric_data[key][-1],)
+                    ret_val += (data[-1],)
             return ret_val
    
     def _reset_metric(self):
@@ -558,21 +568,23 @@ class OpticFlowMetric(MetricBaseClass):
 
         self.metric_data["Batch_EPE"].append(1)
         self.metric_data["Batch_SAD"].append(1)
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
-        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative, rmse linear, rmse log]\n
+        Returns Accuracy Metrics [scale invariant, absolute relative,
+        squared relative, rmse linear, rmse log]\n
         @todo   get a specified epoch instead of only currently loaded one\n
         @param  main_metric, returns sum abs diff\n
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
-        """ 
+        """
 
         if print_only:
             epe = np.asarray(self.metric_data["Batch_EPE"]).mean()
             sad = np.asarray(self.metric_data["Batch_SAD"]).mean()
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-            print("End Point Error: %.4f\tSum Aboslute Difference: %.4f\tLoss: %.4f" % (epe, sad, loss))
+            print("End Point Error: %.4f\tSum Aboslute Difference: %.4f\tLoss: %.4f"
+                  % (epe, sad, loss))
         else:
             ret_val = ()
             if main_metric:
@@ -582,8 +594,8 @@ class OpticFlowMetric(MetricBaseClass):
                     loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                     ret_val += (loss,)
             else:
-                for metric in self.metric_data.keys():
-                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                for _, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                    mean_data = np.asarray(data).mean()
                     ret_val += (mean_data,)
             return ret_val
 
@@ -617,11 +629,11 @@ class OpticFlowMetric(MetricBaseClass):
             return self.metric_data["Batch_SAD"][-1]
         else:
             ret_val = ()
-            for key in self.metric_data.keys():
+            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key != "Batch_Loss":
-                    ret_val += (self.metric_data[key][-1],)
+                    ret_val += (data[-1],)
             return ret_val
-        
+
     def _reset_metric(self):
         self.metric_data = dict(
             Batch_Loss=[],
