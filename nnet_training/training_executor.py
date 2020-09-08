@@ -3,38 +3,83 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-from training_frameworks.mono_seg_trainer import MonoSegmentationTrainer, Init_Training_MonoFSCNN
+import json, os, argparse, hashlib
+from pathlib import Path
+from shutil import copy
+from easydict import EasyDict
+
+import torch
+from nnet_training.nnet_models import get_model
+
+from nnet_training.utilities.dataset import get_cityscapse_dataset
+from nnet_training.utilities.loss_functions import get_loss_function
+from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
+
+def initialise_training_network(config_json: EasyDict, train_path: Path) -> ModelTrainer:
+    """
+    Sets up the network and training configurations
+    Returns initialised training framework class
+    """
+
+    datasets = get_cityscapse_dataset(config_json.dataset)
+    model = get_model(config_json.model)
+
+    loss_fns = get_loss_function(config_json.loss_functions)
+
+    if config_json.optimiser.type in ['adam', 'Adam']:
+        optimiser = torch.optim.Adam(
+            model.parameters(),
+            **config_json.optimiser.args
+        )
+    elif config_json.optimiser.type in ['sgd', 'SGD']:
+        optimiser = torch.optim.SGD(
+            model.parameters(),
+            **config_json.optimiser.args
+        )
+    else:
+        raise NotImplementedError(config_json.optimiser.type)
+
+    trainer = get_trainer(config_json.trainer)(
+        model=model, optim=optimiser, loss_fn=loss_fns,
+        dataldr=datasets, lr_cfg=config_json.lr_scheduler,
+        modelpath=train_path)
+
+    return trainer
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', default='configs/MonoSF_gauss.json')
+    args = parser.parse_args()
 
-    usr_input = int(input("1: Mono FSCNN\nUser Input:"))
-    if (usr_input == 1):
-        modeltrainer = Init_Training_MonoFSCNN()
+    with open(args.config) as f:
+        cfg = EasyDict(json.load(f))
+
+    encoding = hashlib.md5(json.dumps(cfg).encode('utf-8'))
+    training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
+    if not os.path.isdir(training_path):
+        os.makedirs(training_path)
+
+    copy(args.config, training_path / os.path.basename(args.config))
+
+    TRAINER = initialise_training_network(cfg, training_path)
+
+    MAIN_MENU = {
+        1 : lambda: TRAINER.train_model(int(input("Number of Training Epochs: "))),
+        2 : TRAINER.plot_data,
+        3 : TRAINER.visualize_output,
+        4 : lambda: print("Current Base Learning Rate: " + str(TRAINER.get_learning_rate())),
+        5 : lambda: TRAINER.set_learning_rate(float(input("New Learning Rate Value: "))),
+        6 : quit
+    }
 
     #   User Input Training loop
-    while_cond = 1
-    while(while_cond == 1):
-        n_epochs = int(input("Number of Training Epochs: "))
-        modeltrainer.train_model(n_epochs)
+    while True:
+        USR_INPUT = int(input("Main Menu:\n1: Train Model\n2: Plot Statistics\n3: Visualise Output\
+            \n4: Show LR\n5: Change LR\n6: Exit\nInput: "))
 
-        usr_input = int(input("Show Training Statistics? (1/0): "))
-        if (usr_input == 1):
-            modeltrainer.plot_data()
-    
-        usr_input = int(input("Show Example Output? (1/0): "))
-        if (usr_input == 1):
-            modeltrainer.visualize_output()
+        FUNC = MAIN_MENU.get(USR_INPUT, None)
 
-        usr_input = int(input("Pass Specific Image? (1/0): "))
-        if (usr_input == 1):
-            usr_input = str(input("Enter Path: "))
-            modeltrainer.custom_image(usr_input)
-        
-        print("Current Learning Rate: ", modeltrainer.get_learning_rate)
-        
-        usr_input = int(input("New Learning Rate? (1/0): "))
-        if (usr_input == 1):
-            usr_input = float(input("New Learning Rate Value: "))
-            modeltrainer.set_learning_rate(usr_input)
-
-        while_cond = int(input("Continue Training? (1/0): "))
+        if FUNC is not None:
+            FUNC()
+        else:
+            print("Invalid Input")

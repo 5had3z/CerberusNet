@@ -3,21 +3,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 from nnet_training.utilities.loss_functions import SSIM
 
-def mesh_grid(B, H, W):
+def mesh_grid(batch_sz, height, width):
+    '''
+    Creates meshgrid of two dimensions which is the pixel location
+    '''
     # mesh grid
-    x_base = torch.arange(0, W).repeat(B, H, 1)  # BHW
-    y_base = torch.arange(0, H).repeat(B, W, 1).transpose(1, 2)  # BHW
+    x_base = torch.arange(0, width).repeat(batch_sz, height, 1)  # BHW
+    y_base = torch.arange(0, height).repeat(batch_sz, width, 1).transpose(1, 2)  # BHW
 
     base_grid = torch.stack([x_base, y_base], 1)  # B2HW
     return base_grid
 
 def norm_grid(v_grid):
-    _, _, H, W = v_grid.size()
+    '''
+    Normalizses a meshgrid between (-1,1)
+    '''
+    _, _, height, width = v_grid.size()
 
     # scale grid to [-1,1]
     v_grid_norm = torch.zeros_like(v_grid)
-    v_grid_norm[:, 0, :, :] = 2.0 * v_grid[:, 0, :, :] / (W - 1) - 1.0
-    v_grid_norm[:, 1, :, :] = 2.0 * v_grid[:, 1, :, :] / (H - 1) - 1.0
+    v_grid_norm[:, 0, :, :] = 2.0 * v_grid[:, 0, :, :] / (width - 1) - 1.0
+    v_grid_norm[:, 1, :, :] = 2.0 * v_grid[:, 1, :, :] / (height - 1) - 1.0
     return v_grid_norm.permute(0, 2, 3, 1)  # BHW2
 
 def get_corresponding_map(data):
@@ -69,16 +75,22 @@ def get_corresponding_map(data):
 
     return corresponding_map.unsqueeze(1)
 
-def flow_warp(x, flow12, pad='border', mode='bilinear'):
-    B, _, H, W = x.size()
+def flow_warp(image, flow12, pad='border', mode='bilinear'):
+    '''
+    Warps an image given a flow prediction using grid_sample
+    '''
+    batch_sz, _, height, width = image.size()
 
-    base_grid = mesh_grid(B, H, W).type_as(x)  # B2HW
+    base_grid = mesh_grid(batch_sz, height, width).type_as(image)  # B2HW
 
     v_grid = norm_grid(base_grid + flow12)  # BHW2
-    im1_recons = nn.functional.grid_sample(x, v_grid, mode=mode, padding_mode=pad)
+    im1_recons = nn.functional.grid_sample(image, v_grid, mode=mode, padding_mode=pad)
     return im1_recons
 
 def get_occu_mask_bidirection(flow12, flow21, scale=0.01, bias=0.5):
+    '''
+    Get an occlusion mask using both flows such that they match each other
+    '''
     flow21_warped = flow_warp(flow21, flow12, pad='zeros')
     flow12_diff = flow12 + flow21_warped
     mag = (flow12 * flow12).sum(1, keepdim=True) + \
@@ -87,12 +99,15 @@ def get_occu_mask_bidirection(flow12, flow21, scale=0.01, bias=0.5):
     occ = (flow12_diff * flow12_diff).sum(1, keepdim=True) > occ_thresh
     return occ.float()
 
-def get_occu_mask_backward(flow21, th=0.2):
+def get_occu_mask_backward(flow21, theta=0.2):
+    '''
+    Get an occlusion mask using backward propagation
+    '''
     B, _, H, W = flow21.size()
     base_grid = mesh_grid(B, H, W).type_as(flow21)  # B2HW
 
     corr_map = get_corresponding_map(base_grid + flow21)  # BHW
-    occu_mask = corr_map.clamp(min=0., max=1.) < th
+    occu_mask = corr_map.clamp(min=0., max=1.) < theta
     return occu_mask.float()
 
 # Credit: https://github.com/simonmeister/UnFlow/blob/master/src/e2eflow/core/losses.py
@@ -166,7 +181,10 @@ def smooth_grad_2nd(flow, image, alpha):
     return loss_x.mean()/2. + loss_y.mean() / 2.
 
 class unFlowLoss(nn.modules.Module):
-    def __init__(self, weights, smooth_deg=2, smooth_alpha=0.2, consistency=True, back_occ_only=False):
+    """
+    Loss function adopted by ARFlow from originally Unflow.
+    """
+    def __init__(self, weights=None, consistency=True, back_occ_only=False, **kwargs):
         super(unFlowLoss, self).__init__()
 
         if "l1" in weights:
@@ -176,14 +194,26 @@ class unFlowLoss(nn.modules.Module):
             self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
         if "ternary" in weights:
             self.ternary_weight = weights["ternary"]
-        
-        self.smooth_deg     = smooth_deg
-        self.smooth_alpha   = smooth_alpha
-        self.smooth_w       = 75.0
-        self.w_scales       = [1.0, 1.0, 1.0, 1.0, 0.0]
-        self.w_sm_scales    = [1.0, 0.0, 0.0, 0.0, 0.0]
-        self.consistency    = consistency
-        self.back_occ_only  = back_occ_only
+
+        if 'smooth' in kwargs:
+            self.smooth_args = kwargs['smooth']
+        else:
+            self.smooth_args = {"degree": 2, "alpha" : 0.2, "weighting": 75.0}
+
+        self.smooth_w = 75.0 if 'smooth_w' not in kwargs else kwargs['smooth_w']
+
+        if 'w_sm_scales' in kwargs:
+            self.w_sm_scales = kwargs['w_sm_scales']
+        else:
+            self.w_sm_scales = [1.0, 0.0, 0.0, 0.0, 0.0]
+
+        if 'w_wrp_scales' in kwargs:
+            self.w_wrp_scales = kwargs['w_wrp_scales']
+        else:
+            self.w_wrp_scales = [1.0, 1.0, 1.0, 1.0, 0.0]
+
+        self.consistency = consistency
+        self.back_occ_only = back_occ_only
 
     def loss_photometric(self, im_orig, im_recons, occu_mask):
         loss = []
@@ -192,40 +222,41 @@ class unFlowLoss(nn.modules.Module):
             loss += [self.l1_weight * (im_orig - im_recons).abs()]
 
         if hasattr(self, 'ssim_weight'):
-            loss += [self.ssim_weight * self.SSIM(im_recons,\
-                                            im_orig)]
+            loss += [self.ssim_weight * self.SSIM(im_recons, im_orig)]
 
         if hasattr(self, 'ternary_weight'):
-            loss += [self.ternary_weight * TernaryLoss(im_recons * occu_mask,\
-                                                      im_orig * occu_mask)]
+            loss += [self.ternary_weight *\
+                     TernaryLoss(im_recons * occu_mask, im_orig * occu_mask)]
 
         return sum([l.mean() for l in loss]) #/ occu_mask.mean()
 
     def loss_smooth(self, flow, im_scaled):
-        if self.smooth_deg == 2:
+        if self.smooth_args['degree'] == 2:
             func_smooth = smooth_grad_2nd
-        elif self.smooth_deg == 1:
+        elif self.smooth_args['degree'] == 1:
             func_smooth = smooth_grad_1st
         else:
-            raise NotImplementedError
+            raise NotImplementedError(self.smooth_args['degree'])
 
         loss = []
-        loss += [func_smooth(flow, im_scaled, self.smooth_alpha)]
+        loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
         return sum([l.mean() for l in loss])
 
-    def forward(self, pyramid_flows, im1_origin, im2_origin):
+    def forward(self, pred_flow, im1_origin, im2_origin):
         """
         :param output: Multi-scale forward/backward flows n * [B x 4 x h x w]
         :param target: image pairs Nx6xHxW
         :return:
         """
+        pyramid_flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
+                         zip(pred_flow['flow_fw'], pred_flow['flow_bw'])]
 
-        pyramid_smooth_losses = []
         pyramid_warp_losses = []
+        pyramid_smooth_losses = []
 
         s = 1.
         for i, flow in enumerate(pyramid_flows):
-            if self.w_scales[i] == 0:
+            if self.w_wrp_scales[i] == 0:
                 pyramid_warp_losses.append(0)
                 pyramid_smooth_losses.append(0)
                 continue
@@ -241,8 +272,8 @@ class unFlowLoss(nn.modules.Module):
 
             if i == 0:
                 if self.back_occ_only:
-                    occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], th=0.2)
-                    occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], th=0.2)
+                    occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], theta=0.2)
+                    occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], theta=0.2)
                 else:
                     occu_mask1 = 1 - get_occu_mask_bidirection(flow[:, :2], flow[:, 2:])
                     occu_mask2 = 1 - get_occu_mask_bidirection(flow[:, 2:], flow[:, :2])
@@ -268,12 +299,12 @@ class unFlowLoss(nn.modules.Module):
             pyramid_smooth_losses.append(loss_smooth)
 
         pyramid_warp_losses = [l * w for l, w in
-                               zip(pyramid_warp_losses, self.w_scales)]
+                               zip(pyramid_warp_losses, self.w_wrp_scales)]
         pyramid_smooth_losses = [l * w for l, w in
                                  zip(pyramid_smooth_losses, self.w_sm_scales)]
 
         warp_loss = sum(pyramid_warp_losses)
-        smooth_loss = self.smooth_w * sum(pyramid_smooth_losses)
+        smooth_loss = self.smooth_args['weighting'] * sum(pyramid_smooth_losses)
         total_loss = warp_loss + smooth_loss
 
         return total_loss, warp_loss, smooth_loss, pyramid_flows[0].abs().mean()

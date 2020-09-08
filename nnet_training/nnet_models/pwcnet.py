@@ -4,120 +4,14 @@ import torch.nn.functional as F
 
 from nnet_training.utilities.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
+from .pwcnet_modules import *
 
 __all__ = ['PWCNet']
 
-def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=True):
-    if isReLU:
-        return nn.Sequential(
-            nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                      dilation=dilation,
-                      padding=((kernel_size - 1) * dilation) // 2, bias=True),
-            nn.LeakyReLU(0.1, inplace=True)
-        )
-    else:
-        return nn.Sequential(
-            nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                      dilation=dilation,
-                      padding=((kernel_size - 1) * dilation) // 2, bias=True)
-        )
-
-
-class FeatureExtractor(nn.Module):
-    def __init__(self, num_chs):
-        super(FeatureExtractor, self).__init__()
-        self.num_chs = num_chs
-        self.convs = nn.ModuleList()
-
-        for l, (ch_in, ch_out) in enumerate(zip(num_chs[:-1], num_chs[1:])):
-            layer = nn.Sequential(
-                conv(ch_in, ch_out, stride=2),
-                conv(ch_out, ch_out)
-            )
-            self.convs.append(layer)
-
-    def __str__(self):
-        return "_FlwExt_1"
-
-    def forward(self, x):
-        feature_pyramid = []
-        for conv in self.convs:
-            x = conv(x)
-            feature_pyramid.append(x)
-
-        return feature_pyramid[::-1]
-
-
-class FlowEstimatorDense(nn.Module):
-    def __init__(self, ch_in):
-        super(FlowEstimatorDense, self).__init__()
-        self.conv1 = conv(ch_in, 128)
-        self.conv2 = conv(ch_in + 128, 128)
-        self.conv3 = conv(ch_in + 256, 96)
-        self.conv4 = conv(ch_in + 352, 64)
-        self.conv5 = conv(ch_in + 416, 32)
-        self.feat_dim = ch_in + 448
-        self.conv_last = conv(ch_in + 448, 2, isReLU=False)
-
-    def __str__(self):
-        return "_FlwEst_1"
-
-    def forward(self, x):
-        x1 = torch.cat([self.conv1(x), x], dim=1)
-        x2 = torch.cat([self.conv2(x1), x1], dim=1)
-        x3 = torch.cat([self.conv3(x2), x2], dim=1)
-        x4 = torch.cat([self.conv4(x3), x3], dim=1)
-        x5 = torch.cat([self.conv5(x4), x4], dim=1)
-        x_out = self.conv_last(x5)
-        return x5, x_out
-
-
-class FlowEstimatorLite(nn.Module):
-    def __init__(self, ch_in):
-        super(FlowEstimatorLite, self).__init__()
-        self.conv1 = conv(ch_in, 128)
-        self.conv2 = conv(128, 128)
-        self.conv3 = conv(128 + 128, 96)
-        self.conv4 = conv(128 + 96, 64)
-        self.conv5 = conv(96 + 64, 32)
-        self.feat_dim = 32
-        self.predict_flow = conv(64 + 32, 2, isReLU=False)
-
-    def __str__(self):
-        return "_FlwEst_2"
-
-    def forward(self, x):
-        x1 = self.conv1(x)
-        x2 = self.conv2(x1)
-        x3 = self.conv3(torch.cat([x1, x2], dim=1))
-        x4 = self.conv4(torch.cat([x2, x3], dim=1))
-        x5 = self.conv5(torch.cat([x3, x4], dim=1))
-        flow = self.predict_flow(torch.cat([x4, x5], dim=1))
-        return x5, flow
-
-
-class ContextNetwork(nn.Module):
-    def __init__(self, ch_in):
-        super(ContextNetwork, self).__init__()
-
-        self.convs = nn.Sequential(
-            conv(ch_in, 128, 3, 1, 1),
-            conv(128, 128, 3, 1, 2),
-            conv(128, 128, 3, 1, 4),
-            conv(128, 96, 3, 1, 8),
-            conv(96, 64, 3, 1, 16),
-            conv(64, 32, 3, 1, 1),
-            conv(32, 2, isReLU=False)
-        )
-
-    def __str__(self):
-        return "_CtxNet_1"
-
-    def forward(self, x):
-        return self.convs(x)
-
-
 class PWCNet(nn.Module):
+    '''
+    PWCNet implementation from ARFlow-Net
+    '''
     def __init__(self, lite=False, upsample=True):
         super(PWCNet, self).__init__()
         self.upsample = upsample
@@ -142,14 +36,14 @@ class PWCNet(nn.Module):
 
         self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
-        self.conv_1x1 = nn.ModuleList([conv(192, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(128, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(96, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(64, 32, kernel_size=1, stride=1, dilation=1),
-                                       conv(32, 32, kernel_size=1, stride=1, dilation=1)])
+        self.conv_1x1 = nn.ModuleList([pwc_conv(192, 32, kernel_size=1, stride=1, dilation=1),
+                                       pwc_conv(128, 32, kernel_size=1, stride=1, dilation=1),
+                                       pwc_conv(96, 32, kernel_size=1, stride=1, dilation=1),
+                                       pwc_conv(64, 32, kernel_size=1, stride=1, dilation=1),
+                                       pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
     def __str__(self):
-        return "pwcnet" + str(self.feature_pyramid_extractor)\
+        return "PWCNet" + str(self.feature_pyramid_extractor)\
             + str(self.flow_estimator) + str(self.context_networks)
 
     def num_parameters(self):

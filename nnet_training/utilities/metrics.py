@@ -5,27 +5,29 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
 import sys
-import h5py
 import multiprocessing
+
+import h5py
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['MetricBaseClass','SegmentationMetric', 'DepthMetric', 'BoundaryBoxMetric', 'ClassificationMetric']
+__all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
+           'BoundaryBoxMetric', 'ClassificationMetric']
 
 class MetricBaseClass(object):
     """
     Provides basic functionality for statistics tracking classes
     """
-    def __init__(self, mode='training', filename=None):
-        assert mode == 'training' or mode == 'validation'
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        assert mode in ['training', 'validation']
         self.mode = mode
         self.metric_data = dict()
 
-        if filename is not None:
-            if filename[-5:] != '.hdf5':
-                filename = filename + '.hdf5'
-            self._path = Path.cwd() / "torch_models" / filename
+        if savefile != "":
+            if savefile[-5:] != '.hdf5':
+                savefile = savefile + '.hdf5'
+            self._path = base_dir / savefile
             if not os.path.isfile(self._path):
                 with h5py.File(self._path, 'a') as hf:
                     hf.create_group('cache')
@@ -36,7 +38,7 @@ class MetricBaseClass(object):
                         del hf['cache']
         else:
             self._path = None
-        
+
     def __len__(self):
         """
         Return Number of Epochs Recorded
@@ -48,7 +50,7 @@ class MetricBaseClass(object):
             if 'cache' in list(hf) and 'training' in list(hf['cache']):
                 n_epochs += len(list(hf['cache/training']))
             return n_epochs
-    
+
     def __del__(self):
         with h5py.File(self._path, 'a') as hf:
             if 'cache' in list(hf):
@@ -57,26 +59,27 @@ class MetricBaseClass(object):
     def save_epoch(self):
         """
         Save Data to new dataset named by epoch name
-        """             
+        """
         if self._path is not None:
             with h5py.File(self._path, 'a') as hf:
                 # Clear any Cached data from previous first into main
                 if 'cache' in list(hf) and len(list(hf['cache'])) > 0:
                     self._flush_to_main()
-                
+
                 if self.mode in list(hf):
                     group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
                 else:
                     group_name = self.mode + '/Epoch_1'
 
                 top_group = hf.create_group(group_name)
-                for metric in self.metric_data.keys():
-                    top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
+                for name, data in self.metric_data.items():
+                    top_group.create_dataset(name, data=np.asarray(data))
 
                 summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
 
-                #   Flush current data as its now in long term storage and we're ready for next dataset
+                # Flush current data as its now in long term
+                # storage and we're ready for next dataset
                 self._reset_metric()
 
         else:
@@ -88,7 +91,7 @@ class MetricBaseClass(object):
         """
         if mode is None:
             mode = self.mode
-        
+
         if self._path is not None:
             with h5py.File(self._path, 'r') as hf:
                 group_name = 'Epoch_' + str(epoch_idx)
@@ -97,14 +100,15 @@ class MetricBaseClass(object):
             return self.metric_data
         else:
             print("No File Specified for Segmentation Metric Manager")
+            return None
 
     def new_epoch(self, mode='training'):
-        assert mode == 'training' or mode == 'validation'
+        assert mode in ['training', 'validation']
 
         # Cache data if it hasn't been saved yet (probably not a best epoch or
         # something, but the next might be, so we want to keep this data)
-        for key in self.metric_data.keys():
-            if len(self.metric_data[key]) > 0:
+        for metric in self.metric_data.values():
+            if len(metric) > 0:
                 self._cache_data()
                 break
 
@@ -114,7 +118,7 @@ class MetricBaseClass(object):
     def plot_epoch_data(self, epoch_idx):
         """
         This plots all the statistics for an epoch
-        """       
+        """   
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Training and Validation Results Epoch' + str(epoch_idx))
 
@@ -122,7 +126,7 @@ class MetricBaseClass(object):
         with h5py.File(self._path, 'r') as hf:
             num_metrics = len(list(hf['training'][group_name]))
             for idx, metric in enumerate(list(hf['training'][group_name])):
-                plt.subplot(1,num_metrics,idx+1)
+                plt.subplot(1, num_metrics, idx+1)
                 plt.plot(hf['training'][group_name][metric][:])
                 plt.plot(hf['validation'][group_name][metric][:])
                 plt.legend(["Training", "Validation"])
@@ -143,7 +147,8 @@ class MetricBaseClass(object):
                     n_cached = len(list(hf['cache/'+self.mode])) + 1
 
                 if self.mode in list(hf):
-                    group_name = 'cache/' + self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + n_cached)
+                    group_name = 'cache/' + self.mode + '/Epoch_' +\
+                        str(len(list(hf[self.mode])) + n_cached)
                 else:
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
 
@@ -175,12 +180,11 @@ class MetricBaseClass(object):
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
         with h5py.File(self._path, 'r') as hf:
-            
             metrics = []
             for metric in list(hf['training/Epoch_1']):
                 if metric != 'Summary':
                     metrics.append(metric)
-            
+
             training_data = np.zeros((len(list(hf['training'])), len(metrics)))
             testing_data = np.zeros((len(list(hf['validation'])), len(metrics)))
 
@@ -190,17 +194,18 @@ class MetricBaseClass(object):
             for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
                 testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
 
-            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
-        
+            print("# Training, ", len(list(hf['training'])),
+                  "\t# Validation", len(list(hf['validation'])))
+
         for idx, metric in enumerate(metrics):
-            plt.subplot(1,len(metrics),idx+1)
-            plt.plot(training_data[:,idx])
-            plt.plot(testing_data[:,idx])
+            plt.subplot(1, len(metrics), idx+1)
+            plt.plot(training_data[:, idx])
+            plt.plot(testing_data[:, idx])
             plt.legend(["Training", "Validation"])
             plt.title(metric + ' over Epochs')
             plt.xlabel('Epoch #')
 
-        plt.show()
+        plt.show(block=False)
 
     def plot_iteration_data(self):
         """
@@ -211,31 +216,32 @@ class MetricBaseClass(object):
 
         with h5py.File(self._path, 'r') as hf:
             training_metrics = {}
-            validation_metrics  = {}
+            validation_metrics = {}
             for metric in list(hf['training/Epoch_1']):
                 if metric != 'Summary':
-                    training_metrics[metric] = np.zeros((1,1))
-                    validation_metrics[metric]  = np.zeros((1,1))
+                    training_metrics[metric] = np.zeros((1, 1))
+                    validation_metrics[metric] = np.zeros((1, 1))
 
             for epoch in list(hf['training']):
                 for metric in list(hf['training/'+epoch]):
                     if metric != 'Summary':
                         training_metrics[metric] = np.append(
-                                training_metrics[metric],
-                                hf['training/'+epoch+'/'+metric][:])
+                            training_metrics[metric],
+                            hf['training/'+epoch+'/'+metric][:])
 
             for epoch in list(hf['validation']):
                 for metric in list(hf['validation/'+epoch]):
                     if metric != 'Summary':
                         validation_metrics[metric] = np.append(
-                                validation_metrics[metric],
-                                hf['validation/'+epoch+'/'+metric][:])
+                            validation_metrics[metric],
+                            hf['validation/'+epoch+'/'+metric][:])
 
-            print("# Training, ", len(list(hf['training'])), "\t# Validation", len(list(hf['validation'])))
-        
+            print("# Training, ", len(list(hf['training'])),
+                  "\t# Validation", len(list(hf['validation'])))
+
         num_metrics = len(training_metrics.keys())
         for idx, metric in enumerate(training_metrics):
-            plt.subplot(1,num_metrics, idx+1)
+            plt.subplot(1, num_metrics, idx+1)
             plt.plot(training_metrics[metric])
             plt.plot(validation_metrics[metric])
             plt.legend(["Training", "Validation"])
@@ -254,7 +260,7 @@ class MetricBaseClass(object):
         @param  main_metric, only main metric\n
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
-        """ 
+        """
         raise NotImplementedError
 
     def max_accuracy(self):
@@ -267,8 +273,8 @@ class SegmentationMetric(MetricBaseClass):
     """
     Accuracy and Loss Staticstics tracking for semantic segmentation networks
     """
-    def __init__(self, num_classes, mode='training', filename=None):
-        super(SegmentationMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, num_classes, savefile: str, base_dir: Path, mode='training'):
+        super(SegmentationMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._n_classes = num_classes
         self._reset_metric()
 
@@ -281,7 +287,7 @@ class SegmentationMetric(MetricBaseClass):
 
         labels = labels.astype('int64') + 1
         preds = np.squeeze(preds.astype('int64') + 1, 1)
-        
+
         rcv_px, send_px = multiprocessing.Pipe(False)
         pxthread = multiprocessing.Process(target=self._pixelwise, args=(preds, labels, send_px))
         rcv_iou, send_iou = multiprocessing.Pipe(False)
@@ -290,9 +296,9 @@ class SegmentationMetric(MetricBaseClass):
         iouthread.start()
         pxthread.join()
         iouthread.join()
-        self.metric_data["Batch_mIoU"].append(rcv_iou.recv())
+        self.metric_data["Batch_IoU"].append(rcv_iou.recv())
         self.metric_data["Batch_PixelAcc"].append(rcv_px.recv())
-        
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
         Returns Accuracy Metrics [pixelwise, mIoU, loss]\n
@@ -300,24 +306,24 @@ class SegmentationMetric(MetricBaseClass):
         @param  main_metric, returns mIoU and not Pixel Accuracy\n
         @param  loss_metric, returns recorded loss\n
         @param  print_only, prints stats and does not return values
-        """ 
+        """
 
         if print_only:
-            PixelAcc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
-            mIoU = np.asarray(self.metric_data["Batch_mIoU"]).mean()
+            pixel_acc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
+            miou = np.asarray(self.metric_data["Batch_IoU"].mean()).mean()
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (PixelAcc, mIoU, loss))
+            print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixel_acc, miou, loss))
         else:
             ret_val = ()
             if main_metric:
-                invariant = np.asarray(self.metric_data["Batch_mIoU"]).mean()
-                ret_val += (invariant,)
+                miou = np.asarray(self.metric_data["Batch_IoU"].mean()).mean()
+                ret_val += (miou,)
                 if loss_metric:
                     loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                     ret_val += (loss,)
             else:
-                for metric in self.metric_data.keys():
-                    mean_data = np.asarray(self.metric_data[metric]).mean()
+                for metric in self.metric_data.values():
+                    mean_data = np.asarray(metric).mean()
                     ret_val += (mean_data,)
             return ret_val
 
@@ -337,7 +343,7 @@ class SegmentationMetric(MetricBaseClass):
                         mIoU = summary_data[1]
                     if summary_data[0] > PixelAcc:
                         PixelAcc = summary_data[0]
-                    
+
         else:
             print("No File Specified for Segmentation Metric Manager")
         if main_metric:
@@ -347,9 +353,9 @@ class SegmentationMetric(MetricBaseClass):
 
     def get_last_batch(self, main_metric=True):
         if main_metric:
-            return self.metric_data["Batch_mIoU"][-1]
+            return self.metric_data["Batch_IoU"][-1].mean()
         else:
-            return self.metric_data["Batch_mIoU"][-1], self.metric_data["Batch_PixelAcc"][-1]
+            return self.metric_data["Batch_IoU"][-1].mean(), self.metric_data["Batch_PixelAcc"][-1]
 
     def _iou(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
@@ -358,16 +364,17 @@ class SegmentationMetric(MetricBaseClass):
 
         # Compute area intersection:
         intersection = prediction * (prediction == target)
-        area_intersection, _ = np.histogram(intersection, bins=self._n_classes, range=(1, self._n_classes))
+        area_intersection, _ = np.histogram(intersection, bins=self._n_classes,
+                                            range=(1, self._n_classes))
 
         # Compute area union:
         area_pred, _ = np.histogram(prediction, bins=self._n_classes, range=(1, self._n_classes))
         area_lab, _ = np.histogram(target, bins=self._n_classes, range=(1, self._n_classes))
         area_union = area_pred + area_lab - area_intersection
-        
-        mIoU = (1.0 * area_intersection / (np.spacing(1) + area_union)).mean()
-        ret_val.send(mIoU)
-    
+
+        iou = 1.0 * area_intersection / (np.spacing(1) + area_union)
+        ret_val.send(iou)
+
     def _pixelwise(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
@@ -375,20 +382,52 @@ class SegmentationMetric(MetricBaseClass):
         total_pixels = np.spacing(1) + np.sum(target > 0)
         pixAcc = correct / total_pixels
         ret_val.send(pixAcc)
-    
+
     def _reset_metric(self):
         self.metric_data = dict(
             Batch_Loss=[],
             Batch_PixelAcc=[],
-            Batch_mIoU=[]
+            Batch_IoU=[]
         )
+
+    def plot_classwise_iou(self):
+        """
+        This plots the iou of each class over all epochs
+        """
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Summary Training and Validation Results')
+
+        with h5py.File(self._path, 'r') as hf:
+            n_classes = hf['training/Epoch_1/Batch_IoU'][:].shape()
+
+            training_data = np.zeros((len(list(hf['training'])), n_classes))
+            testing_data = np.zeros((len(list(hf['validation'])), n_classes))
+
+            for idx, epoch in enumerate(sorted(list(hf['training']), key=lambda x: int(x[6:]))):
+                training_data[idx] = hf['training/'+epoch+'/Batch_IoU'][:]
+
+            for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
+                testing_data[idx] = hf['validation/'+epoch+'/Batch_IoU'][:]
+
+            print("# Training, ", len(list(hf['training'])),
+                  "\t# Validation", len(list(hf['validation'])))
+
+        for idx in training_data.shape(0):
+            plt.subplot(1, n_classes, idx+1)
+            plt.plot(training_data[:, idx])
+            plt.plot(testing_data[:, idx])
+            plt.legend(["Training", "Validation"])
+            plt.title('Class: '+idx+' over Epochs')
+            plt.xlabel('Epoch #')
+
+        plt.show(block=False)
 
 class DepthMetric(MetricBaseClass):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks
     """
-    def __init__(self, mode='training', filename=None):
-        super(DepthMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(DepthMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._reset_metric()
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
@@ -412,10 +451,11 @@ class DepthMetric(MetricBaseClass):
         eqn1 = np.mean(np.square(log_diff))
         eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
         self.metric_data['Batch_Invariant'].append(eqn1 - eqn2)
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
-        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative, rmse linear, rmse log]\n
+        Returns Accuracy Metrics [scale invariant, absolute relative, squared relative,
+        rmse linear, rmse log]\n
         @todo   get a specified epoch instead of only currently loaded one\n
         @param  main_metric, returns scale invariant\n
         @param  loss_metric, returns recorded loss\n
@@ -429,8 +469,9 @@ class DepthMetric(MetricBaseClass):
             rmse_log = np.asarray(self.metric_data["Batch_RMSE_Log"]).mean()
             invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-            print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\tRMSE Log: %.4f\
-                \tScale Invariant: %.4f\tLoss: %.4f\n" % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
+            print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\t\
+                  RMSE Log: %.4f\tScale Invariant: %.4f\tLoss: %.4f\n"
+                  % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
         else:
             ret_val = ()
             if main_metric:
@@ -488,7 +529,7 @@ class DepthMetric(MetricBaseClass):
                 if key != "Batch_Loss":
                     ret_val += (self.metric_data[key][-1],)
             return ret_val
-        
+   
     def _reset_metric(self):
         self.metric_data = dict(
             Batch_Loss = [],
@@ -503,8 +544,8 @@ class OpticFlowMetric(MetricBaseClass):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks
     """
-    def __init__(self, mode='training', filename=None):
-        super(OpticFlowMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(OpticFlowMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         self._reset_metric()
 
     def _add_sample(self, orig_img, seq_img, flow_pred, flow_target, loss=None):
@@ -589,8 +630,8 @@ class OpticFlowMetric(MetricBaseClass):
         )
 
 class BoundaryBoxMetric(MetricBaseClass):
-    def __init__(self, mode='training', filename=None):
-        super(BoundaryBoxMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(BoundaryBoxMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
@@ -606,13 +647,13 @@ class BoundaryBoxMetric(MetricBaseClass):
         raise NotImplementedError
 
 class ClassificationMetric(MetricBaseClass):
-    def __init__(self, mode='training', filename=None):
-        super(ClassificationMetric, self).__init__(mode=mode, filename=filename)
+    def __init__(self, savefile: str, base_dir: Path, mode='training'):
+        super(ClassificationMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
@@ -623,6 +664,6 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "pwcnet_FlwExt_1_FlwEst_1_CtxNet_1_Adam_Recon"
-    metric = MetricBaseClass(filename=filename)
+    filename = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_flow"
+    metric = MetricBaseClass(savefile=filename, base_dir="~/")
     metric.plot_summary_data()

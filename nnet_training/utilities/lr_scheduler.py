@@ -57,15 +57,21 @@ class LRScheduler(object):
         self.offset = offset
         self.power = power
         self.step_factor = step_factor
+        self.learning_rate = 0.0
 
-    def __call__(self, num_update):
+    def __call__(self, num_update: int) -> float:
         self.update(num_update)
         return self.learning_rate
 
-    def get_lr(self):
+    def get_lr(self) -> float:
         return self.learning_rate
 
-    def update(self, num_update):
+    def set_epochs(self, nepochs: int, iters_per_epoch: int):
+        epoch_iters = nepochs * iters_per_epoch
+        if epoch_iters > 0:
+            self.niters = epoch_iters
+
+    def update(self, num_update: int):
         N = self.niters - 1
         T = num_update - self.offset
         T = min(max(0, T), N)

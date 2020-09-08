@@ -1,4 +1,6 @@
 """Custom losses."""
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,9 +8,9 @@ from torch.autograd import Variable
 
 import numpy as np
 
-__all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss', 'FocalLoss2D',
-    'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss', 'ReconstructionLossV1',
-    'ReconstructionLossV2']
+__all__ = ['get_loss_function', 'MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss',
+           'FocalLoss2D', 'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
+           'ReconstructionLossV1', 'ReconstructionLossV2']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -118,44 +120,36 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
 
 class FocalLoss2D(nn.Module):
     """
-    https://github.com/doiken23/focal_segmentation/blob/master/focalloss2d.py
-    OG Source but I've modified a bit
+    Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=0, weight=None, size_average=True, ignore_index=-100):
+    def __init__(self, gamma=2, ignore_index=-100, dynamic_weights=False,
+                 scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 
         self.gamma = gamma
-        self.weight = weight
-        self.size_average = size_average
-        self._ignore_index = ignore_index
+        self.ignore_index = ignore_index
+        self.dynamic_weights = dynamic_weights
+        self.scale_factor = scale_factor
 
-    def forward(self, input, target):
-        if input.dim()>2:
-            input = input.contiguous().view(input.size(0), input.size(1), -1)
-            input = input.transpose(1,2)
-            input = input.contiguous().view(-1, input.size(2)).squeeze()
-        if target.dim()==4:
-            target = target.contiguous().view(target.size(0), target.size(1), -1)
-            target = target.transpose(1,2)
-            target = target.contiguous().view(-1, target.size(2)).squeeze()
-        elif target.dim()==3:
-            target = target.view(-1)
-        else:
-            target = target.view(-1, 1)
+    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        '''
+        Forward implementation that returns focal loss between prediciton and target
+        '''
+        weights = torch.ones(predicted.shape[1]).to(predicted.get_device())
+        if self.dynamic_weights:
+            class_ids, counts = target.unique(return_counts=True)
+            weights[class_ids] = self.scale_factor / \
+                    (self.scale_factor + counts/float(target.nelement()))
 
         # compute the negative likelyhood
-        # weight = Variable(self.weight)
-        logpt = -F.cross_entropy(input, target, ignore_index=self._ignore_index)
-        pt = torch.exp(logpt)
+        ce_loss = F.cross_entropy(predicted, target, ignore_index=self.ignore_index, weight=weights)
 
         # compute the loss
-        loss = -((1-pt)**self.gamma) * logpt
+        focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
 
-        # averaging (or not) loss
-        if self.size_average:
-            return loss.mean()
-        else:
-            return loss.sum()
+        # return the average
+        return focal_loss.mean()
+
 
 class DepthAwareLoss(nn.Module):
     def __init__(self, size_average=True, ignore_index=0):
@@ -194,11 +188,14 @@ class ScaleInvariantError(nn.Module):
         return (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
-    def __init__(self, ignore_index=-1):
+    """
+    Inverse Huber Loss for Depth/Disparity Training
+    """
+    def __init__(self, ignore_index=-1, **kwargs):
         super(InvHuberLoss, self).__init__()
         self.ignore_index = ignore_index
-    
-    def forward(self, pred, target):
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         pred_relu = F.relu(pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - target
         mask = target != self.ignore_index
@@ -256,7 +253,7 @@ class SSIM(nn.Module):
         self.C1 = 0.01 ** 2
         self.C2 = 0.03 ** 2
 
-    def forward(self, x, y):
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         x = self.refl(x)
         y = self.refl(y)
 
@@ -363,16 +360,35 @@ class ReconstructionLossV2(nn.Module):
             loss = abs_diff.mean(1, True)
         return loss.mean()
 
+def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
+    """
+    Returns a dictionary of loss functions given a config
+    """
+    from nnet_training.utilities.UnFlowLoss import unFlowLoss
+
+    loss_fn_dict = {}
+    for loss_fn in loss_config:
+        if loss_fn['function'] == "FocalLoss2D":
+            loss_fn_dict[loss_fn['type']] = FocalLoss2D(**loss_fn.args)
+        elif loss_fn['function'] == "unFlowLoss":
+            loss_fn_dict[loss_fn['type']] = unFlowLoss(**loss_fn.args)
+        elif loss_fn['function'] == "InvHuberLoss":
+            loss_fn_dict[loss_fn['type']] = InvHuberLoss(**loss_fn.args)
+
+    return loss_fn_dict
+
 if __name__ == '__main__':
     import PIL.Image as Image
     import torchvision.transforms
 
-    img1 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
-    img2 = Image.open('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
+    BASE_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
+    transform = torchvision.transforms.ToTensor()
+
+    img1 = Image.open(BASE_DIR+'leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+    img2 = Image.open(BASE_DIR+'leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
     loss_fn = ReconstructionLossV1(1, img1.size[1], img1.size[0])
-    uniform = torch.zeros([1,img1.size[1],img1.size[0],2])
-    
-    transform = torchvision.transforms.ToTensor()
+    uniform = torch.zeros([1, img1.size[1], img1.size[0], 2])
+
     loss = loss_fn(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0))
     print(loss)
