@@ -322,9 +322,8 @@ class SegmentationMetric(MetricBaseClass):
                     loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                     ret_val += (loss,)
             else:
-                for metric, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                    if metric == 'Batch_IoU':
-                        test = np.asarray(data)
+                for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                    if key == 'Batch_IoU':
                         mean_data = np.asarray(data).mean(axis=(0, 1))
                     else:
                         mean_data = np.asarray(data).mean()
@@ -347,8 +346,8 @@ class SegmentationMetric(MetricBaseClass):
             with h5py.File(self._path, 'a') as hf:
                 for epoch in hf['validation']:
                     summary_data = hf['validation/'+epoch+'/Summary'][:]
-                    for idx, (_, data) in enumerate(sorted(cost_func.items(), key=lambda x: x[0])):
-                        data[1] = data[0](data[1], summary_data[idx])
+                    for idx, (key, data) in enumerate(sorted(cost_func.items(), key=lambda x: x[0])):
+                        cost_func[key][1] = data[0](data[1], summary_data[idx])
 
         else:
             print("No File Specified for Segmentation Metric Manager")
@@ -539,7 +538,7 @@ class DepthMetric(MetricBaseClass):
                 if key != "Batch_Loss":
                     ret_val += (data[-1],)
             return ret_val
-   
+
     def _reset_metric(self):
         self.metric_data = dict(
             Batch_Loss = [],
