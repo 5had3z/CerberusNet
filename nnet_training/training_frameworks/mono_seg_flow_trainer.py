@@ -70,19 +70,17 @@ class MonoSegFlowTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['flow']._add_sample(
-                img.cpu().data.numpy(),
-                pred_flow['flow_fw'][0].cpu().data.numpy(),
-                img_seq.cpu().data.numpy(),
-                None,
-                loss=flow_loss.item()
-            )
+            with torch.no_grad():
+                self.metric_loggers['flow']._add_sample(
+                    img, img_seq, pred_flow['flow_fw'][0],
+                    None, loss=flow_loss.item()
+                )
 
-            self.metric_loggers['seg']._add_sample(
-                torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
-                seg_gt.cpu().data.numpy(),
-                loss=seg_loss.item()
-            )
+                self.metric_loggers['seg']._add_sample(
+                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    seg_gt.cpu().data.numpy(),
+                    loss=seg_loss.item()
+                )
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
@@ -110,11 +108,8 @@ class MonoSegFlowTrainer(ModelTrainer):
                 seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
                 self.metric_loggers['flow']._add_sample(
-                    img.cpu().data.numpy(),
-                    pred_flow['flow_fw'][0].cpu().data.numpy(),
-                    img_seq.cpu().data.numpy(),
-                    None,
-                    loss=flow_loss.item()
+                    img, img_seq, pred_flow['flow_fw'][0],
+                    None, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg']._add_sample(

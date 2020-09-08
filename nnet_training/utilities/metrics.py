@@ -12,6 +12,8 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
+from nnet_training.utilities.UnFlowLoss import flow_warp
+
 __all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
 
@@ -566,7 +568,7 @@ class OpticFlowMetric(MetricBaseClass):
             self.metric_data["Batch_Loss"].append(loss)
 
         self.metric_data["Batch_EPE"].append(1)
-        self.metric_data["Batch_SAD"].append(1)
+        self.metric_data["Batch_SAD"].append((flow_warp(orig_img, flow_pred)-seq_img).abs().mean())
 
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """

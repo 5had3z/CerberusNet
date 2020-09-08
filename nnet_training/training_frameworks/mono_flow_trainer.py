@@ -73,14 +73,12 @@ class MonoFlowTrainer(ModelTrainer):
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
-
-            self.metric_loggers['flow']._add_sample(
-                img.cpu().data.numpy(),
-                pred_flow['flow_fw'][0].cpu().data.numpy(),
-                img_seq.cpu().data.numpy(),
-                None,
-                loss=loss.item()
-            )
+            
+            with torch.no_grad():
+                self.metric_loggers['flow']._add_sample(
+                    img, img_seq, pred_flow['flow_fw'][0].detach(),
+                    None, loss=loss.item()
+                )
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
@@ -107,11 +105,8 @@ class MonoFlowTrainer(ModelTrainer):
                 loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
 
                 self.metric_loggers['flow']._add_sample(
-                    img.cpu().data.numpy(),
-                    pred_flow['flow_fw'][0].cpu().data.numpy(),
-                    img_seq.cpu().data.numpy(),
-                    None,
-                    loss=loss.item()
+                    img, img_seq, pred_flow['flow_fw'][0],
+                    None, loss=loss.item()
                 )
 
                 if not batch_idx % 10:
