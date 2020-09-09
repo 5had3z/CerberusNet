@@ -230,8 +230,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def _sync_transform(self, epoch_data):
         # random mirror
         if random.random() < 0.5:
-            for item in epoch_data.values():
-                item = item.transpose(Image.FLIP_LEFT_RIGHT)
+            for key, data in epoch_data.items():
+                epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
 
         if hasattr(self, 'crop_fraction'):
             # random crop
@@ -240,36 +240,36 @@ class CityScapesDataset(torch.utils.data.Dataset):
             crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
             crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
 
-            for item in epoch_data.values():
-                item = item.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+            for key, data in epoch_data.items():
+                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
         if hasattr(self, 'rand_rot'):
             angle = random.uniform(0, self.rand_rot)
-            for key in epoch_data.keys():
+            for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                    item = torchvision.transforms.functional.rotate(
-                        epoch_data[key], angle, resample=Image.BILINEAR)
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.BILINEAR)
                 else:
-                    item = torchvision.transforms.functional.rotate(
-                        epoch_data[key], angle, resample=Image.NEAREST, fill=-1)
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.NEAREST, fill=-1)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
-            for key in epoch_data.keys():
+            for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.adjust_brightness(
-                        epoch_data[key], brightness_scale)
+                        data, brightness_scale)
 
-        for key in epoch_data.keys():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:                  
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.BILINEAR)
-                epoch_data[key] = self._img_transform(epoch_data[key])
+        for key, data in epoch_data.items():
+            if key in ["l_img", "r_img", "l_seq", "r_seq"]:                
+                data = data.resize(self.output_size, Image.BILINEAR)
+                epoch_data[key] = self._img_transform(data)
             elif key == "seg":
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
-                epoch_data[key] = self._seg_transform(epoch_data[key])
+                data = data.resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = self._seg_transform(data)
             elif key == "disparity":
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
-                epoch_data[key] = self._depth_transform(epoch_data[key])
+                data = data.resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = self._depth_transform(data)
 
     def _class_to_index(self, seg):
         values = np.unique(seg)
