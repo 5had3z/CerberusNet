@@ -233,15 +233,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
             for key, data in epoch_data.items():
                 epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
 
-        if hasattr(self, 'crop_fraction'):
-            # random crop
-            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
-            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
-            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
-            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
-
+        if hasattr(self, 'brightness'):
+            brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
             for key, data in epoch_data.items():
-                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                    epoch_data[key] = torchvision.transforms.functional.adjust_brightness(
+                        data, brightness_scale)
 
         if hasattr(self, 'rand_rot'):
             angle = random.uniform(0, self.rand_rot)
@@ -253,15 +250,18 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
 
-        if hasattr(self, 'brightness'):
-            brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
+        if hasattr(self, 'crop_fraction'):
+            # random crop
+            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
+            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
+            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
+            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
+
             for key, data in epoch_data.items():
-                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                    epoch_data[key] = torchvision.transforms.functional.adjust_brightness(
-                        data, brightness_scale)
+                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
         for key, data in epoch_data.items():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:                
+            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                 data = data.resize(self.output_size, Image.BILINEAR)
                 epoch_data[key] = self._img_transform(data)
             elif key == "seg":
@@ -338,7 +338,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
-        'Validation' : CityScapesDataset(validation_dirs, **dataset_config.augmentations)
+        'Validation' : CityScapesDataset(validation_dirs,
+                                         output_size=dataset_config.augmentations.output_size)
     }
 
     dataloaders = {
