@@ -18,7 +18,6 @@ import torchvision
 from PIL import Image
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 
@@ -318,26 +317,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def json_to_pose(self, json_path):
         raise NotImplementedError
 
-def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
-    num_images = 0
-    for file in os.listdir(directory):
-        num_images += file.endswith(IMG_EXT)
-
-    print("Number of Images:\t", num_images)
-    image_ids = list(range(num_images))
-    random.shuffle(image_ids)
-
-    ratio_sum = train_ratio + val_ratio + test_ratio
-    n_train = int(num_images*train_ratio/ratio_sum)
-    n_val = int(num_images*val_ratio/ratio_sum)
-    # n_test = int(num_images*test_ratio/ratio_sum) #This is implicit anyway
-
-    train_ids = image_ids[0:n_train]
-    val_ids = image_ids[n_train+1:n_train+n_val]
-    test_ids = image_ids[n_train+n_val:-1]
-
-    return train_ids, val_ids, test_ids
-
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     """
     Returns a cityscapes dataset given a config
@@ -376,7 +355,7 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
             drop_last=dataset_config.drop_last
-        ),
+        )
     }
 
     return dataloaders
@@ -429,6 +408,8 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
     print("success copying: ", subsets.keys())
 
 def some_test_idk():
+    import matplotlib.pyplot as plt
+
     print("Testing Folder Traversal and Image Extraction!")
 
     HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'

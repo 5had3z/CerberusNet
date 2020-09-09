@@ -572,7 +572,8 @@ class OpticFlowMetric(MetricBaseClass):
         else:
             self.metric_data["Batch_EPE"].append(1)
 
-        self.metric_data["Batch_SAD"].append((flow_warp(orig_img, flow_pred)-seq_img).abs().mean())
+        self.metric_data["Batch_SAD"].append(
+            (flow_warp(orig_img, flow_pred)-seq_img).abs().mean().cpu().data.numpy())
 
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         """
