@@ -2,8 +2,8 @@
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
-        "batch_size" : 8,
-        "shuffle" : true,
+        "batch_size" : 5,
+        "shuffle" : false,
         "drop_last" : true,
         "augmentations" : {
             "crop_fraction" : 1.5,

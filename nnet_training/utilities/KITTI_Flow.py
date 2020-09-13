@@ -9,6 +9,7 @@ import re
 import random
 import json
 import multiprocessing
+import cv2
 from shutil import copy
 from pathlib import Path
 from typing import Dict, List
@@ -19,7 +20,9 @@ from PIL import Image
 
 import numpy as np
 
-__all__ = ['KITTIFlowDataset', 'get_kitti_dataset']
+from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
+
+__all__ = ['Kitti2015Dataset', 'get_kitti_dataset']
 
 IMG_EXT = '.png'
 
@@ -165,14 +168,12 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         if hasattr(self, 'r_seq'):
             epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
         if hasattr(self, 'flow'):
-            epoch_data["flow"] = Image.open(self.flow[idx])
+            raw_data = cv2.imread(self.flow[idx], cv2.IMREAD_UNCHANGED)
+            epoch_data["flow_x"] = Image.fromarray(np.array(raw_data[:, :, 2]))
+            epoch_data["flow_y"] = Image.fromarray(np.array(raw_data[:, :, 1]))
+            epoch_data["flow_b"] = Image.fromarray(np.array(raw_data[:, :, 0]))
 
         self._sync_transform(epoch_data)
-
-        #   Transform images to tensors
-        for key in epoch_data.keys():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                epoch_data[key] = torchvision.transforms.functional.to_tensor(epoch_data[key])
 
         return epoch_data
 
@@ -212,10 +213,42 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:                
                 data = data.resize(self.output_size, Image.BILINEAR)
+                epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
             elif key == "seg":
                 data = data.resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = torch.LongTensor(np.array(data).astype('int32'))
             elif key == "disparity":
                 raise NotImplementedError
+
+        if all(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
+            self._flow_transform(epoch_data)
+        elif any(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
+            raise UserWarning("Partially missing flow data, need x, y and bit mask")
+
+    def _depth_transform(self, disparity):
+        disparity = np.array(disparity).astype('float32') / 256.0
+        disparity[disparity == 0] = -1
+        return torch.FloatTensor(disparity.astype('float32'))
+
+    def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
+        # Resize to appropriate size first
+        bitmask = epoch_data['flow_b'].resize(self.output_size, Image.NEAREST)
+        flow_x = epoch_data['flow_x'].resize(self.output_size, Image.NEAREST)
+        flow_y = epoch_data['flow_y'].resize(self.output_size, Image.NEAREST)
+
+        # Apply transform indicated by the devkit including ignore mask
+        flow_out_x = (np.array(flow_x).astype('float32') - 2**15) / 64.0
+        flow_out_x[bitmask == 0] = -1
+        flow_out_y = (np.array(flow_y).astype('float32') - 2**15) / 64.0
+        flow_out_y[bitmask == 0] = -1
+
+        for key in ["flow_x", "flow_y", "flow_b"]:
+            del epoch_data[key]
+
+        epoch_data["flow"] = torch.stack([torch.FloatTensor(flow_out_x), torch.FloatTensor(flow_out_y)])
+
+    def _seg_transform(self, segmentaiton):
+        raise NotImplementedError
 
 def id_vec_generator(train_ratio, directory):
     """
@@ -258,7 +291,7 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
                                         id_vector=train_ids),
         'Validation' : Kitti2015Dataset(dataset_config.rootdir,
                                         dataset_config.objectives,
-                                        **dataset_config.augmentations,
+                                        output_size=dataset_config.augmentations.output_size,
                                         id_vector=val_ids)
     }
 
@@ -286,11 +319,39 @@ def test_kitti_loading():
     Get kitti dataset for testing
     """
     from easydict import EasyDict
+    import matplotlib.pyplot as plt
 
     with open("configs/Kitti_test.json") as f:
         cfg = EasyDict(json.load(f))
 
-    return get_kitti_dataset(cfg)
+    dataloaders = get_kitti_dataset(cfg['dataset'])
+
+    data = next(iter(dataloaders['Validation']))
+    left     = data['l_img']
+    seq_left = data['l_seq']
+    seg_gt   = data['seg']
+    flow_gt  = data['flow']
+
+    for i in range(dataloaders['Validation'].batch_size):
+        plt.subplot(2, 2, 1)
+        plt.imshow(np.moveaxis(left[i, 0:3, :, :].numpy(), 0, 2))
+        plt.xlabel("Base Image")
+
+        plt.subplot(2, 2, 2)
+        plt.imshow(np.moveaxis(seq_left[i, :, :].numpy(), 0, 2))
+        plt.xlabel("Sequential Image")
+
+        plt.subplot(2, 2, 3)
+        plt.imshow(get_color_pallete(seg_gt.numpy()[i, :, :]))
+        plt.xlabel("Ground Truth Segmentation")
+
+        vis_flow = flow_to_image(flow_gt[i].numpy().transpose([1, 2, 0]))
+
+        plt.subplot(2, 2, 4)
+        plt.imshow(vis_flow)
+        plt.xlabel("Ground Truth Flow")
+
+        plt.show()
 
 if __name__ == "__main__":
     test_kitti_loading()

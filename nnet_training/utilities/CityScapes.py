@@ -197,9 +197,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
         Returns relevant training data as a dict
         @output l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose
         '''
-        epoch_data = {}
         # Read image and labels
-        epoch_data["l_img"] = Image.open(self.l_img[idx]).convert('RGB')
+        epoch_data = {"l_img" : Image.open(self.l_img[idx]).convert('RGB')}
 
         if hasattr(self, 'r_img'):
             epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
@@ -213,11 +212,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
             epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
 
         self._sync_transform(epoch_data)
-
-        #   Transform images to tensors
-        for key in epoch_data.keys():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                epoch_data[key] = torchvision.transforms.functional.to_tensor(epoch_data[key])
 
         if hasattr(self, 'cam'):
             epoch_data["cam"] = self.json_to_intrinsics(self.cam[idx])
@@ -279,11 +273,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return self._key[index].reshape(seg.shape)
 
     def _img_transform(self, img):
-        return np.array(img)
+        return torchvision.transforms.functional.to_tensor(img)
 
     def _seg_transform(self, seg):
         target = self._class_to_index(np.array(seg).astype('int32'))
-        return torch.LongTensor(np.array(target).astype('int32'))
+        return torch.LongTensor(target.astype('int32'))
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
@@ -296,7 +290,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             disparity[-bottom_clip:-1, :] = -1    #bottom
             disparity[:, :side_clip]      = -1    #lhs
             disparity[:, -side_clip:-1]   = -1    #rhs
-        return  torch.FloatTensor(disparity.astype('float32'))
+        return torch.FloatTensor(disparity.astype('float32'))
 
     def json_to_intrinsics(self, json_path):
         with open(json_path) as json_file:
