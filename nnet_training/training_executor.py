@@ -11,6 +11,7 @@ from easydict import EasyDict
 import torch
 from nnet_training.nnet_models import get_model
 
+from nnet_training.utilities.KITTI import get_kitti_dataset
 from nnet_training.utilities.CityScapes import get_cityscapse_dataset
 from nnet_training.utilities.loss_functions import get_loss_function
 from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
@@ -21,7 +22,13 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     Returns initialised training framework class
     """
 
-    datasets = get_cityscapse_dataset(config_json.dataset)
+    if config_json.dataset.type == "Kitti":
+        datasets = get_kitti_dataset(config_json.dataset)
+    elif config_json.dataset.type == "Cityscapes":
+        datasets = get_cityscapse_dataset(config_json.dataset)
+    else:
+        raise NotImplementedError(config_json.dataset.type)
+
     model = get_model(config_json.model)
 
     loss_fns = get_loss_function(config_json.loss_functions)
@@ -48,7 +55,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/MonoSF_gauss.json')
+    parser.add_argument('-c', '--config', default='configs/Kitti_test.json')
     args = parser.parse_args()
 
     with open(args.config) as f:

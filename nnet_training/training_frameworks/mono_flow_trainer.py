@@ -65,6 +65,12 @@ class MonoFlowTrainer(ModelTrainer):
             # img_pyr     = self.build_pyramid(img)
             # img_seq_pyr = self.build_pyramid(img_seq)
 
+            if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                flow_gt = {"flow": data['flow'].to(self._device),
+                           "flow_mask": data['flow_mask'].to(self._device)}
+            else:
+                flow_gt = None
+
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             pred_flow = self._model(img, img_seq)
@@ -77,7 +83,7 @@ class MonoFlowTrainer(ModelTrainer):
             with torch.no_grad():
                 self.metric_loggers['flow']._add_sample(
                     img, img_seq, pred_flow['flow_fw'][0].detach(),
-                    None, loss=loss.item()
+                    flow_gt, loss=loss.item()
                 )
 
             if not batch_idx % 10:
@@ -99,14 +105,20 @@ class MonoFlowTrainer(ModelTrainer):
                 img         = data['l_img'].to(self._device)
                 img_seq     = data['l_seq'].to(self._device)
 
-                pred_flow   = self._model(img, img_seq)
+                if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                    flow_gt = {"flow": data['flow'].to(self._device),
+                               "flow_mask": data['flow_mask'].to(self._device)}
+                else:
+                    flow_gt = None
+
+                pred_flow = self._model(img, img_seq)
 
                 # Caculate the loss and accuracy for the predictions
                 loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
 
                 self.metric_loggers['flow']._add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
-                    None, loss=loss.item()
+                    flow_gt, loss=loss.item()
                 )
 
                 if not batch_idx % 10:

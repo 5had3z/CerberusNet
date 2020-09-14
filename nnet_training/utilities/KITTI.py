@@ -206,6 +206,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.BILINEAR)
+                elif key == "flow_b":
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                            data, angle, resample=Image.NEAREST, fill=0)
                 else:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)

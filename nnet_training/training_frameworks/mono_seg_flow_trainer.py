@@ -58,6 +58,12 @@ class MonoSegFlowTrainer(ModelTrainer):
             img_seq = data['l_seq'].to(self._device)
             seg_gt  = data['seg'].to(self._device)
 
+            if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                flow_gt = {"flow": data['flow'].to(self._device),
+                           "flow_mask": data['flow_mask'].to(self._device)}
+            else:
+                flow_gt = None
+
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             pred_flow, seg_pred = self._model(img, img_seq)
@@ -73,7 +79,7 @@ class MonoSegFlowTrainer(ModelTrainer):
             with torch.no_grad():
                 self.metric_loggers['flow']._add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
-                    None, loss=flow_loss.item()
+                    flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg']._add_sample(
@@ -102,6 +108,12 @@ class MonoSegFlowTrainer(ModelTrainer):
                 img_seq = data['l_seq'].to(self._device)
                 seg_gt  = data['seg'].to(self._device)
 
+                if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                    flow_gt = {"flow": data['flow'].to(self._device),
+                               "flow_mask": data['flow_mask'].to(self._device)}
+                else:
+                    flow_gt = None
+
                 # Caculate the loss and accuracy for the predictions
                 pred_flow, seg_pred = self._model(img, img_seq)
                 flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
@@ -109,7 +121,7 @@ class MonoSegFlowTrainer(ModelTrainer):
 
                 self.metric_loggers['flow']._add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
-                    None, loss=flow_loss.item()
+                    flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg']._add_sample(

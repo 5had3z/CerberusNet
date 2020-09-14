@@ -6,10 +6,10 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import os
 import sys
 import multiprocessing
+from pathlib import Path
 
 import h5py
 import numpy as np
-from pathlib import Path
 import matplotlib.pyplot as plt
 
 from nnet_training.utilities.UnFlowLoss import flow_warp
@@ -31,13 +31,13 @@ class MetricBaseClass(object):
                 savefile = savefile + '.hdf5'
             self._path = base_dir / savefile
             if not os.path.isfile(self._path):
-                with h5py.File(self._path, 'a') as hf:
-                    hf.create_group('cache')
+                with h5py.File(self._path, 'a') as hfile:
+                    hfile.create_group('cache')
                     print("Training Statitsics created at ", self._path)
             else:
-                with h5py.File(self._path, 'a') as hf:
-                    if 'cache' in list(hf):
-                        del hf['cache']
+                with h5py.File(self._path, 'a') as hfile:
+                    if 'cache' in list(hfile):
+                        del hfile['cache']
         else:
             self._path = None
 
@@ -45,35 +45,35 @@ class MetricBaseClass(object):
         """
         Return Number of Epochs Recorded
         """
-        with h5py.File(self._path, 'r') as hf:
+        with h5py.File(self._path, 'r') as hfile:
             n_epochs = 0
-            if 'training' in list(hf):
-                n_epochs += len(list(hf['training']))
-            if 'cache' in list(hf) and 'training' in list(hf['cache']):
-                n_epochs += len(list(hf['cache/training']))
+            if 'training' in list(hfile):
+                n_epochs += len(list(hfile['training']))
+            if 'cache' in list(hfile) and 'training' in list(hfile['cache']):
+                n_epochs += len(list(hfile['cache/training']))
             return n_epochs
 
     def __del__(self):
-        with h5py.File(self._path, 'a') as hf:
-            if 'cache' in list(hf):
-                del hf['cache']
+        with h5py.File(self._path, 'a') as hfile:
+            if 'cache' in list(hfile):
+                del hfile['cache']
 
     def save_epoch(self):
         """
         Save Data to new dataset named by epoch name
         """
         if self._path is not None:
-            with h5py.File(self._path, 'a') as hf:
+            with h5py.File(self._path, 'a') as hfile:
                 # Clear any Cached data from previous first into main
-                if 'cache' in list(hf) and len(list(hf['cache'])) > 0:
+                if 'cache' in list(hfile) and len(list(hfile['cache'])) > 0:
                     self._flush_to_main()
 
-                if self.mode in list(hf):
-                    group_name = self.mode + '/Epoch_' + str(len(list(hf[self.mode])) + 1)
+                if self.mode in list(hfile):
+                    group_name = self.mode + '/Epoch_' + str(len(list(hfile[self.mode])) + 1)
                 else:
                     group_name = self.mode + '/Epoch_1'
 
-                top_group = hf.create_group(group_name)
+                top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
                     top_group.create_dataset(name, data=np.asarray(data))
 
@@ -95,16 +95,19 @@ class MetricBaseClass(object):
             mode = self.mode
 
         if self._path is not None:
-            with h5py.File(self._path, 'r') as hf:
+            with h5py.File(self._path, 'r') as hfile:
                 group_name = 'Epoch_' + str(epoch_idx)
-                for metric in list(hf[mode][group_name]):
-                    self.metric_data[metric] = hf[mode][group_name][metric][:]
+                for metric in list(hfile[mode][group_name]):
+                    self.metric_data[metric] = hfile[mode][group_name][metric][:]
             return self.metric_data
-        else:
-            print("No File Specified for Segmentation Metric Manager")
-            return None
+
+        print("No File Specified for Segmentation Metric Manager")
+        return None
 
     def new_epoch(self, mode='training'):
+        """
+        Caches any data that hasn't been saved and resets metrics
+        """
         assert mode in ['training', 'validation']
 
         # Cache data if it hasn't been saved yet (probably not a best epoch or
@@ -120,17 +123,17 @@ class MetricBaseClass(object):
     def plot_epoch_data(self, epoch_idx):
         """
         This plots all the statistics for an epoch
-        """   
+        """
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Training and Validation Results Epoch' + str(epoch_idx))
 
         group_name = 'Epoch_' + str(epoch_idx)
-        with h5py.File(self._path, 'r') as hf:
-            num_metrics = len(list(hf['training'][group_name]))
-            for idx, metric in enumerate(list(hf['training'][group_name])):
+        with h5py.File(self._path, 'r') as hfile:
+            num_metrics = len(list(hfile['training'][group_name]))
+            for idx, metric in enumerate(list(hfile['training'][group_name])):
                 plt.subplot(1, num_metrics, idx+1)
-                plt.plot(hf['training'][group_name][metric][:])
-                plt.plot(hf['validation'][group_name][metric][:])
+                plt.plot(hfile['training'][group_name][metric][:])
+                plt.plot(hfile['validation'][group_name][metric][:])
                 plt.legend(["Training", "Validation"])
                 plt.title('Batch ' + str(metric) + ' over Epochs')
                 plt.ylabel(str(metric))
@@ -143,19 +146,19 @@ class MetricBaseClass(object):
         Moves data to temporary location to be permanently saved or deleted later
         """
         if self._path is not None:
-            with h5py.File(self._path, 'a') as hf:
+            with h5py.File(self._path, 'a') as hfile:
                 n_cached = 1
-                if 'cache' in list(hf) and self.mode in list(hf['cache']):
-                    n_cached = len(list(hf['cache/'+self.mode])) + 1
+                if 'cache' in list(hfile) and self.mode in list(hfile['cache']):
+                    n_cached = len(list(hfile['cache/'+self.mode])) + 1
 
-                if self.mode in list(hf):
+                if self.mode in list(hfile):
                     group_name = 'cache/' + self.mode + '/Epoch_' +\
-                        str(len(list(hf[self.mode])) + n_cached)
+                        str(len(list(hfile[self.mode])) + n_cached)
                 else:
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
 
-                top_group = hf.create_group(group_name)
-                for metric in self.metric_data.keys():
+                top_group = hfile.create_group(group_name)
+                for metric in self.metric_data:
                     top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
 
                 summary_stats = np.asarray(self._get_epoch_statistics(main_metric=False))
@@ -168,11 +171,11 @@ class MetricBaseClass(object):
         """
         Moves data from cache to main storage area
         """
-        with h5py.File(self._path, 'a') as hf:
-            for mode in list(hf['cache']):
-                for epoch in list(hf['cache/'+mode]):
-                    hf.copy('cache/'+mode+'/'+epoch, mode+'/'+epoch)
-                    del hf['cache/'+mode+'/'+epoch]
+        with h5py.File(self._path, 'a') as hfile:
+            for mode in list(hfile['cache']):
+                for epoch in list(hfile['cache/'+mode]):
+                    hfile.copy('cache/'+mode+'/'+epoch, mode+'/'+epoch)
+                    del hfile['cache/'+mode+'/'+epoch]
 
     def plot_summary_data(self):
         """
@@ -181,23 +184,24 @@ class MetricBaseClass(object):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        with h5py.File(self._path, 'r') as hf:
+        with h5py.File(self._path, 'r') as hfile:
             metrics = []
-            for metric in list(hf['training/Epoch_1']):
+            for metric in list(hfile['training/Epoch_1']):
                 if metric != 'Summary':
                     metrics.append(metric)
 
-            training_data = np.zeros((len(list(hf['training'])), len(metrics)))
-            testing_data = np.zeros((len(list(hf['validation'])), len(metrics)))
+            training_data = np.zeros((len(list(hfile['training'])), len(metrics)))
+            testing_data = np.zeros((len(list(hfile['validation'])), len(metrics)))
 
-            for idx, epoch in enumerate(sorted(list(hf['training']), key=lambda x: int(x[6:]))):
-                training_data[idx] = hf['training/'+epoch+'/Summary'][:]
+            sort_func = lambda x: int(x[6:])
+            for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_func)):
+                training_data[idx] = hfile['training/'+epoch+'/Summary'][:]
 
-            for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
-                testing_data[idx] = hf['validation/'+epoch+'/Summary'][:]
+            for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_func)):
+                testing_data[idx] = hfile['validation/'+epoch+'/Summary'][:]
 
-            print("# Training, ", len(list(hf['training'])),
-                  "\t# Validation", len(list(hf['validation'])))
+            print("# Training, ", len(list(hfile['training'])),
+                  "\t# Validation", len(list(hfile['validation'])))
 
         for idx, metric in enumerate(metrics):
             plt.subplot(1, len(metrics), idx+1)
@@ -216,30 +220,30 @@ class MetricBaseClass(object):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Iteration Training and Validation Results')
 
-        with h5py.File(self._path, 'r') as hf:
+        with h5py.File(self._path, 'r') as hfile:
             training_metrics = {}
             validation_metrics = {}
-            for metric in list(hf['training/Epoch_1']):
+            for metric in list(hfile['training/Epoch_1']):
                 if metric != 'Summary':
                     training_metrics[metric] = np.zeros((1, 1))
                     validation_metrics[metric] = np.zeros((1, 1))
 
-            for epoch in list(hf['training']):
-                for metric in list(hf['training/'+epoch]):
+            for epoch in list(hfile['training']):
+                for metric in list(hfile['training/'+epoch]):
                     if metric != 'Summary':
                         training_metrics[metric] = np.append(
                             training_metrics[metric],
-                            hf['training/'+epoch+'/'+metric][:])
+                            hfile['training/'+epoch+'/'+metric][:])
 
-            for epoch in list(hf['validation']):
-                for metric in list(hf['validation/'+epoch]):
+            for epoch in list(hfile['validation']):
+                for metric in list(hfile['validation/'+epoch]):
                     if metric != 'Summary':
                         validation_metrics[metric] = np.append(
                             validation_metrics[metric],
-                            hf['validation/'+epoch+'/'+metric][:])
+                            hfile['validation/'+epoch+'/'+metric][:])
 
-            print("# Training, ", len(list(hf['training'])),
-                  "\t# Validation", len(list(hf['validation'])))
+            print("# Training, ", len(list(hfile['training'])),
+                  "\t# Validation", len(list(hfile['validation'])))
 
         num_metrics = len(training_metrics.keys())
         for idx, metric in enumerate(training_metrics):
@@ -265,10 +269,16 @@ class MetricBaseClass(object):
         """
         raise NotImplementedError
 
-    def max_accuracy(self):
+    def max_accuracy(self, main_metric=True):
+        """
+        Return the max accuracy from all epochs
+        """
         raise NotImplementedError
 
-    def get_last_batch(self):
+    def get_last_batch(self, main_metric=True):
+        """
+        Return the data from the last batch
+        """
         raise NotImplementedError
 
 class SegmentationMetric(MetricBaseClass):
@@ -287,8 +297,8 @@ class SegmentationMetric(MetricBaseClass):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
 
-        labels = labels.astype('int64') + 1
-        preds = np.squeeze(preds.astype('int64') + 1, 1)
+        labels = labels.astype('int32') + 1
+        preds = np.squeeze(preds.astype('int32') + 1, 1)
 
         rcv_px, send_px = multiprocessing.Pipe(False)
         pxthread = multiprocessing.Process(target=self._pixelwise, args=(preds, labels, send_px))
@@ -315,22 +325,23 @@ class SegmentationMetric(MetricBaseClass):
             miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
             print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixel_acc, miou, loss))
+            return None
+
+        ret_val = ()
+        if main_metric:
+            miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
+            ret_val += (miou,)
+            if loss_metric:
+                loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+                ret_val += (loss,)
         else:
-            ret_val = ()
-            if main_metric:
-                miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
-                ret_val += (miou,)
-                if loss_metric:
-                    loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-                    ret_val += (loss,)
-            else:
-                for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                    if key == 'Batch_IoU':
-                        mean_data = np.asarray(data).mean(axis=(0, 1))
-                    else:
-                        mean_data = np.asarray(data).mean()
-                    ret_val += (mean_data,)
-            return ret_val
+            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                if key == 'Batch_IoU':
+                    mean_data = np.asarray(data).mean(axis=(0, 1))
+                else:
+                    mean_data = np.asarray(data).mean()
+                ret_val += (mean_data,)
+        return ret_val
 
     def max_accuracy(self, main_metric=True):
         """
@@ -345,28 +356,30 @@ class SegmentationMetric(MetricBaseClass):
         }
 
         if self._path is not None:
-            with h5py.File(self._path, 'a') as hf:
-                for epoch in hf['validation']:
-                    summary_data = hf['validation/'+epoch+'/Summary'][:]
-                    for idx, (key, data) in enumerate(sorted(cost_func.items(), key=lambda x: x[0])):
+            with h5py.File(self._path, 'a') as hfile:
+                for epoch in hfile['validation']:
+                    summary_data = hfile['validation/'+epoch+'/Summary'][:]
+
+                    sort_lmbda = lambda x: x[0]
+                    for idx, (key, data) in enumerate(sorted(cost_func.items(), key=sort_lmbda)):
                         cost_func[key][1] = data[0](data[1], summary_data[idx])
 
         else:
             print("No File Specified for Segmentation Metric Manager")
         if main_metric:
             return cost_func["Batch_IoU"][1]
-        else:
-            return cost_func["Batch_PixelAcc"][1], cost_func["Batch_IoU"][1]
+
+        return cost_func["Batch_PixelAcc"][1], cost_func["Batch_IoU"][1]
 
     def get_last_batch(self, main_metric=True):
         if main_metric:
             return self.metric_data["Batch_IoU"][-1].mean()
-        else:
-            ret_val = ()
-            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                if key != "Batch_Loss":
-                    ret_val += (data[-1],)
-            return ret_val
+
+        ret_val = ()
+        for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+            if key != "Batch_Loss":
+                ret_val += (data[-1],)
+        return ret_val
 
     def _iou(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
@@ -386,13 +399,14 @@ class SegmentationMetric(MetricBaseClass):
         iou = 1.0 * area_intersection / (np.spacing(1) + area_union)
         ret_val.send(iou)
 
-    def _pixelwise(self, prediction, target, ret_val):
+    @staticmethod
+    def _pixelwise(prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
         correct = 1.0 * np.sum((prediction == target) * (target > 0))
         total_pixels = np.spacing(1) + np.sum(target > 0)
-        pixAcc = correct / total_pixels
-        ret_val.send(pixAcc)
+        pix_acc = correct / total_pixels
+        ret_val.send(pix_acc)
 
     def _reset_metric(self):
         self.metric_data = dict(
@@ -408,20 +422,21 @@ class SegmentationMetric(MetricBaseClass):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        with h5py.File(self._path, 'r') as hf:
-            n_classes = hf['training/Epoch_1/Batch_IoU'][:].shape()
+        with h5py.File(self._path, 'r') as hfile:
+            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape()
 
-            training_data = np.zeros((len(list(hf['training'])), n_classes))
-            testing_data = np.zeros((len(list(hf['validation'])), n_classes))
+            training_data = np.zeros((len(list(hfile['training'])), n_classes))
+            testing_data = np.zeros((len(list(hfile['validation'])), n_classes))
 
-            for idx, epoch in enumerate(sorted(list(hf['training']), key=lambda x: int(x[6:]))):
-                training_data[idx] = hf['training/'+epoch+'/Batch_IoU'][:]
+            sort_lmbda = lambda x: int(x[6:])
+            for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
+                training_data[idx] = hfile['training/'+epoch+'/Batch_IoU'][:]
 
-            for idx, epoch in enumerate(sorted(list(hf['validation']), key=lambda x: int(x[6:]))):
-                testing_data[idx] = hf['validation/'+epoch+'/Batch_IoU'][:]
+            for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
+                testing_data[idx] = hfile['validation/'+epoch+'/Batch_IoU'][:]
 
-            print("# Training, ", len(list(hf['training'])),
-                  "\t# Validation", len(list(hf['validation'])))
+            print("# Training, ", len(list(hfile['training'])),
+                  "\t# Validation", len(list(hfile['validation'])))
 
         for idx in training_data.shape(0):
             plt.subplot(1, n_classes, idx+1)
@@ -454,10 +469,17 @@ class DepthMetric(MetricBaseClass):
         squared_diff = np.square(difference)
         log_diff = np.log(pred_depth) - np.log(gt_depth)
 
-        self.metric_data['Batch_Absolute_Relative'].append(np.mean(np.absolute(difference)/gt_depth))
-        self.metric_data['Batch_Squared_Relative'].append(np.mean(squared_diff/gt_depth))
-        self.metric_data['Batch_RMSE_Linear'].append(np.sqrt(np.mean(squared_diff)))
-        self.metric_data['Batch_RMSE_Log'].append(np.sqrt(np.mean(np.square(log_diff))))
+        self.metric_data['Batch_Absolute_Relative'].append(
+            np.mean(np.absolute(difference)/gt_depth))
+
+        self.metric_data['Batch_Squared_Relative'].append(
+            np.mean(squared_diff/gt_depth))
+
+        self.metric_data['Batch_RMSE_Linear'].append(
+            np.sqrt(np.mean(squared_diff)))
+
+        self.metric_data['Batch_RMSE_Log'].append(
+            np.sqrt(np.mean(np.square(log_diff))))
 
         eqn1 = np.mean(np.square(log_diff))
         eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
@@ -483,23 +505,24 @@ class DepthMetric(MetricBaseClass):
             print("Absolute Relative: %.4f\tSquared Relative: %.4f\tRMSE Linear: %.4f\t\
                   RMSE Log: %.4f\tScale Invariant: %.4f\tLoss: %.4f\n"
                   % (abs_rel, sqr_rel, rmse_lin, rmse_log, invariant, loss))
+            return None
+
+        ret_val = ()
+        if main_metric:
+            invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
+            ret_val += (invariant,)
+            if loss_metric:
+                loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
+                ret_val += (loss,)
         else:
-            ret_val = ()
-            if main_metric:
-                invariant = np.asarray(self.metric_data["Batch_Invariant"]).mean()
-                ret_val += (invariant,)
-                if loss_metric:
-                    loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-                    ret_val += (loss,)
-            else:
-                for _, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                    mean_data = np.asarray(data).mean()
-                    ret_val += (mean_data,)
-            return ret_val
+            for _, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                mean_data = np.asarray(data).mean()
+                ret_val += (mean_data,)
+        return ret_val
 
     def max_accuracy(self, main_metric=True):
         """
-        Returns highest scale invariant, absolute relative, squared relative, 
+        Returns highest scale invariant, absolute relative, squared relative,
         rmse linear, rmse log Accuracy from per epoch summarised data.\n
         @param  main_metric, if true only returns scale invariant\n
         @output scale invariant, absolute relative, squared relative, rmse linear, rmse log
@@ -511,9 +534,9 @@ class DepthMetric(MetricBaseClass):
         rmse_log = sys.float_info.max
 
         if self._path is not None:
-            with h5py.File(self._path, 'a') as hf:
-                for epoch in hf['validation']:
-                    summary_data = hf['validation/'+epoch+'/Summary'][:]
+            with h5py.File(self._path, 'a') as hfile:
+                for epoch in hfile['validation']:
+                    summary_data = hfile['validation/'+epoch+'/Summary'][:]
                     if summary_data[0] < invariant:
                         invariant = summary_data[0]
                     if summary_data[1] < abs_rel:
@@ -528,22 +551,22 @@ class DepthMetric(MetricBaseClass):
             print("No File Specified for Segmentation Metric Manager")
         if main_metric:
             return invariant
-        else:
-            return invariant, abs_rel, sqr_rel, rmse_lin, rmse_log
+
+        return invariant, abs_rel, sqr_rel, rmse_lin, rmse_log
 
     def get_last_batch(self, main_metric=True):
         if main_metric:
             return self.metric_data["Batch_Invariant"][-1]
-        else:
-            ret_val = ()
-            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                if key != "Batch_Loss":
-                    ret_val += (data[-1],)
-            return ret_val
+
+        ret_val = ()
+        for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+            if key != "Batch_Loss":
+                ret_val += (data[-1],)
+        return ret_val
 
     def _reset_metric(self):
         self.metric_data = dict(
-            Batch_Loss = [],
+            Batch_Loss=[],
             Batch_Absolute_Relative=[],
             Batch_Squared_Relative=[],
             Batch_RMSE_Linear=[],
@@ -568,9 +591,14 @@ class OpticFlowMetric(MetricBaseClass):
             self.metric_data["Batch_Loss"].append(loss)
 
         if flow_target is not None:
-            self.metric_data["Batch_EPE"].append(flow_pred-flow_target)
+            diff = flow_pred - flow_target["flow"]
+            norm_diff = ((diff[:, 0, :, :]**2 + diff[:, 1, :, :]**2)**0.5).unsqueeze(1)
+            masked_epe = (norm_diff * flow_target["flow_mask"]).sum()
+            n_valid = flow_target["flow_mask"].sum()
+            self.metric_data["Batch_EPE"].append(
+                (masked_epe / n_valid).cpu().data.numpy())
         else:
-            self.metric_data["Batch_EPE"].append(1)
+            self.metric_data["Batch_EPE"].append(0)
 
         self.metric_data["Batch_SAD"].append(
             (flow_warp(orig_img, flow_pred)-seq_img).abs().mean().cpu().data.numpy())
@@ -591,6 +619,7 @@ class OpticFlowMetric(MetricBaseClass):
             loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
             print("End Point Error: %.4f\tSum Aboslute Difference: %.4f\tLoss: %.4f"
                   % (epe, sad, loss))
+            return None
         else:
             ret_val = ()
             if main_metric:
@@ -611,34 +640,32 @@ class OpticFlowMetric(MetricBaseClass):
         @param  main_metric, if true only returns scale invariant\n
         @output scale invariant, absolute relative, squared relative, rmse linear, rmse log
         """
-        epe = sys.float_info.max
-        sad = sys.float_info.max
 
         if self._path is not None:
-            with h5py.File(self._path, 'a') as hf:
-                for epoch in hf['validation']:
-                    summary_data = hf['validation/'+epoch+'/Summary'][:]
+            epe = sys.float_info.max
+            sad = sys.float_info.max
+
+            with h5py.File(self._path, 'a') as hfile:
+                for epoch in hfile['validation']:
+                    summary_data = hfile['validation/'+epoch+'/Summary'][:]
                     if summary_data[0] < epe:
                         epe = summary_data[0]
                     if summary_data[1] < sad:
                         sad = summary_data[1]
 
-        else:
-            print("No File Specified for Segmentation Metric Manager")
-        if main_metric:
-            return sad
-        else:
-            return sad, epe
+            return epe if main_metric else sad, epe
+
+        print("No File Specified for Segmentation Metric Manager")
 
     def get_last_batch(self, main_metric=True):
         if main_metric:
-            return self.metric_data["Batch_SAD"][-1]
-        else:
-            ret_val = ()
-            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                if key != "Batch_Loss":
-                    ret_val += (data[-1],)
-            return ret_val
+            return self.metric_data["Batch_EPE"][-1]
+
+        ret_val = ()
+        for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+            if key != "Batch_Loss":
+                ret_val += (data[-1],)
+        return ret_val
 
     def _reset_metric(self):
         self.metric_data = dict(
@@ -648,13 +675,16 @@ class OpticFlowMetric(MetricBaseClass):
         )
 
 class BoundaryBoxMetric(MetricBaseClass):
+    """
+    Accuracy/Error and Loss Staticstics tracking for nnets with boundary box output
+    """
     def __init__(self, savefile: str, base_dir: Path, mode='training'):
         super(BoundaryBoxMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
 
     def _add_sample(self, pred_depth, gt_depth, loss=None):
         raise NotImplementedError
-    
+
     def _get_epoch_statistics(self, print_only=False, main_metric=True, loss_metric=True):
         raise NotImplementedError
 
@@ -665,6 +695,9 @@ class BoundaryBoxMetric(MetricBaseClass):
         raise NotImplementedError
 
 class ClassificationMetric(MetricBaseClass):
+    """
+    Accuracy/Error and Loss Staticstics tracking for classification problems
+    """
     def __init__(self, savefile: str, base_dir: Path, mode='training'):
         super(ClassificationMetric, self).__init__(savefile=savefile, base_dir=base_dir, mode=mode)
         raise NotImplementedError
@@ -682,6 +715,7 @@ class ClassificationMetric(MetricBaseClass):
         raise NotImplementedError
 
 if __name__ == "__main__":
-    filename = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_flow"
-    metric = MetricBaseClass(savefile=filename, base_dir="~/")
-    metric.plot_summary_data()
+    FILENAME = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_seg"
+    TEST = MetricBaseClass(savefile=FILENAME, base_dir=Path.cwd()/"torch_models")
+    TEST.plot_summary_data()
+    input("Press enter to leave")
