@@ -135,7 +135,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 self.flow = [self.flow[i] for i in id_vector]
 
         self.disparity_out = disparity_out
-        self.output_size = output_size
+        self.output_size = tuple(output_size)
+
+        self.std_kitti_dims = (1274, 375)
 
         if 'crop_fraction' in kwargs:
             self.crop_fraction = kwargs['crop_fraction']
@@ -208,7 +210,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                         data, angle, resample=Image.BILINEAR)
                 elif key == "flow_b":
                     epoch_data[key] = torchvision.transforms.functional.rotate(
-                            data, angle, resample=Image.NEAREST, fill=0)
+                        data, angle, resample=Image.NEAREST, fill=0)
                 else:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
@@ -221,7 +223,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                         data, brightness_scale)
 
         for key, data in epoch_data.items():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:                
+            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                 data = data.resize(self.output_size, Image.BILINEAR)
                 epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
             elif key == "seg":
@@ -235,7 +237,8 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         elif any(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
             raise UserWarning("Partially missing flow data, need x, y and bit mask")
 
-    def _depth_transform(self, disparity):
+    @staticmethod
+    def _depth_transform(disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
         disparity[disparity == 0] = -1
         return torch.FloatTensor(disparity.astype('float32'))
@@ -245,10 +248,12 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         bitmask = epoch_data['flow_b'].resize(self.output_size, Image.NEAREST)
         flow_x = epoch_data['flow_x'].resize(self.output_size, Image.NEAREST)
         flow_y = epoch_data['flow_y'].resize(self.output_size, Image.NEAREST)
+        scale_x = self.output_size[0] / self.std_kitti_dims[0]
+        scale_y = self.output_size[1] / self.std_kitti_dims[1]
 
         # Apply transform indicated by the devkit including ignore mask
-        flow_out_x = (np.array(flow_x).astype('float32') - 2**15) / 64.0
-        flow_out_y = (np.array(flow_y).astype('float32') - 2**15) / 64.0
+        flow_out_x = scale_x * (np.array(flow_x).astype('float32') - 2**15) / 64.0
+        flow_out_y = scale_y * (np.array(flow_y).astype('float32') - 2**15) / 64.0
 
         for key in ["flow_x", "flow_y", "flow_b"]:
             del epoch_data[key]

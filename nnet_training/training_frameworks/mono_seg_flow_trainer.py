@@ -181,6 +181,13 @@ class MonoSegFlowTrainer(ModelTrainer):
                 plt.imshow(get_color_pallete(pred_cpu[i, 0, :, :]))
                 plt.xlabel("Predicted Segmentation")
 
+                if "flow" in data:
+                    vis_flow = flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0]))
+                    plt.subplot(2, 3, 6)
+                    plt.imshow(vis_flow)
+                    plt.xlabel("Ground Truth Flow")
+
+
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
