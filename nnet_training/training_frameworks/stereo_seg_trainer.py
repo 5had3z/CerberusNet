@@ -140,6 +140,9 @@ class StereoSegTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
+    def plot_data(self):
+        super(StereoSegTrainer, self).plot_data()
+        self.metric_loggers['seg'].plot_classwise_iou()
 
 if __name__ == "__main__":
     from nnet_training.utilities.loss_functions import FocalLoss2D

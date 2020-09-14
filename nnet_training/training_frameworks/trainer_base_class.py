@@ -144,6 +144,12 @@ class ModelTrainer(object):
         raise NotImplementedError
 
     def plot_data(self):
+        """
+        Plots the main summary data for each of the metric loggers.\n
+        You must overide this if you want some extra metric plots
+        e.g. classwise segmentation iou\n
+        (don't forget to call this after your override)
+        """
         for metric in self.metric_loggers.values():
             metric.plot_summary_data()
 

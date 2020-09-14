@@ -180,12 +180,14 @@ class StereoSegDepthTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
+    def plot_data(self):
+        super(StereoSegDepthTrainer, self).plot_data()
+        self.metric_loggers['seg'].plot_classwise_iou()
+
 from nnet_training.utilities.loss_functions import FocalLoss2D, InvHuberLoss, ReconstructionLossV2
 from nnet_training.nnet_models.nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
 
 if __name__ == "__main__":
-    # multiprocessing.set_start_method('spawn', True)
-    print(Path.cwd())
     if platform.system() == 'Windows':
         n_workers = 0
     else:

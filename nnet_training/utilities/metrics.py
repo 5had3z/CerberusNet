@@ -423,27 +423,27 @@ class SegmentationMetric(MetricBaseClass):
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
         with h5py.File(self._path, 'r') as hfile:
-            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape()
+            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape[1]
 
             training_data = np.zeros((len(list(hfile['training'])), n_classes))
             testing_data = np.zeros((len(list(hfile['validation'])), n_classes))
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                training_data[idx] = hfile['training/'+epoch+'/Batch_IoU'][:]
+                training_data[idx] = hfile['training/'+epoch+'/Batch_IoU'][:].mean(axis=0)
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                testing_data[idx] = hfile['validation/'+epoch+'/Batch_IoU'][:]
+                testing_data[idx] = hfile['validation/'+epoch+'/Batch_IoU'][:].mean(axis=0)
 
             print("# Training, ", len(list(hfile['training'])),
                   "\t# Validation", len(list(hfile['validation'])))
 
-        for idx in training_data.shape(0):
-            plt.subplot(1, n_classes, idx+1)
+        for idx in range(n_classes):
+            plt.subplot(3, (n_classes//3+1), idx+1)
             plt.plot(training_data[:, idx])
             plt.plot(testing_data[:, idx])
             plt.legend(["Training", "Validation"])
-            plt.title('Class: '+idx+' over Epochs')
+            plt.title('Class: '+str(idx)+' over Epochs')
             plt.xlabel('Epoch #')
 
         plt.show(block=False)
