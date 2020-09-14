@@ -9,10 +9,9 @@ import re
 import random
 import json
 import multiprocessing
-import cv2
-from shutil import copy
 from pathlib import Path
 from typing import Dict, List
+import cv2
 
 import torch
 import torchvision
@@ -145,6 +144,14 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
 
+        self._key = np.array([-1, -1, -1, -1, -1, -1,
+                              -1, -1, 0, 1, -1, -1,
+                              2, 3, 4, -1, -1, -1,
+                              5, -1, 6, 7, 8, 9,
+                              10, 11, 12, 13, 14, 15,
+                              -1, -1, 16, 17, 18])
+        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
+
     def __len__(self):
         return len(self.l_img)
 
@@ -216,7 +223,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
             elif key == "seg":
                 data = data.resize(self.output_size, Image.NEAREST)
-                epoch_data[key] = torch.LongTensor(np.array(data).astype('int32'))
+                epoch_data[key] = self._seg_transform(data)
             elif key == "disparity":
                 raise NotImplementedError
 
@@ -238,17 +245,27 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         # Apply transform indicated by the devkit including ignore mask
         flow_out_x = (np.array(flow_x).astype('float32') - 2**15) / 64.0
-        flow_out_x[bitmask == 0] = -1
         flow_out_y = (np.array(flow_y).astype('float32') - 2**15) / 64.0
-        flow_out_y[bitmask == 0] = -1
 
         for key in ["flow_x", "flow_y", "flow_b"]:
             del epoch_data[key]
 
-        epoch_data["flow"] = torch.stack([torch.FloatTensor(flow_out_x), torch.FloatTensor(flow_out_y)])
+        epoch_data["flow"] = torch.stack([
+            torch.FloatTensor(flow_out_x),
+            torch.FloatTensor(flow_out_y)
+        ])
+        epoch_data["flow_mask"] = torchvision.transforms.functional.to_tensor(bitmask)
+
+    def _class_to_index(self, seg):
+        values = np.unique(seg)
+        for value in values:
+            assert value in self._mapping
+        index = np.digitize(seg.ravel(), self._mapping, right=True)
+        return self._key[index].reshape(seg.shape)
 
     def _seg_transform(self, segmentaiton):
-        raise NotImplementedError
+        target = self._class_to_index(np.array(segmentaiton).astype('int32'))
+        return torch.LongTensor(target.astype('int32'))
 
 def id_vec_generator(train_ratio, directory):
     """
