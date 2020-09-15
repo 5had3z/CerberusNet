@@ -217,20 +217,23 @@ class unFlowLoss(nn.modules.Module):
         self.consistency = consistency
         self.back_occ_only = back_occ_only
 
-    def loss_photometric(self, im_orig, im_recons, occu_mask):
+    def loss_photometric(self, im_orig: torch.Tensor,
+                         im_recons: torch.Tensor, occu_mask: torch.Tensor):
         loss = []
+        if occu_mask.mean() == 0:
+            occu_mask = torch.ones_like(occu_mask)
 
         if hasattr(self, 'l1_weight'):
-            loss += [self.l1_weight * (im_orig - im_recons).abs()]
+            loss += [self.l1_weight * (im_orig - im_recons).abs() * occu_mask]
 
         if hasattr(self, 'ssim_weight'):
-            loss += [self.ssim_weight * self.SSIM(im_recons, im_orig)]
+            loss += [self.ssim_weight * self.SSIM(im_recons * occu_mask, im_orig * occu_mask)]
 
         if hasattr(self, 'ternary_weight'):
             loss += [self.ternary_weight *\
                      TernaryLoss(im_recons * occu_mask, im_orig * occu_mask)]
 
-        return sum([l.mean() for l in loss]) #/ occu_mask.mean()
+        return sum([l.mean() for l in loss]) / occu_mask.mean()
 
     def loss_smooth(self, flow, im_scaled):
         if self.smooth_args['degree'] == 2:
@@ -272,16 +275,19 @@ class unFlowLoss(nn.modules.Module):
             im1_recons = flow_warp(im2_scaled, flow[:, :2], pad='border')
             im2_recons = flow_warp(im1_scaled, flow[:, 2:], pad='border')
 
-            if i == 0:
-                if self.back_occ_only:
-                    occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], theta=0.2)
-                    occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], theta=0.2)
-                else:
-                    occu_mask1 = 1 - get_occu_mask_bidirection(flow[:, :2], flow[:, 2:])
-                    occu_mask2 = 1 - get_occu_mask_bidirection(flow[:, 2:], flow[:, :2])
-            else:
-                occu_mask1 = F.interpolate(occu_mask1, (h, w), mode='nearest')
-                occu_mask2 = F.interpolate(occu_mask2, (h, w), mode='nearest')
+            #   Occlusion mask is broken, always returns zeros...
+            # if i == 0:
+            #     if self.back_occ_only:
+            #         occu_mask1 = 1 - get_occu_mask_backward(flow[:, 2:], theta=0.2)
+            #         occu_mask2 = 1 - get_occu_mask_backward(flow[:, :2], theta=0.2)
+            #     else:
+            #         occu_mask1 = 1 - get_occu_mask_bidirection(flow[:, :2], flow[:, 2:])
+            #         occu_mask2 = 1 - get_occu_mask_bidirection(flow[:, 2:], flow[:, :2])
+            # else:
+            #     occu_mask1 = F.interpolate(occu_mask1, (h, w), mode='nearest')
+            #     occu_mask2 = F.interpolate(occu_mask2, (h, w), mode='nearest')
+
+            occu_mask1 = occu_mask2 = torch.ones_like(im1_scaled)
 
             loss_warp = self.loss_photometric(im1_scaled, im1_recons, occu_mask1)
 

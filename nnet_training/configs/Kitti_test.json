@@ -3,7 +3,7 @@
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
         "batch_size" : 3,
-        "shuffle" : false,
+        "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
             "crop_fraction" : 1.5,

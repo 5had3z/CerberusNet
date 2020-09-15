@@ -138,6 +138,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         self.output_size = tuple(output_size)
 
         self.std_kitti_dims = (1274, 375)
+        self.mirror_x = 1.0
 
         if 'crop_fraction' in kwargs:
             self.crop_fraction = kwargs['crop_fraction']
@@ -189,8 +190,11 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _sync_transform(self, epoch_data):
         # random mirror
         if random.random() < 0.5:
+            self.mirror_x = -1.0
             for key, data in epoch_data.items():
                 epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
+        else:
+            self.mirror_x = 1.0
 
         if hasattr(self, 'crop_fraction'):
             # random crop
@@ -252,7 +256,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         scale_y = self.output_size[1] / self.std_kitti_dims[1]
 
         # Apply transform indicated by the devkit including ignore mask
-        flow_out_x = scale_x * (np.array(flow_x).astype('float32') - 2**15) / 64.0
+        flow_out_x = self.mirror_x * scale_x * (np.array(flow_x).astype('float32') - 2**15) / 64.0
         flow_out_y = scale_y * (np.array(flow_y).astype('float32') - 2**15) / 64.0
 
         for key in ["flow_x", "flow_y", "flow_b"]:
