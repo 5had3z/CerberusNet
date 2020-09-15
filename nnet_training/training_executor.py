@@ -66,6 +66,8 @@ if __name__ == "__main__":
     if not os.path.isdir(training_path):
         os.makedirs(training_path)
 
+    print("Experiment # ", encoding.hexdigest())
+
     copy(args.config, training_path / os.path.basename(args.config))
 
     TRAINER = initialise_training_network(cfg, training_path)

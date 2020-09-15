@@ -266,11 +266,9 @@ class unFlowLoss(nn.modules.Module):
                 pyramid_smooth_losses.append(0)
                 continue
 
-            _, _, h, w = flow.size()
-
             # resize images to match the size of layer
-            im1_scaled = F.interpolate(im1_origin, (h, w), mode='area')
-            im2_scaled = F.interpolate(im2_origin, (h, w), mode='area')
+            im1_scaled = F.interpolate(im1_origin, tuple(flow.size()[2:]), mode='area')
+            im2_scaled = F.interpolate(im2_origin, tuple(flow.size()[2:]), mode='area')
 
             im1_recons = flow_warp(im2_scaled, flow[:, :2], pad='border')
             im2_recons = flow_warp(im1_scaled, flow[:, 2:], pad='border')
@@ -284,15 +282,15 @@ class unFlowLoss(nn.modules.Module):
             #         occu_mask1 = 1 - get_occu_mask_bidirection(flow[:, :2], flow[:, 2:])
             #         occu_mask2 = 1 - get_occu_mask_bidirection(flow[:, 2:], flow[:, :2])
             # else:
-            #     occu_mask1 = F.interpolate(occu_mask1, (h, w), mode='nearest')
-            #     occu_mask2 = F.interpolate(occu_mask2, (h, w), mode='nearest')
+            #     occu_mask1 = F.interpolate(occu_mask1, tuple(flow.size()[2:]), mode='nearest')
+            #     occu_mask2 = F.interpolate(occu_mask2, tuple(flow.size()[2:]), mode='nearest')
 
             occu_mask1 = occu_mask2 = torch.ones_like(im1_scaled)
 
             loss_warp = self.loss_photometric(im1_scaled, im1_recons, occu_mask1)
 
             if i == 0:
-                s = min(h, w)
+                s = min(flow.size()[2:])
 
             loss_smooth = self.loss_smooth(flow[:, :2] / s, im1_scaled)
 

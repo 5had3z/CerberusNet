@@ -1,5 +1,5 @@
 """Custom losses."""
-from typing import Dict
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
@@ -214,6 +214,22 @@ class InvHuberLoss(nn.Module):
         cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
         return cost
 
+class InvHuberLossPyr(InvHuberLoss):
+    def __init__(self, lvl_weights: List[int], ignore_index=-1, **kwargs):
+        self.lvl_weights = lvl_weights
+        super(InvHuberLossPyr, self).__init__(ignore_index=-1, **kwargs)
+
+    def forward(self, disp_pred_pyr: List[torch.Tensor],
+                disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+        loss = 0
+
+        for lvl, disp_pred in enumerate(disp_pred_pyr):
+            disp_gt_scaled = F.interpolate(disp_gt.unsqueeze(1), tuple(disp_pred.size()[2:]), mode='nearest')
+            lvl_loss = super(InvHuberLossPyr, self).forward(disp_pred, disp_gt_scaled)
+            loss += (lvl_loss * self.lvl_weights[lvl])
+
+        return loss
+
 class FlowReconstructionLossV1(nn.Module):
     """
     Ultra basic reconstruction loss for flow
@@ -390,6 +406,8 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
             loss_fn_dict[loss_fn['type']] = ScaleInvariantError(**loss_fn.args)
         elif loss_fn['function'] == "DepthAwareLoss":
             loss_fn_dict[loss_fn['type']] = DepthAwareLoss(**loss_fn.args)
+        elif loss_fn['function'] == "InvHuberLossPyr":
+            loss_fn_dict[loss_fn['type']] = InvHuberLossPyr(**loss_fn.args)
         else:
             raise NotImplementedError(loss_fn['function'])
 

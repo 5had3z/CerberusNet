@@ -68,16 +68,17 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow, depth_pred, seg_pred = self._model(im1_rgb=img, im2_rgb=img_seq, seg_gt=seg_gt)
+            pred_flow, depth_pred, seg_pred =\
+                self._model(im1_rgb=img, im2_rgb=img_seq, seg_gt=seg_gt)
 
             flow_loss, _, _, _ = self._flow_loss_fn(
                 pred_flow=pred_flow, im1_origin=img, im2_origin=img_seq)
 
             seg_loss = self._seg_loss_fn(
-                seg_pred=seg_pred, seg_gt=seg_gt)
+                seg_pred=seg_pred['seg_fw'], seg_gt=seg_gt)
 
             depth_loss = self._depth_loss_fn(
-                disp_pred=depth_pred['depth_fw'][0], disp_gt=depth_gt)
+                disp_pred_pyr=depth_pred['depth_fw'], disp_gt=depth_gt)
 
             loss = flow_loss + seg_loss + depth_loss
 
@@ -92,7 +93,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 )
 
                 self.metric_loggers['seg']._add_sample(
-                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -137,10 +138,10 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     pred_flow=pred_flow, im1_origin=img, im2_origin=img_seq)
 
                 seg_loss = self._seg_loss_fn(
-                    seg_pred=seg_pred, seg_gt=seg_gt)
+                    seg_pred=seg_pred['seg_fw'], seg_gt=seg_gt)
 
                 depth_loss = self._depth_loss_fn(
-                    disp_pred=depth_pred['depth_fw'][0], disp_gt=depth_gt)
+                    disp_pred_pyr=depth_pred['depth_fw'], disp_gt=depth_gt)
 
                 self.metric_loggers['flow']._add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
@@ -148,7 +149,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 )
 
                 self.metric_loggers['seg']._add_sample(
-                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     data['seg'].data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -160,7 +161,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 )
 
                 if not batch_idx % 10:
-                    loss = flow_loss + seg_loss
+                    loss = flow_loss + seg_loss + depth_loss
                     seg_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
                     time_remain = time_elapsed/(batch_idx+1)*(len(self._validation_loader)-(batch_idx+1))
@@ -180,11 +181,12 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             seq_left = data['l_seq'].to(self._device)
 
             start_time = time.time()
-            flow_12, seg_pred = self._model(left, seq_left)
+            flow_12, depth_pred, seg_pred = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             np_flow_12 = flow_12['flow_fw'][0].detach().cpu().numpy()
-            pred_cpu = torch.argmax(seg_pred, dim=1, keepdim=True).cpu().numpy()
+            sed_pred_cpu = torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().numpy()
+            depth_pred_cpu = depth_pred['depth_fw'][0].detach().cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 4, 1)
@@ -201,16 +203,16 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.imshow(vis_flow)
                 plt.xlabel("Predicted Flow")
 
-                plt.subplot(1,3,2)
-                plt.imshow(data['disparity'][i,:,:])
-                plt.xlabel("Ground Truth")
+                plt.subplot(2, 4, 4)
+                plt.imshow(data['disparity'][i, :, :])
+                plt.xlabel("Ground Truth Disparity")
 
                 plt.subplot(2, 4, 5)
                 plt.imshow(get_color_pallete(data['seg'].numpy()[i, :, :]))
                 plt.xlabel("Ground Truth Segmentation")
 
                 plt.subplot(2, 4, 6)
-                plt.imshow(get_color_pallete(pred_cpu[i, 0, :, :]))
+                plt.imshow(get_color_pallete(sed_pred_cpu[i, 0, :, :]))
                 plt.xlabel("Predicted Segmentation")
 
                 if "flow" in data:
@@ -219,6 +221,9 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     plt.imshow(vis_flow)
                     plt.xlabel("Ground Truth Flow")
 
+                plt.subplot(2, 4, 8)
+                plt.imshow(depth_pred_cpu[i, 0, :, :])
+                plt.xlabel("Predicted Depth")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
