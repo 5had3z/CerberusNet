@@ -14,7 +14,7 @@ import torch
 
 from nnet_training.utilities.lr_scheduler import LRScheduler
 
-__all__ = ['ModelTrainer', 'get_trainer']
+__all__ = ['ModelTrainer']
 
 class ModelTrainer(object):
     """
@@ -60,9 +60,15 @@ class ModelTrainer(object):
                 sys.stdout.write("\nStarting From Scratch!")
 
     def get_learning_rate(self) -> float:
+        """
+        Returns current learning rate of manager
+        """
         return self._lr_manager.get_lr()
 
     def set_learning_rate(self, new_lr: float) -> None:
+        """
+        Sets new base learning rate for manager
+        """
         self._lr_manager.base_lr = new_lr
 
     def load_checkpoint(self, path: Path):
@@ -153,29 +159,5 @@ class ModelTrainer(object):
         for metric in self.metric_loggers.values():
             metric.plot_summary_data()
 
-def get_trainer(trainer_name: str) -> ModelTrainer:
-    """
-    Returns the corresponding network trainer given a string
-    """
-    from nnet_training.training_frameworks import MonoFlowTrainer,\
-        MonoSegFlowTrainer, MonoSegmentationTrainer, StereoDisparityTrainer,\
-        StereoFlowTrainer, StereoSegDepthTrainer, StereoSegTrainer
-
-    if trainer_name == "MonoFlowTrainer":
-        trainer = MonoFlowTrainer
-    elif trainer_name == "MonoSegFlowTrainer":
-        trainer = MonoSegFlowTrainer
-    elif trainer_name == "MonoSegmentationTrainer":
-        trainer = MonoSegmentationTrainer
-    elif trainer_name == "StereoDisparityTrainer":
-        trainer = StereoDisparityTrainer
-    elif trainer_name == "StereoFlowTrainer":
-        trainer = StereoFlowTrainer
-    elif trainer_name == "StereoSegDepthTrainer":
-        trainer = StereoSegDepthTrainer
-    elif trainer_name == "StereoSegTrainer":
-        trainer = StereoSegTrainer
-    else:
-        raise NotImplementedError(trainer_name)
-
-    return trainer
+if __name__ == "__main__":
+    raise NotImplementedError

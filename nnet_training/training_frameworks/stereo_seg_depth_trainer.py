@@ -3,7 +3,8 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
 from typing import Dict, TypeVar
 T = TypeVar('T')
@@ -11,12 +12,8 @@ import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric
-from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
@@ -184,10 +181,13 @@ class StereoSegDepthTrainer(ModelTrainer):
         super(StereoSegDepthTrainer, self).plot_data()
         self.metric_loggers['seg'].plot_classwise_iou()
 
-from nnet_training.utilities.loss_functions import FocalLoss2D, InvHuberLoss, ReconstructionLossV2
-from nnet_training.nnet_models.nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
-
 if __name__ == "__main__":
+    import platform, multiprocessing
+    from nnet_training.utilities.loss_functions import FocalLoss2D, InvHuberLoss, DepthReconstructionLossV1
+    from nnet_training.nnet_models.nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
+    from nnet_training.utilities.CityScapes import CityScapesDataset
+    from torch.utils.data import DataLoader
+
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -224,14 +224,15 @@ if __name__ == "__main__":
     Model = StereoDepthSegSeparated2()
     optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
     lossfn = dict(
-        segmentation   = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda")),
+        segmentation = FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda")),
         # depth          = InvHuberLoss(ignore_index=-1).to(torch.device("cuda"))
-        depth          = ReconstructionLossV2(batch_size=6, height=512, width=1024, pred_type="depth").to(torch.device("cuda"))
+        depth = DepthReconstructionLossV1(batch_size=6, height=512, width=1024, pred_type="depth").to(torch.device("cuda"))
     )
-    filename = str(Model)+'_SGD_Fcl_Recon2'
+    
+    filename = Path.cwd() / 'torch_models' / str(Model)+'_SGD_Fcl_Recon2'
     print("Loading " + filename)
 
-    lr_sched = { "lr": 0.01, "mode":"poly" }
-    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, modelname=filename)
+    lr_sched = {"lr": 0.01, "mode":"poly"}
+    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataldr=dataloaders, lr_cfg=lr_sched, modelpath=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(3)

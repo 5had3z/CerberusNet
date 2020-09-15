@@ -131,18 +131,18 @@ class FocalLoss2D(nn.Module):
         self.dynamic_weights = dynamic_weights
         self.scale_factor = scale_factor
 
-    def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, seg_pred: torch.Tensor, seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         '''
         Forward implementation that returns focal loss between prediciton and target
         '''
-        weights = torch.ones(predicted.shape[1]).to(predicted.get_device())
+        weights = torch.ones(seg_pred.shape[1]).to(seg_pred.get_device())
         if self.dynamic_weights:
-            class_ids, counts = target.unique(return_counts=True)
+            class_ids, counts = seg_gt.unique(return_counts=True)
             weights[class_ids] = self.scale_factor / \
-                    (self.scale_factor + counts/float(target.nelement()))
+                    (self.scale_factor + counts/float(seg_gt.nelement()))
 
         # compute the negative likelyhood
-        ce_loss = F.cross_entropy(predicted, target, ignore_index=self.ignore_index, weight=weights)
+        ce_loss = F.cross_entropy(seg_pred, seg_gt, ignore_index=self.ignore_index, weight=weights)
 
         # compute the loss
         focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
@@ -152,39 +152,45 @@ class FocalLoss2D(nn.Module):
 
 
 class DepthAwareLoss(nn.Module):
-    def __init__(self, size_average=True, ignore_index=0):
+    def __init__(self, size_average=True, ignore_index=-1, **kwargs):
         super(DepthAwareLoss, self).__init__()
         self.size_average = size_average
         self._ignore_index = ignore_index
 
-    def forward(self, pred, target):
-        pred = pred.squeeze(dim=1)
-        regularization = 1 - torch.min(torch.log(pred), torch.log(target)) / torch.max(torch.log(pred), torch.log(target))
-        l_loss = F.smooth_l1_loss(pred, target ,size_average=self.size_average)
-        depth_aware_attention = target / torch.max(target)
-        return ((depth_aware_attention + regularization)*l_loss).mean()
+    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+        disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
+
+        l_disp_pred = torch.log(disp_pred)
+        l_disp_gt = torch.log(disp_gt)
+        regularization = 1 - torch.min(l_disp_pred, l_disp_gt) / torch.max(l_disp_pred, l_disp_gt)
+
+        l_loss = F.smooth_l1_loss(disp_pred, disp_gt, size_average=self.size_average)
+        depth_aware_attention = disp_gt / torch.max(disp_gt)
+
+        return ((depth_aware_attention + regularization) * l_loss).mean()
 
 class ScaleInvariantError(nn.Module):
-    def __init__(self, lmda=1, ignore_index=-1):
+    def __init__(self, lmda=1, ignore_index=-1, **kwargs):
         super(ScaleInvariantError, self).__init__()
         self.lmda = lmda
         self._ignore_index = ignore_index
 
-    def forward(self, pred, target):
+    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         #   Number of pixels per image
-        n_pixels = target.shape[1]*target.shape[2]
+        n_pixels = disp_gt.shape[1]*disp_gt.shape[2]
         #   Number of valid pixels in target image
-        n_valid = (target != self._ignore_index).view(-1, n_pixels).float().sum(dim=1)
+        n_valid = (disp_gt != self._ignore_index).view(-1, n_pixels).float().sum(dim=1)
 
         #   Prevent infs and nans
-        pred[pred<=0] = 0.00001
-        pred = pred.squeeze(dim=1)
-        pred[target==self._ignore_index] = 0.00001
-        target[target==self._ignore_index] = 0.00001
-        d = torch.log(pred) - torch.log(target)
+        disp_pred[disp_pred <= 0] = 0.00001
+        disp_pred = disp_pred.squeeze(dim=1)
+        disp_pred[disp_gt == self._ignore_index] = 0.00001
+        disp_gt[disp_gt == self._ignore_index] = 0.00001
 
-        element_wise = torch.pow(d.view(-1, n_pixels),2).sum(dim=1)/n_valid
-        scaled_error = self.lmda*(torch.pow(d.view(-1, n_pixels).sum(dim=1),2)/(n_valid**2))
+        log_diff = (torch.log(disp_pred) - torch.log(disp_gt)).view(-1, n_pixels)
+
+        element_wise = torch.pow(log_diff, 2).sum(dim=1) / n_valid
+        scaled_error = self.lmda * (torch.pow(log_diff.sum(dim=1), 2) / (n_valid**2))
         return (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
@@ -195,10 +201,10 @@ class InvHuberLoss(nn.Module):
         super(InvHuberLoss, self).__init__()
         self.ignore_index = ignore_index
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        pred_relu = F.relu(pred.squeeze(dim=1)) # depth predictions must be >=0
-        diff = pred_relu - target
-        mask = target != self.ignore_index
+    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+        pred_relu = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
+        diff = pred_relu - disp_gt
+        mask = disp_gt != self.ignore_index
 
         err = (diff * mask.float()).abs()
         c = 0.2 * err.max()
@@ -208,22 +214,27 @@ class InvHuberLoss(nn.Module):
         cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
         return cost
 
-class ReconstructionLossV1(nn.Module):
+class FlowReconstructionLossV1(nn.Module):
+    """
+    Ultra basic reconstruction loss for flow
+    """
     def __init__(self, img_b, img_h, img_w, device=torch.device("cpu")):
-        super(ReconstructionLossV1, self).__init__()
+        super(FlowReconstructionLossV1, self).__init__()
         self.img_h = img_h
         self.img_w = img_w
 
         base_x = torch.arange(0, img_w).repeat(img_b, img_h, 1)/float(img_w)*2.-1.
         base_y = torch.arange(0, img_h).repeat(img_b, img_w, 1).transpose(1, 2)/float(img_h)*2.-1.
         self.transf_base = torch.stack([base_x, base_y], 3).to(device)
-    
-    def forward(self, source, flow, target):
-        flow = flow.reshape(-1, self.img_h, self.img_w, 2)
-        flow[:,:,:,0] /= self.img_w
-        flow[:,:,:,1] /= self.img_h
-        flow += self.transf_base
-        pred = F.grid_sample(source, flow, mode='bilinear', padding_mode='zeros', align_corners=None)
+
+    def forward(self, pred_flow: torch.Tensor, im1_origin: torch.Tensor,
+                im2_origin: torch.Tensor) -> torch.Tensor:
+        pred_flow = pred_flow.reshape(-1, self.img_h, self.img_w, 2)
+        pred_flow[:, :, :, 0] /= self.img_w
+        pred_flow[:, :, :, 1] /= self.img_h
+        pred_flow += self.transf_base
+        im1_warp = F.grid_sample(im1_origin, pred_flow, mode='bilinear',
+                                 padding_mode='zeros', align_corners=None)
 
         # debug disp
         # import matplotlib.pyplot as plt
@@ -233,8 +244,8 @@ class ReconstructionLossV1(nn.Module):
         # plt.imshow(np.moveaxis(pred[0,0:3,:,:].cpu().numpy(),0,2))
         # plt.show()
 
-        diff = (target-pred).abs()
-        loss = diff.view([1,-1]).sum(1).mean() / (self.img_w * self.img_h)
+        diff = (im2_origin-im1_warp).abs()
+        loss = diff.view([1, -1]).sum(1).mean() / (self.img_w * self.img_h)
         return loss
 
 class SSIM(nn.Module):
@@ -260,8 +271,8 @@ class SSIM(nn.Module):
         mu_x = self.mu_x_pool(x)
         mu_y = self.mu_y_pool(y)
 
-        sigma_x  = self.sig_x_pool(x ** 2) - mu_x ** 2
-        sigma_y  = self.sig_y_pool(y ** 2) - mu_y ** 2
+        sigma_x = self.sig_x_pool(x ** 2) - mu_x ** 2
+        sigma_y = self.sig_y_pool(y ** 2) - mu_y ** 2
         sigma_xy = self.sig_xy_pool(x * y) - mu_x * mu_y
 
         SSIM_n = (2 * mu_x * mu_y + self.C1) * (2 * sigma_xy + self.C2)
@@ -324,29 +335,29 @@ class Project3D(nn.Module):
         pix_coords = (pix_coords - 0.5) * 2
         return pix_coords
 
-class ReconstructionLossV2(nn.Module):
+class DepthReconstructionLossV1(nn.Module):
     """Generate the warped (reprojected) color images for a minibatch.
     """
     def __init__(self, batch_size, height, width, pred_type="disparity", ssim=True):
-        super(ReconstructionLossV2, self).__init__()
-        self.pred_type      = pred_type
-        self.BackprojDepth  = BackprojectDepth(batch_size, height, width)\
+        super(DepthReconstructionLossV1, self).__init__()
+        self.pred_type = pred_type
+        self.BackprojDepth = BackprojectDepth(batch_size, height, width)\
                                 .to("cuda" if torch.cuda.is_available() else "cpu")
-        self.Project3D      = Project3D(batch_size, height, width)\
+        self.Project3D = Project3D(batch_size, height, width)\
                                 .to("cuda" if torch.cuda.is_available() else "cpu")
         if ssim:
-            self.SSIM       = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
-    
+            self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+
     def depth_from_disparity(self, disparity):
         return (0.209313 * 2262.52) / ((disparity - 1) / 256)
-    
-    def forward(self, source_img, prediction, target_img, telemetry, camera):
-        if self.pred_type is "depth":
-            depth = prediction
-        elif self.pred_type is "disparity":
-            depth = self.depth_from_disparity(prediction)
-        elif self.pred_type is "flow":
-            raise NotImplementedError
+
+    def forward(self, disp_pred, source_img, target_img, telemetry, camera):
+        if self.pred_type == "depth":
+            depth = disp_pred
+        elif self.pred_type == "disparity":
+            depth = self.depth_from_disparity(disp_pred)
+        else:
+            raise NotImplementedError(self.pred_type)
 
         cam_points = self.BackprojDepth(depth, camera["inv_K"])
         pix_coords = self.Project3D(cam_points, camera["K"], telemetry)
@@ -355,7 +366,8 @@ class ReconstructionLossV2(nn.Module):
 
         abs_diff = (target_img - source_img).abs()
         if hasattr(self, 'SSIM'):
-            loss = 0.15*abs_diff.mean(1, True) + 0.85*self.SSIM(source_img, target_img).mean(1, True)
+            loss = 0.15*abs_diff.mean(1, True) +\
+                0.85*self.SSIM(source_img, target_img).mean(1, True)
         else:
             loss = abs_diff.mean(1, True)
         return loss.mean()
@@ -374,6 +386,12 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
             loss_fn_dict[loss_fn['type']] = unFlowLoss(**loss_fn.args)
         elif loss_fn['function'] == "InvHuberLoss":
             loss_fn_dict[loss_fn['type']] = InvHuberLoss(**loss_fn.args)
+        elif loss_fn['function'] == "ScaleInvariantError":
+            loss_fn_dict[loss_fn['type']] = ScaleInvariantError(**loss_fn.args)
+        elif loss_fn['function'] == "DepthAwareLoss":
+            loss_fn_dict[loss_fn['type']] = DepthAwareLoss(**loss_fn.args)
+        else:
+            raise NotImplementedError(loss_fn['function'])
 
     return loss_fn_dict
 
@@ -387,8 +405,7 @@ if __name__ == '__main__':
     img1 = Image.open(BASE_DIR+'leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
     img2 = Image.open(BASE_DIR+'leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
-    loss_fn = ReconstructionLossV1(1, img1.size[1], img1.size[0])
+    loss_func = DepthReconstructionLossV1(1, img1.size[1], img1.size[0])
     uniform = torch.zeros([1, img1.size[1], img1.size[0], 2])
 
-    loss = loss_fn(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0))
-    print(loss)
+    print(loss_func(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0)))

@@ -3,7 +3,8 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
 from typing import Dict, TypeVar
 T = TypeVar('T')
@@ -11,10 +12,8 @@ import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import DepthMetric
-from nnet_training.utilities.CityScapes import CityScapesDataset
 from .trainer_base_class import ModelTrainer
 
 __all__ = ['StereoDisparityTrainer']
@@ -46,13 +45,13 @@ class StereoDisparityTrainer(ModelTrainer):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
-            
+
             # Put both image and target onto device
             left        = data['l_img'].to(self._device)
             right       = data['r_img'].to(self._device)
             depth_gt    = data['disparity'].to(self._device)
             baseline    = data['cam']['baseline_T'].to(self._device)
-            
+
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             depth_pred = self._model(left, right)
@@ -66,7 +65,7 @@ class StereoDisparityTrainer(ModelTrainer):
 
             self.metric_loggers['depth']._add_sample(
                 depth_pred.cpu().data.numpy(),
-                depth_gt.cpu().data.numpy(),
+                data['disparity'].data.numpy(),
                 loss=loss.item()
             )
 
@@ -99,7 +98,7 @@ class StereoDisparityTrainer(ModelTrainer):
 
                 self.metric_loggers['depth']._add_sample(
                     depth_pred.cpu().data.numpy(),
-                    depth_gt.cpu().numpy(),
+                    data['disparity'].data.numpy(),
                     loss=loss.item()
                 )
 
@@ -130,11 +129,11 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.subplot(1,3,1)
                 plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
                 plt.xlabel("Base Image")
-        
+
                 plt.subplot(1,3,2)
                 plt.imshow(data['disparity'][i,:,:])
                 plt.xlabel("Ground Truth")
-        
+
                 plt.subplot(1,3,3)
                 plt.imshow(pred.cpu().numpy()[i,0,:,:])
                 # plt.imshow(torch.exp(pred).cpu().numpy()[i,0,:,:])
@@ -143,12 +142,15 @@ class StereoDisparityTrainer(ModelTrainer):
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
 
-from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
-from nnet_training.utilities.loss_functions import DepthAwareLoss, ScaleInvariantError,\
-                            InvHuberLoss, ReconstructionLossV2
 
 if __name__ == "__main__":
-    print(Path.cwd())
+    import platform, multiprocessing
+    from torch.utils.data import DataLoader
+    from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp, StereoDepthSeparatedReLu
+    from nnet_training.utilities.loss_functions import DepthAwareLoss, ScaleInvariantError,\
+                                InvHuberLoss, DepthReconstructionLossV1
+    from nnet_training.utilities.CityScapes import CityScapesDataset
+
     if platform.system() == 'Windows':
         n_workers = 0
     else:
@@ -169,8 +171,8 @@ if __name__ == "__main__":
     }
 
     datasets = dict(
-        Training    = CityScapesDataset(training_dir, output_size=(512,256), crop_fraction=1, disparity_out=True),
-        Validation  = CityScapesDataset(validation_dir, output_size=(512,256), crop_fraction=1, disparity_out=True)
+        Training    = CityScapesDataset(training_dir, output_size=(512, 256), crop_fraction=1, disparity_out=True),
+        Validation  = CityScapesDataset(validation_dir, output_size=(512, 256), crop_fraction=1, disparity_out=True)
     )
 
     dataloaders = dict(
@@ -182,11 +184,11 @@ if __name__ == "__main__":
     # optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.001, momentum=0.9)
     optimizer = torch.optim.Adam(disparityModel.parameters(), lr=0.00001)
     # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ReconstructionLossV2(batch_size=16, height=256, width=512, pred_type="depth").to(torch.device("cuda"))
+    lossfn = DepthReconstructionLossV1(batch_size=16, height=256, width=512, pred_type="depth").to(torch.device("cuda"))
     # lossfn = InvHuberLoss().to(torch.device("cuda"))
-    filename = str(disparityModel) + "_A_ReconV2_disp"
+    filename = Path.cwd() / 'torch_models' / str(disparityModel) + "_A_ReconV2_disp"
 
     lr_sched = { "mode":"poly", "lr":0.0001 }
-    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
+    modeltrainer = StereoDisparityTrainer(disparityModel, optimizer, lossfn, dataldr=dataloaders, lr_cfg=lr_sched, modelpath=filename)
     modeltrainer.visualize_output()
     # modeltrainer.train_model(10)

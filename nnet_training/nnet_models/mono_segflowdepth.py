@@ -1,5 +1,3 @@
-from typing import List
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,55 +8,38 @@ from nnet_training.correlation_package.correlation import Correlation
 from .pwcnet_modules import *
 from .fast_scnn import Classifer
 from .nnet_ops import LinearBottleneck, LinearBottleneckAGN
+from .mono_segflow import SegmentationNet1
 
-__all__ = ['MonoSFNet', 'SegmentationNet1']
+__all__ = ['MonoSFDNet']
 
-class SegmentationNet1(nn.Module):
-    '''
-    Module for extracting semantic segmentation from encoding pyramid
-    '''
-    def __init__(self, input_ch: List[int], classes=19, interm_ch=32, **kwargs):
-        super(SegmentationNet1, self).__init__()
-        self.classifier = Classifer(interm_ch, classes)
-
-        if 'g_noise' in kwargs and kwargs['g_noise'] != 0.0:
-            bottleneck_module = LinearBottleneckAGN
-        else:
-            bottleneck_module = LinearBottleneck
-
-        t = 1 if 't' not in kwargs else kwargs['t']
-        stride = 1 if 'stride' not in kwargs else kwargs['stride']
-        sigma = 0 if 'g_noise' not in kwargs else kwargs['g_noise']
-
-        self.feature_fusion = nn.ModuleList(
-            [bottleneck_module(input_ch[0], interm_ch, t=t, stride=stride, sigma=sigma)]
+class DepthEstimator1(nn.Module):
+    """
+    Simple Prototype Depth Estimation Module
+    """
+    def __init__(self, in_channels: int, pre_out_ch: 32, **kwargs):
+        super(DepthEstimator1, self).__init__()
+        in_int_mean = (in_channels + pre_out_ch) // 2
+        self.network = nn.Sequential(
+            nn.Conv2d(in_channels, in_int_mean, 3),
+            nn.Conv2d(in_int_mean, pre_out_ch, 3),
+            nn.Conv2d(pre_out_ch, 1, 1),
+            nn.ReLU(inplace=True)
         )
-        for ch_in in input_ch[1:]:
-            self.feature_fusion.append(
-                bottleneck_module(ch_in+interm_ch, interm_ch, t=t, stride=stride, sigma=sigma)
-            )
-
-        self.scale_factor = 2 * stride
 
     def __str__(self):
-        return "_SegNet1"
+        return "_DepthEst1"
 
-    def forward(self, img_pyr: List[torch.Tensor]) -> torch.Tensor:
-        interm = self.feature_fusion[0](img_pyr[0])
-        interm = nn.functional.interpolate(interm, scale_factor=self.scale_factor)
+    def forward(self, x: torch.Tensor):
+        out = self.network(x)
+        out = F.interpolate(out, size=x.size(), mode='nearest', align_corners=True)
+        return out
 
-        for level, img in enumerate(img_pyr[1:], start=1):
-            interm = self.feature_fusion[level](torch.cat([interm, img], 1))
-            interm = nn.functional.interpolate(interm, scale_factor=self.scale_factor)
-
-        return self.classifier(interm)
-
-class MonoSFNet(nn.Module):
+class MonoSFDNet(nn.Module):
     '''
-    Monocular image sequence to segmentation and optic flow
+    Monocular image sequence to segmentation, depth and optic flow
     '''
     def __init__(self, upsample=True, **kwargs):
-        super(MonoSFNet, self).__init__()
+        super(MonoSFDNet, self).__init__()
         self.upsample = upsample
         self.output_level = 4
         self.scale_levels = [8, 4, 2, 1]
@@ -76,11 +57,13 @@ class MonoSFNet(nn.Module):
 
         if 'segmentation_network' in kwargs:
             seg_cfg = kwargs['segmentation_network']
+            n_classes = kwargs['segmentation_network']['args']['classes']
             if seg_cfg['type'] == 'SegmentationNet1':
                 self.segmentation_network = SegmentationNet1(num_chs[:0:-1], **seg_cfg['args'])
             else:
                 raise NotImplementedError(seg_cfg['type'])
         else:
+            n_classes = 19
             self.segmentation_network = SegmentationNet1(num_chs[:0:-1], 19)
 
         if 'correlation_args' in kwargs:
@@ -93,9 +76,16 @@ class MonoSFNet(nn.Module):
                                     max_displacement=search_range, stride1=1,
                                     stride2=1, corr_multiply=1)
 
-        dim_corr = (search_range * 2 + 1) ** 2
-        num_ch_in = 32 + (dim_corr + 2)
+        out_1x1 = 32 if '1x1_conv_out' not in kwargs else kwargs['1x1_conv_out']
+        self.conv_1x1 = nn.ModuleList()
 
+        for lvl in range(self.output_level):
+            self.conv_1x1.append(
+                pwc_conv(num_chs[-(lvl+1)], out_1x1, kernel_size=1, stride=1, dilation=1)
+            )
+
+        dim_corr = (search_range * 2 + 1) ** 2
+        num_ch_in = out_1x1 + dim_corr + 2 # 1x1 conv, correlation, previous flow
         if 'flow_est_network' in kwargs:
             if kwargs['flow_est_network']['type'] == 'FlowEstimatorDense':
                 self.flow_estimator = FlowEstimatorDense(num_ch_in)
@@ -103,6 +93,16 @@ class MonoSFNet(nn.Module):
                 raise NotImplementedError(kwargs['flow_est_network']['type'])
         else:
             self.flow_estimator = FlowEstimatorDense(num_ch_in)
+
+        num_ch_in = out_1x1 + n_classes + 1 # 1x1 conv, segmentaiton, previous depth
+        if 'depth_est_network' in kwargs:
+            depth_cfg = kwargs['depth_est_network']
+            if depth_cfg['type'] == 'DepthEstimator1':
+                self.depth_estimator = DepthEstimator1(num_ch_in, **depth_cfg['args'])
+            else:
+                raise NotImplementedError(depth_cfg['type'])
+        else:
+            self.depth_estimator = DepthEstimator1(num_ch_in, 32)
 
         if 'context_network' in kwargs:
             if kwargs['context_network']['type'] == 'ContextNetwork':
@@ -112,15 +112,8 @@ class MonoSFNet(nn.Module):
         else:
             self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
-        out_1x1 = 32 if '1x1_conv_out' not in kwargs else kwargs['1x1_conv_out']
-        self.conv_1x1 = nn.ModuleList([pwc_conv(192, out_1x1, kernel_size=1, stride=1, dilation=1),
-                                       pwc_conv(128, out_1x1, kernel_size=1, stride=1, dilation=1),
-                                       pwc_conv(96, out_1x1, kernel_size=1, stride=1, dilation=1),
-                                       pwc_conv(64, out_1x1, kernel_size=1, stride=1, dilation=1),
-                                       pwc_conv(32, out_1x1, kernel_size=1, stride=1, dilation=1)])
-
     def __str__(self):
-        return "MonoSF" + str(self.segmentation_network) + str(self.feature_pyramid_extractor)\
+        return "MonoSF" + str(self.feature_pyramid_extractor) + str(self.segmentation_network)\
             + str(self.flow_estimator) + str(self.context_networks)
 
     def get_scales(self):
@@ -129,25 +122,31 @@ class MonoSFNet(nn.Module):
         '''
         return self.scale_levels
 
-    def aux_forward(self, im1_pyr, im2_pyr):
+    def aux_forward(self, im1_pyr, im2_pyr, seg):
         '''
         Auxillary forward method that does the flow prediction
         @todo incorperate segmentation
         '''
         # output
         flows = []
+        depths = []
 
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
         flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
+        depth = im1_pyr[0].new_zeros((b_size, 1, h_x1, w_x1)).float()
 
         for level, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
+            seg_resized = F.interpolate(seg.detach(), im1.size()[2:],
+                                        mode='nearest', align_corners=True)
             # warping
             if level == 0:
                 im2_warp = im2
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
                                      mode='bilinear', align_corners=True)
+                depth = F.interpolate(depth, scale_factor=2,
+                                      mode='nearest', align_corners=True)
                 im2_warp = flow_warp(im2, flow)
 
             # correlation
@@ -165,6 +164,13 @@ class MonoSFNet(nn.Module):
 
             flows.append(flow)
 
+            # concat and estimate depth
+            depth_res = self.depth_estimator(
+                torch.cat([seg_resized, im1_1by1, depth], dim=1))
+            depth += depth_res
+
+            depths.append(depth)
+
             # upsampling or post-processing
             if level == self.output_level:
                 break
@@ -172,7 +178,8 @@ class MonoSFNet(nn.Module):
         if self.upsample:
             flows = [F.interpolate(flow * 4, scale_factor=4,
                                    mode='bilinear', align_corners=True) for flow in flows]
-        return flows[::-1]
+
+        return flows[::-1], depths[::-1]
 
     def forward(self, im1_rgb, im2_rgb, seg_gt=None, consistency=True):
         '''
@@ -180,15 +187,22 @@ class MonoSFNet(nn.Module):
         '''
         # outputs
         flows = {}
+        depths = {}
+        segs = {}
 
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
+        segs['seg_fw'] = self.segmentation_network(im1_pyr)
+        segs['seg_bw'] = self.segmentation_network(im2_pyr)
+
         if seg_gt is None:
-            seg_gt = self.segmentation_network(im1_pyr)
+            seg_gt = segs['seg_fw']
 
-        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr)
+        flows['flow_fw'], depths['depth_fw'] = self.aux_forward(im1_pyr, im2_pyr, seg_gt)
+
         if consistency:
-            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr)
+            flows['flow_bw'], depths['depth_bw'] = \
+                self.aux_forward(im2_pyr, im1_pyr, segs['seg_bw'])
 
-        return flows, seg_gt
+        return flows, depths, segs
