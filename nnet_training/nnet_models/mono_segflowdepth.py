@@ -163,9 +163,8 @@ class MonoSFDNet(nn.Module):
 
             # concat and estimate depth
             seg_resized = F.interpolate(seg.detach(), size=tuple(im1.size()[2:]), mode='nearest')
-            depth_res = self.depth_estimator(
+            depth = self.depth_estimator(
                 torch.cat([seg_resized, im1_1by1, depth], dim=1))
-            depth += depth_res
 
             depths.append(depth)
 
