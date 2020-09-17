@@ -42,7 +42,6 @@ class MonoSFDNet(nn.Module):
         super(MonoSFDNet, self).__init__()
         self.upsample = upsample
         self.output_level = 4
-        self.scale_levels = [8, 4, 2, 1]
 
         if 'feature_pyramid_extractor' in kwargs:
             feat_pyr_cfg = kwargs['feature_pyramid_extractor']
@@ -116,16 +115,9 @@ class MonoSFDNet(nn.Module):
         return "MonoSF" + str(self.feature_pyramid_extractor) + str(self.segmentation_network)\
             + str(self.flow_estimator) + str(self.context_networks)
 
-    def get_scales(self):
-        '''
-        Returns the subsampling scales
-        '''
-        return self.scale_levels
-
     def aux_forward(self, im1_pyr, im2_pyr, seg):
         '''
         Auxillary forward method that does the flow prediction
-        @todo incorperate segmentation
         '''
         # output
         flows = []
