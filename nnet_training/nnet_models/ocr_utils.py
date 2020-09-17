@@ -10,9 +10,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from config import cfg
-from network.utils import BNReLU
-
+def BNReLU(ch):
+    """
+    If you want to do multi-gpu training, this needs a synchronised version
+    """
+    return nn.Sequential(nn.BatchNorm2d(ch), nn.ReLU())
 
 class SpatialGather_Module(nn.Module):
     """
@@ -23,8 +25,6 @@ class SpatialGather_Module(nn.Module):
         Output:
           The correlation of every class map with every feature map
           shape = [n, num_feats, num_classes, 1]
-
-
     """
     def __init__(self, cls_num=0, scale=1):
         super(SpatialGather_Module, self).__init__()
@@ -32,8 +32,7 @@ class SpatialGather_Module(nn.Module):
         self.scale = scale
 
     def forward(self, feats, probs):
-        batch_size, c, _, _ = probs.size(0), probs.size(1), probs.size(2), \
-            probs.size(3)
+        batch_size, c, _, _ = probs.size(0), probs.size(1), probs.size(2), probs.size(3)
 
         # each class image now a vector
         probs = probs.view(batch_size, c, -1)
@@ -113,11 +112,13 @@ class ObjectAttentionBlock(nn.Module):
         context = context.view(batch_size, self.key_channels, *x.size()[2:])
         context = self.f_up(context)
         if self.scale > 1:
-            context = F.interpolate(input=context, size=(h, w), mode='bilinear',
-                                    align_corners=cfg.MODEL.ALIGN_CORNERS)
+            context = F.interpolate(input=context, size=(h, w), mode='bilinear', align_corners=True)
 
         return context
 
+
+def get_aspp(high_level_ch, bottleneck_ch, output_stride, dpc=False):
+    raise NotImplementedError
 
 class SpatialOCR_Module(nn.Module):
     """
@@ -126,14 +127,14 @@ class SpatialOCR_Module(nn.Module):
     for each pixel.
     """
     def __init__(self, in_channels, key_channels, out_channels, scale=1,
-                 dropout=0.1):
+                 dropout=0.1, **kwargs):
         super(SpatialOCR_Module, self).__init__()
         self.object_context_block = ObjectAttentionBlock(in_channels,
                                                          key_channels,
                                                          scale)
-        if cfg.MODEL.OCR_ASPP:
+        if "OCR_ASPP" in kwargs:
             self.aspp, aspp_out_ch = get_aspp(
-                in_channels, bottleneck_ch=cfg.MODEL.ASPP_BOT_CH,
+                in_channels, bottleneck_ch=kwargs['kwargs']['bott_ch'],
                 output_stride=8)
             _in_channels = 2 * in_channels + aspp_out_ch
         else:
@@ -149,7 +150,7 @@ class SpatialOCR_Module(nn.Module):
     def forward(self, feats, proxy_feats):
         context = self.object_context_block(feats, proxy_feats)
 
-        if cfg.MODEL.OCR_ASPP:
+        if hasattr(self, 'aspp'):
             aspp = self.aspp(feats)
             output = self.conv_bn_dropout(torch.cat([context, aspp, feats], 1))
         else:

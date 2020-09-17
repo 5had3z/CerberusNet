@@ -2,7 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['_ConvBNReLU', '_DSConv', '_DWConv', 'LinearBottleneck', 'PyramidPooling']
+__all__ = ['_ConvBNReLU', '_DSConv', '_DWConv', 'LinearBottleneck', 'PyramidPooling', 'initialize_weights']
+
+def initialize_weights(*models):
+    """
+    Initialize Model Weights
+    """
+    for model in models:
+        for module in model.modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, nn.BatchNorm2d):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
 
 class _ConvBNReLU(nn.Module):
     """Conv-BN-ReLU"""
