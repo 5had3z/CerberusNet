@@ -32,9 +32,9 @@ class StereoSegDepthTrainer(ModelTrainer):
         self._depth_loss_fn = loss_fn['depth']
 
         self.metric_loggers = {
-            'seg': SegmentationMetric(19, base_dir=modelpath,
+            'seg': SegmentationMetric(19, base_dir=modelpath, main_metric="IoU",
                                       savefile='segmentation_data'),
-            'depth': DepthMetric(base_dir=modelpath, savefile='depth_data')
+            'depth': DepthMetric(base_dir=modelpath, main_metric="RMSE_Log", savefile='depth_data')
         }
 
         super(StereoSegDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
@@ -70,13 +70,13 @@ class StereoSegDepthTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['seg']._add_sample(
+            self.metric_loggers['seg'].add_sample(
                 torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                 seg_gt.cpu().data.numpy(),
                 loss=seg_loss.item()
             )
 
-            self.metric_loggers['depth']._add_sample(
+            self.metric_loggers['depth'].add_sample(
                 depth_pred.cpu().data.numpy(),
                 depth_gt.cpu().data.numpy(),
                 loss=l_depth_loss.item() + r_depth_loss.item()
@@ -111,13 +111,13 @@ class StereoSegDepthTrainer(ModelTrainer):
                 l_depth_loss = self._depth_loss_fn(left, depth_pred, right, baseline, data['cam'])
                 r_depth_loss = self._depth_loss_fn(right, depth_pred, left, -baseline, data['cam'])
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
 
-                self.metric_loggers['depth']._add_sample(
+                self.metric_loggers['depth'].add_sample(
                     depth_pred.cpu().data.numpy(),
                     depth_gt.cpu().data.numpy(),
                     loss=l_depth_loss.item() + r_depth_loss.item()

@@ -43,7 +43,9 @@ class MonoFlowTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn['flow']
-        self.metric_loggers = {'flow' : OpticFlowMetric(base_dir=modelpath, savefile='flow_data')}
+        self.metric_loggers = {
+            'flow' : OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data')
+        }
 
         super(MonoFlowTrainer, self).__init__(model, optim, dataldr,
                                               lr_cfg, modelpath, checkpoints)
@@ -81,7 +83,7 @@ class MonoFlowTrainer(ModelTrainer):
             self._optimizer.step()
             
             with torch.no_grad():
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0].detach(),
                     flow_gt, loss=loss.item()
                 )
@@ -116,7 +118,7 @@ class MonoFlowTrainer(ModelTrainer):
                 # Caculate the loss and accuracy for the predictions
                 loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
 
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
                     flow_gt, loss=loss.item()
                 )

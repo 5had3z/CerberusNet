@@ -55,7 +55,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/MonoSFD_cs.json')
+    parser.add_argument('-c', '--config', default='configs/SFD_test.json')
     args = parser.parse_args()
 
     with open(args.config) as f:

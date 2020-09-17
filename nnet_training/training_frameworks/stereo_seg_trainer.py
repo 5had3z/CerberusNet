@@ -30,7 +30,7 @@ class StereoSegTrainer(ModelTrainer):
         '''
         self._loss_function = loss_fn['segmentation']
         self.metric_loggers = {
-            'seg': SegmentationMetric(19, base_dir=modelpath, savefile='segmentation_data')
+            'seg': SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='segmentation_data')
         }
 
         super(StereoSegTrainer, self).__init__(model, optim, dataldr, lr_cfg,
@@ -61,7 +61,7 @@ class StereoSegTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['seg']._add_sample(
+            self.metric_loggers['seg'].add_sample(
                 torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
@@ -92,7 +92,7 @@ class StereoSegTrainer(ModelTrainer):
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()

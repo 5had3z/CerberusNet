@@ -13,6 +13,7 @@ T = TypeVar('T')
 import torch
 
 from nnet_training.utilities.lr_scheduler import LRScheduler
+from nnet_training.utilities.metrics import MetricBaseClass
 
 __all__ = ['ModelTrainer']
 
@@ -48,13 +49,12 @@ class ModelTrainer(object):
         if not os.path.isdir(basepath):
             os.makedirs(basepath)
 
-        self._best_path = basepath / (str(self._model) + "_best.pth")
-        self._latest_path = basepath / (str(self._model) + "_latest.pth")
+        self._basepath = basepath
 
         if self._checkpoints:
-            self.load_checkpoint(self._latest_path)
+            self.load_checkpoint(self._basepath / (str(self._model)+"_latest.pth"))
         else:
-            if os.path.isfile(self._latest_path):
+            if os.path.isfile(self._basepath / (str(self._model)+"_latest.pth")):
                 sys.stdout.write("\nWarning: Checkpoint Already Exists!")
             else:
                 sys.stdout.write("\nStarting From Scratch!")
@@ -102,6 +102,16 @@ class ModelTrainer(object):
             'epochs'              : self.epoch
         }, path)
 
+    def write_summary(self):
+        """
+        Writes a brief summary of the current state of an experiment in a text file
+        """
+        with open(self._basepath / "Summary.txt", "w") as txt_file:
+            txt_file.write("{} Summary, # Epochs: {}\n".format(str(self._model), self.epoch))
+            for key, metric in self.metric_loggers.items():
+                name, value = metric.max_accuracy(main_metric=True)
+                txt_file.write("Objective: %s\tMetric: %s\tValue: %.3f\n"%(key, name, value[1]))
+
     def train_model(self, n_epochs):
         """
         Train the model for a number of epochs
@@ -127,14 +137,25 @@ class ModelTrainer(object):
 
             self._validate_model(max_epoch)
 
-            epoch_end_time = time.time()
+            epoch_duration = time.time() - epoch_start_time
 
             if self._checkpoints:
-                self.save_checkpoint(self._latest_path, metrics=True)
+                for key, logger in self.metric_loggers.items():
+                    epoch_acc = logger.get_epoch_statistics(main_metric=True,
+                                                            loss_metric=False)
+                    _, prev_best = logger.max_accuracy(main_metric=True)
+                    if prev_best[0](epoch_acc[0], prev_best[1]):
+                        filename = "{}_{}.pth".format(str(self._model), key)
+                        self.save_checkpoint(self._basepath / filename, metrics=False)
+
+                self.save_checkpoint(
+                    self._basepath / "{}_latest.pth".format(str(self._model)), metrics=True)
+
+                self.write_summary()
 
             sys.stdout.flush()
-            sys.stdout.write('\rEpoch '+ str(self.epoch) +
-                             ' Finished, Time: '+ str(epoch_end_time - epoch_start_time)+ 's\n')
+            sys.stdout.write('\rEpoch '+str(self.epoch)+' Finished, Time: '+
+                             str(epoch_duration)+'s\n')
 
         train_end_time = time.time()
 

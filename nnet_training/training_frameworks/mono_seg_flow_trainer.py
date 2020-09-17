@@ -36,8 +36,8 @@ class MonoSegFlowTrainer(ModelTrainer):
         self._flow_loss_fn = loss_fn['flow']
 
         self.metric_loggers = {
-            'seg' : SegmentationMetric(19, base_dir=modelpath, savefile='seg_data'),
-            'flow': OpticFlowMetric(base_dir=modelpath, savefile='flow_data')
+            'seg' : SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='seg_data'),
+            'flow': OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data')
         }
 
         super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
@@ -77,12 +77,12 @@ class MonoSegFlowTrainer(ModelTrainer):
             self._optimizer.step()
 
             with torch.no_grad():
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
@@ -119,12 +119,12 @@ class MonoSegFlowTrainer(ModelTrainer):
                 flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
                 seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
 
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()

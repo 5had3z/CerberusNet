@@ -31,7 +31,9 @@ class StereoDisparityTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn['depth']
-        self.metric_loggers = {'depth' : DepthMetric(base_dir=modelpath, savefile='depth_data')}
+        self.metric_loggers = {
+            'depth' : DepthMetric(base_dir=modelpath, main_metric="RMSE_Log",savefile='depth_data')
+        }
 
         super(StereoDisparityTrainer, self).__init__(model, optim, dataldr,
                                                      lr_cfg, modelpath, checkpoints)
@@ -63,7 +65,7 @@ class StereoDisparityTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['depth']._add_sample(
+            self.metric_loggers['depth'].add_sample(
                 depth_pred.cpu().data.numpy(),
                 data['disparity'].data.numpy(),
                 loss=loss.item()
@@ -96,7 +98,7 @@ class StereoDisparityTrainer(ModelTrainer):
                 loss = self._loss_function(left, depth_pred, right, baseline, data['cam'])
                 loss += self._loss_function(right, depth_pred, left, -baseline, data['cam'])
 
-                self.metric_loggers['depth']._add_sample(
+                self.metric_loggers['depth'].add_sample(
                     depth_pred.cpu().data.numpy(),
                     data['disparity'].data.numpy(),
                     loss=loss.item()

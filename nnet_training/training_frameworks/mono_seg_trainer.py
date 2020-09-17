@@ -35,8 +35,10 @@ class MonoSegmentationTrainer(ModelTrainer):
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self.metric_loggers = {'seg': SegmentationMetric(19, base_dir=modelpath,
-                                                         savefile='segmentation_data')}
+        self.metric_loggers = {
+            'seg': SegmentationMetric(19, base_dir=modelpath, main_metric="IoU",
+                                      savefile='segmentation_data')
+        }
         self._loss_function = loss_fn['segmentation']
 
         super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
@@ -65,7 +67,7 @@ class MonoSegmentationTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['seg']._add_sample(
+            self.metric_loggers['seg'].add_sample(
                 torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                 target.cpu().data.numpy(),
                 loss=loss.item()
@@ -94,7 +96,7 @@ class MonoSegmentationTrainer(ModelTrainer):
                 # Caculate the loss and accuracy for the predictions
                 loss = self._loss_function(outputs, target)
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(outputs, dim=1, keepdim=True).cpu().data.numpy(),
                     target.cpu().numpy(),
                     loss=loss.item()

@@ -35,7 +35,9 @@ class StereoFlowTrainer(ModelTrainer):
         a dictionary with Training, Validation and Testing loaders
         '''
         self._loss_function = loss_fn['flow']
-        self.metric_loggers = {'flow': OpticFlowMetric(base_dir=modelpath, savefile='flow_data')}
+        self.metric_loggers = {
+            'flow': OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data')
+        }
 
         super(StereoFlowTrainer, self).__init__(model, optim, dataldr,
                                                 lr_cfg, modelpath, checkpoints)
@@ -67,7 +69,7 @@ class StereoFlowTrainer(ModelTrainer):
             loss.backward()
             self._optimizer.step()
 
-            self.metric_loggers['flow']._add_sample(
+            self.metric_loggers['flow'].add_sample(
                 [left.cpu().data.numpy(), right.cpu().data.numpy()],
                 [left_seq.cpu().data.numpy(), right_seq.cpu().data.numpy()],
                 [output_left.cpu().data.numpy(), output_right.cpu().data.numpy()],
@@ -102,7 +104,7 @@ class StereoFlowTrainer(ModelTrainer):
                 loss =  self._loss_function(left, output_left, left_seq)
                 loss += self._loss_function(right, output_right, right_seq)
 
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     [left.cpu().data.numpy(), right.cpu().data.numpy()],
                     [left_seq.cpu().data.numpy(), right_seq.cpu().data.numpy()],
                     [output_left.cpu().data.numpy(), output_right.cpu().data.numpy()],

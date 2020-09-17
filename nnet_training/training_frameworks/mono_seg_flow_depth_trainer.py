@@ -36,9 +36,9 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         self._depth_loss_fn = loss_fn['depth']
 
         self.metric_loggers = {
-            'seg' : SegmentationMetric(19, base_dir=modelpath, savefile='seg_data'),
-            'flow': OpticFlowMetric(base_dir=modelpath, savefile='flow_data'),
-            'depth': DepthMetric(base_dir=modelpath, savefile='depth_data')
+            'seg' : SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='seg_data'),
+            'flow': OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data'),
+            'depth': DepthMetric(base_dir=modelpath, main_metric="RMSE_Log", savefile='depth_data')
         }
 
         super(MonoSegFlowDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
@@ -87,18 +87,18 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             self._optimizer.step()
 
             with torch.no_grad():
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
 
-                self.metric_loggers['depth']._add_sample(
+                self.metric_loggers['depth'].add_sample(
                     depth_pred['depth_fw'][0].cpu().data.numpy(),
                     data['disparity'].data.numpy(),
                     loss=depth_loss.item()
@@ -143,18 +143,18 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 depth_loss = self._depth_loss_fn(
                     disp_pred_pyr=depth_pred['depth_fw'], disp_gt=depth_gt)
 
-                self.metric_loggers['flow']._add_sample(
+                self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
-                self.metric_loggers['seg']._add_sample(
+                self.metric_loggers['seg'].add_sample(
                     torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     data['seg'].data.numpy(),
                     loss=seg_loss.item()
                 )
 
-                self.metric_loggers['depth']._add_sample(
+                self.metric_loggers['depth'].add_sample(
                     depth_pred['depth_fw'][0].cpu().data.numpy(),
                     data['disparity'].data.numpy(),
                     loss=depth_loss.item()
