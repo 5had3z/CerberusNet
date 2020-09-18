@@ -31,7 +31,7 @@ from collections import OrderedDict
 
 from torch import nn
 
-import nnet_training.nnet_models.hrnetv2 as hrnetv2
+from .hrnetv2 import get_seg_model
 
 from .nnet_ops import initialize_weights
 from .ocr_utils import BNReLU, SpatialGather_Module, SpatialOCR_Module, get_aspp
@@ -115,12 +115,10 @@ class OCR_block(nn.Module):
             BNReLU(ocr_mid_channels)
         )
         self.ocr_gather_head = SpatialGather_Module(num_classes)
-        self.ocr_distri_head = SpatialOCR_Module(in_channels=ocr_mid_channels,
-                                                 key_channels=ocr_key_channels,
-                                                 out_channels=ocr_mid_channels,
-                                                 scale=1,
-                                                 dropout=0.05,
-                                                 )
+        self.ocr_distri_head = SpatialOCR_Module(
+            in_channels=ocr_mid_channels, key_channels=ocr_key_channels,
+            out_channels=ocr_mid_channels, scale=1, dropout=0.05)
+
         self.cls_head = nn.Conv2d(
             ocr_mid_channels, num_classes, kernel_size=1, stride=1, padding=0,
             bias=True)
@@ -155,20 +153,19 @@ class OCRNet(nn.Module):
     """
     def __init__(self, **kwargs):
         super(OCRNet, self).__init__()
-        self.backbone = hrnetv2.get_seg_model(**kwargs)
+        self.backbone = get_seg_model(**kwargs)
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
 
     def forward(self, inputs):
         assert 'images' in inputs
         x = inputs['images']
 
-        _, _, high_level_features = self.backbone(x)
+        high_level_features, _ = self.backbone(x)
         cls_out, aux_out, _ = self.ocr(high_level_features)
         aux_out = scale_as(aux_out, x)
         cls_out = scale_as(cls_out, x)
 
         return cls_out
-
 
 class OCRNetASPP(nn.Module):
     """
@@ -176,7 +173,7 @@ class OCRNetASPP(nn.Module):
     """
     def __init__(self, **kwargs):
         super(OCRNetASPP, self).__init__()
-        self.backbone = hrnetv2.get_seg_model(**kwargs)
+        self.backbone = get_seg_model(**kwargs)
         self.aspp, aspp_out_ch = get_aspp(self.backbone.high_level_ch,
                                           bottleneck_ch=256, output_stride=8)
         self.ocr = OCR_block(aspp_out_ch, **kwargs)
@@ -200,7 +197,7 @@ class MscaleOCR(nn.Module):
     """
     def __init__(self, **kwargs):
         super(MscaleOCR, self).__init__()
-        self.backbone = hrnetv2.get_seg_model(**kwargs)
+        self.backbone = get_seg_model(**kwargs)
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
 
         mid_channels = 512 if "mid_channels" not in kwargs else kwargs['mid_channels']

@@ -12,14 +12,12 @@
         "train_subdirs" : {
             "images" : "leftImg8bit/train",
             "left_seq" : "leftImg8bit_sequence/train",
-            "seg" : "gtFine/train",
-            "disparity" : "disparity/train"
+            "seg" : "gtFine/train"
         },
         "val_subdirs" : {
             "images" : "leftImg8bit/val",
             "left_seq" : "leftImg8bit_sequence/val",
-            "seg" : "gtFine/val",
-            "disparity" : "disparity/val"
+            "seg" : "gtFine/val"
         }
     },
     "loss_functions" : [
@@ -42,20 +40,18 @@
                 "num_classes":19, "rmi_radius":3, "rmi_pool_way":1, "rmi_pool_size":4,
                 "rmi_pool_stride":4, "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":-1
             }
-        },
-        {
-            "type" :"depth",
-            "function" : "InvHuberLossPyr",
-            "args" : {"lvl_weights" : [0.01, 0.01, 0.01, 0.01, 0.0], "ignore_index" : -1}
         }
     ],
     "trainer" : "MonoSegFlowTrainer",
     "model" : {
         "name" : "OCRNet",
         "args" : {
-            "mid_channels" : 512,
-            "key_channels" : 256,
-            "OCR_EXTRA" : {
+            "ocr_config" : {
+                "mid_channels" : 512,
+                "key_channels" : 256,
+                "classes" : 19
+            },
+            "hrnetv2_config" : {
                 "STAGE1" : {
                     "NUM_MODULES" : 1,
                     "NUM_BRANCHES" : 1,
@@ -88,7 +84,30 @@
                     "NUM_CHANNELS" : [48, 96, 192, 384],
                     "FUSE_METHOD" : "SUM"
                 }
-            }
+            },
+            "depth_est_network" : {
+                "type" : "DepthEstimator1",
+                "args" : {
+                    "pre_out_ch" : 32
+                }
+            },
+            "correlation_args" : {
+                "pad_size" : 4,
+                "max_displacement" : 4,
+                "kernel_size" : 1,
+                "stride1" : 1,
+                "stride2" : 1,
+                "corr_multiply" : 1
+            },
+            "flow_est_network" : {
+                "type" : "FlowEstimatorDense",
+                "args" : {}
+            },
+            "context_network" : {
+                "type" : "ContextNetwork",
+                "args" : {}
+            },
+            "1x1_conv_out" : 32
         }
     },
     "optimiser" : {

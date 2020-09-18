@@ -187,8 +187,8 @@ class MonoSFNet(nn.Module):
         if seg_gt is None:
             seg_gt = self.segmentation_network(im1_pyr)
 
-        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr)
+        flows['fw'] = self.aux_forward(im1_pyr, im2_pyr)
         if consistency:
-            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr)
+            flows['bw'] = self.aux_forward(im2_pyr, im1_pyr)
 
         return flows, seg_gt

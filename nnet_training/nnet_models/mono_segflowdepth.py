@@ -66,7 +66,6 @@ class MonoSFDNet(nn.Module):
             self.segmentation_network = SegmentationNet1(num_chs[:0:-1], 19)
 
         if 'correlation_args' in kwargs:
-            corr_args = kwargs['correlation_args']
             search_range = kwargs['correlation_args']['max_displacement']
             self.corr = Correlation(**kwargs['correlation_args'])
         else:
@@ -183,19 +182,18 @@ class MonoSFDNet(nn.Module):
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
-        segs['seg_fw'] = self.segmentation_network(im1_pyr)
-        segs['seg_bw'] = self.segmentation_network(im2_pyr)
+        segs['fw'] = self.segmentation_network(im1_pyr)
+        segs['bw'] = self.segmentation_network(im2_pyr)
 
         # I'll revisit using GT, will have to make a
         # new tensor and cat for each class and give them
         # each a magnitude that is typical of output
         if seg_gt is None and False:
-            seg_gt = segs['seg_fw']
+            seg_gt = segs['fw']
 
-        flows['flow_fw'], depths['depth_fw'] = self.aux_forward(im1_pyr, im2_pyr, segs['seg_fw'])
+        flows['fw'], depths['fw'] = self.aux_forward(im1_pyr, im2_pyr, segs['fw'])
 
         if consistency:
-            flows['flow_bw'], depths['depth_bw'] = \
-                self.aux_forward(im2_pyr, im1_pyr, segs['seg_bw'])
+            flows['bw'], depths['bw'] = self.aux_forward(im2_pyr, im1_pyr, segs['bw'])
 
         return flows, depths, segs

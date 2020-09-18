@@ -255,7 +255,6 @@ blocks_dict = {
 class HighResolutionNet(nn.Module):
 
     def __init__(self, **kwargs):
-        extra = kwargs['OCR_EXTRA']
         super(HighResolutionNet, self).__init__()
 
         # stem net
@@ -267,14 +266,14 @@ class HighResolutionNet(nn.Module):
         self.bn2 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=relu_inplace)
 
-        self.stage1_cfg = extra['STAGE1']
+        self.stage1_cfg = kwargs['STAGE1']
         num_channels = self.stage1_cfg['NUM_CHANNELS'][0]
         block = blocks_dict[self.stage1_cfg['BLOCK']]
         num_blocks = self.stage1_cfg['NUM_BLOCKS'][0]
         self.layer1 = self._make_layer(block, 64, num_channels, num_blocks)
         stage1_out_channel = block.expansion*num_channels
 
-        self.stage2_cfg = extra['STAGE2']
+        self.stage2_cfg = kwargs['STAGE2']
         num_channels = self.stage2_cfg['NUM_CHANNELS']
         block = blocks_dict[self.stage2_cfg['BLOCK']]
         num_channels = [num_channels[i] * block.expansion
@@ -284,7 +283,7 @@ class HighResolutionNet(nn.Module):
         self.stage2, pre_stage_channels = self._make_stage(
             self.stage2_cfg, num_channels)
 
-        self.stage3_cfg = extra['STAGE3']
+        self.stage3_cfg = kwargs['STAGE3']
         num_channels = self.stage3_cfg['NUM_CHANNELS']
         block = blocks_dict[self.stage3_cfg['BLOCK']]
         num_channels = [num_channels[i] * block.expansion
@@ -294,7 +293,7 @@ class HighResolutionNet(nn.Module):
         self.stage3, pre_stage_channels = self._make_stage(
             self.stage3_cfg, num_channels)
 
-        self.stage4_cfg = extra['STAGE4']
+        self.stage4_cfg = kwargs['STAGE4']
         num_channels = self.stage4_cfg['NUM_CHANNELS']
         block = blocks_dict[self.stage4_cfg['BLOCK']]
         num_channels = [num_channels[i] * block.expansion
@@ -433,7 +432,9 @@ class HighResolutionNet(nn.Module):
 
         feats = torch.cat([x[0], x1, x2, x3], 1)
 
-        return None, None, feats
+        # Return concatinated features for segmentation, and separated unscaled
+        # features for flow from smallest to highest resolution
+        return feats, x[::-1]
 
     def init_weights(self, pretrained: Path):
         print('=> init weights from normal distribution')

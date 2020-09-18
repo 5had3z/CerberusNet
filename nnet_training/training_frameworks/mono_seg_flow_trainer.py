@@ -67,7 +67,7 @@ class MonoSegFlowTrainer(ModelTrainer):
             # Then backpropagate and step the optimizer
             pred_flow, seg_pred = self._model(img, img_seq)
             flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
-            seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
+            seg_loss = self._seg_loss_fn(seg_pred['fw'], seg_gt)
 
             loss = flow_loss + seg_loss
 
@@ -77,12 +77,12 @@ class MonoSegFlowTrainer(ModelTrainer):
 
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0],
+                    img, img_seq, pred_flow['fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -116,15 +116,15 @@ class MonoSegFlowTrainer(ModelTrainer):
                 # Caculate the loss and accuracy for the predictions
                 pred_flow, seg_pred = self._model(img, img_seq)
                 flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
-                seg_loss = self._seg_loss_fn(seg_pred, seg_gt)
+                seg_loss = self._seg_loss_fn(seg_pred['fw'], seg_gt)
 
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0],
+                    img, img_seq, pred_flow['fw'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred, dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
