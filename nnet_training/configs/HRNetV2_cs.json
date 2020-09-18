@@ -1,43 +1,103 @@
 {
-"model" : {
-    "name" : "MonoSFNet",
-    "args" : {
-        "mid_channels" : 512,
-        "key_channels" : 256,
-        "OCR_EXTRA" : {
-            "STAGE1" : {
-                "NUM_MODULES" : 1,
-                "NUM_BRANCHES" : 1,
-                "BLOCK": "BOTTLENECK",
-                "NUM_BLOCKS" : [4],
-                "NUM_CHANNELS" : [64],
-                "FUSE_METHOD" : "SUM"
-            },
-            "STAGE2" : {
-                "NUM_MODULES" : 1,
-                "NUM_BRANCHES" : 2,
-                "BLOCK": "BASIC",
-                "NUM_BLOCKS" : [4, 4],
-                "NUM_CHANNELS" : [48, 96],
-                "FUSE_METHOD" : "SUM"
-            },
-            "STAGE3" : {
-                "NUM_MODULES" : 4,
-                "NUM_BRANCHES" : 3,
-                "BLOCK": "BASIC",
-                "NUM_BLOCKS" : [4, 4, 4],
-                "NUM_CHANNELS" : [48, 96, 192],
-                "FUSE_METHOD" : "SUM"
-            },
-            "STAGE4" : {
-                "NUM_MODULES" : 3,
-                "NUM_BRANCHES" : 4,
-                "BLOCK": "BASIC",
-                "NUM_BLOCKS" : [4, 4, 4, 4],
-                "NUM_CHANNELS" : [48, 96, 192, 384],
-                "FUSE_METHOD" : "SUM"
+    "dataset" : {
+        "type" : "Cityscapes",
+        "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
+        "batch_size" : 4,
+        "shuffle" : true,
+        "drop_last" : true,
+        "augmentations" : {
+            "output_size" : [512, 256],
+            "rand_brightness" : 10
+        },
+        "train_subdirs" : {
+            "images" : "leftImg8bit/train",
+            "left_seq" : "leftImg8bit_sequence/train",
+            "seg" : "gtFine/train",
+            "disparity" : "disparity/train"
+        },
+        "val_subdirs" : {
+            "images" : "leftImg8bit/val",
+            "left_seq" : "leftImg8bit_sequence/val",
+            "seg" : "gtFine/val",
+            "disparity" : "disparity/val"
+        }
+    },
+    "loss_functions" : [
+        {   
+            "type" : "flow",
+            "function" : "unFlowLoss",
+            "args" : {
+                "weights" : {"l1":0.15, "ssim":0.85},
+                "smooth" : {"degree": 2, "alpha" : 0.2, "weighting": 75.0},
+                "w_wrp_scales" : [1.0, 1.0, 1.0, 1.0, 0.0],
+                "w_sm_scales" : [1.0, 0.0, 0.0, 0.0, 0.0],
+                "consistency" : true,
+                "back_occ_only" : false
+            }
+        }, 
+        {
+            "type" :"segmentation",
+            "function" : "RMILoss",
+            "args" : {
+                "num_classes":19, "rmi_radius":3, "rmi_pool_way":1, "rmi_pool_size":4,
+                "rmi_pool_stride":4, "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":-1
+            }
+        },
+        {
+            "type" :"depth",
+            "function" : "InvHuberLossPyr",
+            "args" : {"lvl_weights" : [0.01, 0.01, 0.01, 0.01, 0.0], "ignore_index" : -1}
+        }
+    ],
+    "trainer" : "MonoSegFlowTrainer",
+    "model" : {
+        "name" : "MonoSFNet",
+        "args" : {
+            "mid_channels" : 512,
+            "key_channels" : 256,
+            "OCR_EXTRA" : {
+                "STAGE1" : {
+                    "NUM_MODULES" : 1,
+                    "NUM_BRANCHES" : 1,
+                    "BLOCK": "BOTTLENECK",
+                    "NUM_BLOCKS" : [4],
+                    "NUM_CHANNELS" : [64],
+                    "FUSE_METHOD" : "SUM"
+                },
+                "STAGE2" : {
+                    "NUM_MODULES" : 1,
+                    "NUM_BRANCHES" : 2,
+                    "BLOCK": "BASIC",
+                    "NUM_BLOCKS" : [4, 4],
+                    "NUM_CHANNELS" : [48, 96],
+                    "FUSE_METHOD" : "SUM"
+                },
+                "STAGE3" : {
+                    "NUM_MODULES" : 4,
+                    "NUM_BRANCHES" : 3,
+                    "BLOCK": "BASIC",
+                    "NUM_BLOCKS" : [4, 4, 4],
+                    "NUM_CHANNELS" : [48, 96, 192],
+                    "FUSE_METHOD" : "SUM"
+                },
+                "STAGE4" : {
+                    "NUM_MODULES" : 3,
+                    "NUM_BRANCHES" : 4,
+                    "BLOCK": "BASIC",
+                    "NUM_BLOCKS" : [4, 4, 4, 4],
+                    "NUM_CHANNELS" : [48, 96, 192, 384],
+                    "FUSE_METHOD" : "SUM"
+                }
             }
         }
+    },
+    "optimiser" : {
+        "type" : "Adam",
+        "args" : {
+            "betas":[0.9, 0.99], "weight_decay":1e-6
+        }
+    },
+    "lr_scheduler" : {
+        "base_lr" : 1e-4, "mode" : "constant", "power" : 0.9
     }
-}
 }

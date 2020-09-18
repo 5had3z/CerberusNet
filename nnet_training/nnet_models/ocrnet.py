@@ -153,13 +153,10 @@ class OCRNet(nn.Module):
     """
     OCR net
     """
-    def __init__(self, num_classes, criterion=None, **kwargs):
+    def __init__(self, **kwargs):
         super(OCRNet, self).__init__()
-        self.criterion = criterion
         self.backbone = hrnetv2.get_seg_model(**kwargs)
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
-        self.alpha = 0.4 if 'alpha' not in kwargs else kwargs['alpha']
-        self.aux_rmi = False if 'aux_rmi' not in kwargs else kwargs['aux_rmi']
 
     def forward(self, inputs):
         assert 'images' in inputs
@@ -170,29 +167,19 @@ class OCRNet(nn.Module):
         aux_out = scale_as(aux_out, x)
         cls_out = scale_as(cls_out, x)
 
-        if self.training:
-            gts = inputs['gts']
-            aux_loss = self.criterion(aux_out, gts, do_rmi=self.aux_rmi)
-            main_loss = self.criterion(cls_out, gts)
-            loss = self.alpha * aux_loss + main_loss
-            return loss
-        else:
-            output_dict = {'pred': cls_out}
-            return output_dict
+        return cls_out
 
 
 class OCRNetASPP(nn.Module):
     """
     OCR net
     """
-    def __init__(self, num_classes, criterion=None, **kwargs):
+    def __init__(self, **kwargs):
         super(OCRNetASPP, self).__init__()
-        self.criterion = criterion
         self.backbone = hrnetv2.get_seg_model(**kwargs)
         self.aspp, aspp_out_ch = get_aspp(self.backbone.high_level_ch,
                                           bottleneck_ch=256, output_stride=8)
         self.ocr = OCR_block(aspp_out_ch, **kwargs)
-        self.alpha = 0.4 if 'alpha' not in kwargs else kwargs['alpha']
 
     def forward(self, inputs):
         assert 'images' in inputs
@@ -204,33 +191,23 @@ class OCRNetASPP(nn.Module):
         aux_out = scale_as(aux_out, x)
         cls_out = scale_as(cls_out, x)
 
-        if self.training:
-            gts = inputs['gts']
-            loss = self.alpha * self.criterion(aux_out, gts) + \
-                self.criterion(cls_out, gts)
-            return loss
-
-        output_dict = {'pred': cls_out}
-        return output_dict
+        return cls_out
 
 
 class MscaleOCR(nn.Module):
     """
     OCR net
     """
-    def __init__(self, num_classes, criterion=None, **kwargs):
+    def __init__(self, **kwargs):
         super(MscaleOCR, self).__init__()
-        self.criterion = criterion
         self.backbone = hrnetv2.get_seg_model(**kwargs)
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
 
         mid_channels = 512 if "mid_channels" not in kwargs else kwargs['mid_channels']
         self.scale_attn = make_attn_head(in_ch=mid_channels, out_ch=1)
 
-        self.alpha = 0.4 if 'alpha' not in kwargs else kwargs['alpha']
         self.n_scales = None if 'n_scales' not in kwargs else kwargs['n_scales']
         self.mscale_lo_scale = 0.5 if 'mscale_lo_scale' not in kwargs else kwargs['mscale_lo_scale']
-        self.aux_rmi = False if 'aux_rmi' not in kwargs else kwargs['aux_rmi']
         self.supervised_mscale_wt = 0 if 'supervised_mscale_wt' not in kwargs\
             else kwargs['supervised_mscale_wt']
 
@@ -330,14 +307,8 @@ class MscaleOCR(nn.Module):
                 pred = cls_out + (1 - attn_out) * pred
                 aux = aux_out + (1 - attn_out) * aux
 
-        if self.training:
-            assert 'gts' in inputs
-            gts = inputs['gts']
-            loss = self.alpha * self.criterion(aux, gts) + self.criterion(pred, gts)
-            return loss
-        else:
-            output_dict['pred'] = pred
-            return output_dict
+        output_dict['pred'] = pred
+        return output_dict
 
     def two_scale_forward(self, inputs):
         """
@@ -376,43 +347,16 @@ class MscaleOCR(nn.Module):
         joint_pred = p_lo + (1 - logit_attn) * p_1x
         joint_aux = aux_lo + (1 - logit_attn) * aux_1x
 
-        if self.training:
-            gts = inputs['gts']
-            aux_loss = self.criterion(joint_aux, gts, do_rmi=self.aux_rmi)
-
-            # Optionally turn off RMI loss for first epoch to try to work
-            # around cholesky errors of singular matrix
-            do_rmi_main = True  # cfg.EPOCH > 0
-            main_loss = self.criterion(joint_pred, gts, do_rmi=do_rmi_main)
-            loss = self.alpha * aux_loss + main_loss
-
-            # Optionally, apply supervision to the multi-scale predictions
-            # directly. Turn off RMI to keep things lightweight
-            if self.supervised_mscale_wt:
-                scaled_pred_05x = scale_as(pred_05x, p_1x)
-                loss_lo = self.criterion(scaled_pred_05x, gts, do_rmi=False)
-                loss_hi = self.criterion(pred_10x, gts, do_rmi=False)
-                loss += self.supervised_mscale_wt * loss_lo
-                loss += self.supervised_mscale_wt * loss_hi
-            return loss
-        else:
-            output_dict = {
-                'pred': joint_pred,
-                'pred_05x': pred_05x,
-                'pred_10x': pred_10x,
-                'attn_05x': attn_05x,
-            }
-            return output_dict
+        output_dict = {
+            'pred': joint_pred,
+            'pred_05x': pred_05x,
+            'pred_10x': pred_10x,
+            'attn_05x': attn_05x,
+            'aux' : joint_aux
+        }
+        return output_dict
 
     def forward(self, inputs):
         if self.n_scales and not self.training:
             return self.nscale_forward(inputs, self.n_scales)
         return self.two_scale_forward(inputs)
-
-
-def HRNet(num_classes, criterion, **kwargs):
-    return OCRNet(num_classes, criterion=criterion, **kwargs)
-
-
-def HRNet_Mscale(num_classes, criterion, **kwargs):
-    return MscaleOCR(num_classes, criterion=criterion, **kwargs)
