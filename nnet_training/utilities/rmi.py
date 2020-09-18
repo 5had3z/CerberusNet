@@ -202,12 +202,13 @@ class RMILoss(nn.Module):
         rmi_loss = torch.sum(rmi_per_class) if _IS_SUM else torch.mean(rmi_per_class)
         return rmi_loss
 
-class MultiScaleRMILoss(RMILoss):
+class MultiScaleRMILoss(nn.Module):
     def __init__(self, ocr_aux_rmi=False, supervised_mscale_wt=0.0, alpha=0.4, **kwargs):
-        super(MultiScaleRMILoss, self).__init__(**kwargs)
+        super(MultiScaleRMILoss, self).__init__()
         self.alpha = alpha
         self.ocr_aux_rmi = ocr_aux_rmi
         self.supervised_mscale_wt = supervised_mscale_wt
+        self.rmi = RMILoss(**kwargs)
 
     def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
         aux_loss = super(MultiScaleRMILoss, self).__call__(
@@ -216,8 +217,7 @@ class MultiScaleRMILoss(RMILoss):
         # Optionally turn off RMI loss for first epoch to try to work
         # around cholesky errors of singular matrix
         do_rmi_main = True  # cfg.EPOCH > 0
-        main_loss = super(MultiScaleRMILoss, self).__call__(
-            seg_pred['pred'], seg_gt, do_rmi=do_rmi_main)
+        main_loss = self.rmi(seg_pred['pred'], seg_gt, do_rmi=do_rmi_main)
         loss = self.alpha * aux_loss + main_loss
 
         # Optionally, apply supervision to the multi-scale predictions
@@ -227,13 +227,25 @@ class MultiScaleRMILoss(RMILoss):
                 seg_pred['pred_05x'], size=tuple(seg_pred['pred_10x'][2:]),
                 mode='bilinear', align_corners=True, recompute_scale_factor=True)
 
-            loss_lo = super(MultiScaleRMILoss, self).__call__(
-                scaled_pred_05x, seg_gt, do_rmi=False)
-
-            loss_hi = super(MultiScaleRMILoss, self).__call__(
-                seg_pred['pred_10x'], seg_gt, do_rmi=False)
+            loss_lo = self.rmi(scaled_pred_05x, seg_gt, do_rmi=False)
+            loss_hi = self.rmi(seg_pred['pred_10x'], seg_gt, do_rmi=False)
 
             loss += self.supervised_mscale_wt * loss_lo
             loss += self.supervised_mscale_wt * loss_hi
 
         return loss
+
+class RMILossAux(nn.Module):
+    def __init__(self, weight: float, aux_weight=0.4, **kwargs):
+        super(RMILossAux, self).__init__()
+        self.rmi = RMILoss(**kwargs)
+        self.aux_weight = aux_weight
+        self.weight = weight
+
+    def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
+        assert 'seg' and 'seg_aux' in seg_pred.keys()
+
+        aux_loss = self.rmi(seg_pred['seg'], seg_gt)
+        seg_loss = self.rmi(seg_pred['seg_aux'], seg_gt)
+
+        return self.weight * (self.aux_weight * aux_loss + seg_loss)

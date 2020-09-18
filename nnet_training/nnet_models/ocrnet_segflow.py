@@ -101,25 +101,25 @@ class OCRNetSF(nn.Module):
         return flows[::-1]
 
     def forward(self, im1_rgb: torch.Tensor, im2_rgb: torch.Tensor, consistency=True):
-        flows = {}
-        segs = {}
+        forward = {}
+        backward = {}
 
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(im1_rgb)
         _, im2_pyr = self.backbone(im2_rgb)
 
         # Segmentation pass with image 1
-        segs['fw'], aux_out, _ = self.ocr(high_level_features)
+        forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
 
         # Flow pass with image 1
-        scale_factor = im1_rgb.size()[-1] // segs['fw'].size()[-1]
-        flows['fw'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)
+        scale_factor = im1_rgb.size()[-1] // forward['seg'].size()[-1]
+        forward['flow'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)
 
         if consistency:
             # Flow pass with image 2
-            flows['bw'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
+            backward['flow'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
-        aux_out = scale_as(aux_out, im1_rgb)
-        segs['fw'] = scale_as(segs['fw'], im1_rgb)
+        forward['seg'] = scale_as(forward['seg'], im1_rgb)
+        forward['seg_aux'] = scale_as(forward['seg_aux'], im1_rgb)
 
-        return flows, segs
+        return forward, backward

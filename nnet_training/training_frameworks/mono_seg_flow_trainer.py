@@ -53,9 +53,9 @@ class MonoSegFlowTrainer(ModelTrainer):
                 param_group['lr'] = cur_lr
 
             # Put both image and target onto device
-            img     = data['l_img'].to(self._device)
+            img = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
-            seg_gt  = data['seg'].to(self._device)
+            seg_gt = data['seg'].to(self._device)
 
             if all(key in data.keys() for key in ["flow", "flow_mask"]):
                 flow_gt = {"flow": data['flow'].to(self._device),
@@ -65,9 +65,11 @@ class MonoSegFlowTrainer(ModelTrainer):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow, seg_pred = self._model(img, img_seq)
-            flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
-            seg_loss = self._seg_loss_fn(seg_pred['fw'], seg_gt)
+            forward, backward = self._model(img, img_seq)
+
+            flow_loss, _, _, _ = self._flow_loss_fn(
+                forward['flow'], backward['flow'], img, img_seq)
+            seg_loss = self._seg_loss_fn(forward, seg_gt)
 
             loss = flow_loss + seg_loss
 
@@ -77,12 +79,12 @@ class MonoSegFlowTrainer(ModelTrainer):
 
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['fw'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -103,9 +105,9 @@ class MonoSegFlowTrainer(ModelTrainer):
 
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img     = data['l_img'].to(self._device)
+                img = data['l_img'].to(self._device)
                 img_seq = data['l_seq'].to(self._device)
-                seg_gt  = data['seg'].to(self._device)
+                seg_gt = data['seg'].to(self._device)
 
                 if all(key in data.keys() for key in ["flow", "flow_mask"]):
                     flow_gt = {"flow": data['flow'].to(self._device),
@@ -114,17 +116,19 @@ class MonoSegFlowTrainer(ModelTrainer):
                     flow_gt = None
 
                 # Caculate the loss and accuracy for the predictions
-                pred_flow, seg_pred = self._model(img, img_seq)
-                flow_loss, _, _, _ = self._flow_loss_fn(pred_flow, img, img_seq)
-                seg_loss = self._seg_loss_fn(seg_pred['fw'], seg_gt)
+                forward, backward = self._model(img, img_seq)
+
+                flow_loss, _, _, _ = self._flow_loss_fn(
+                    forward['flow'], backward['flow'], img, img_seq)
+                seg_loss = self._seg_loss_fn(forward, seg_gt)
 
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['fw'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
@@ -146,16 +150,16 @@ class MonoSegFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             data = next(iter(self._validation_loader))
-            left     = data['l_img'].to(self._device)
+            left = data['l_img'].to(self._device)
             seq_left = data['l_seq'].to(self._device)
-            seg_gt   = data['seg']
+            seg_gt = data['seg']
 
             start_time = time.time()
-            flow_12, seg_pred = self._model(left, seq_left)
+            forward, _ = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            np_flow_12 = flow_12['fw'][0].detach().cpu().numpy()
-            pred_cpu = torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().numpy()
+            np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+            pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 3, 1)
@@ -185,7 +189,6 @@ class MonoSegFlowTrainer(ModelTrainer):
                     plt.subplot(2, 3, 6)
                     plt.imshow(vis_flow)
                     plt.xlabel("Ground Truth Flow")
-
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()

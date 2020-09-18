@@ -186,8 +186,9 @@ class unFlowLoss(nn.modules.Module):
     """
     Loss function adopted by ARFlow from originally Unflow.
     """
-    def __init__(self, weights=None, consistency=True, back_occ_only=False, **kwargs):
+    def __init__(self, weight=1.0, weights=None, consistency=True, back_occ_only=False, **kwargs):
         super(unFlowLoss, self).__init__()
+        self.weight = weight
 
         if "l1" in weights:
             self.l1_weight = weights["l1"]
@@ -247,14 +248,14 @@ class unFlowLoss(nn.modules.Module):
         loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
         return sum([l.mean() for l in loss])
 
-    def forward(self, pred_flow, im1_origin, im2_origin):
+    def forward(self, pred_flow_fw, pred_flow_bw, im1_origin, im2_origin):
         """
         :param output: Multi-scale forward/backward flows n * [B x 4 x h x w]
         :param target: image pairs Nx6xHxW
         :return:
         """
         pyramid_flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                         zip(pred_flow['fw'], pred_flow['bw'])]
+                         zip(pred_flow_fw, pred_flow_bw)]
 
         pyramid_warp_losses = []
         pyramid_smooth_losses = []
@@ -309,8 +310,8 @@ class unFlowLoss(nn.modules.Module):
         pyramid_smooth_losses = [l * w for l, w in
                                  zip(pyramid_smooth_losses, self.w_sm_scales)]
 
-        warp_loss = sum(pyramid_warp_losses)
-        smooth_loss = self.smooth_args['weighting'] * sum(pyramid_smooth_losses)
+        warp_loss = self.weight * sum(pyramid_warp_losses)
+        smooth_loss = self.weight * self.smooth_args['weighting'] * sum(pyramid_smooth_losses)
         total_loss = warp_loss + smooth_loss
 
         return total_loss, warp_loss, smooth_loss, pyramid_flows[0].abs().mean()
