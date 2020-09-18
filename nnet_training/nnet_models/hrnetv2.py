@@ -137,8 +137,7 @@ class HighResolutionModule(nn.Module):
                 num_branches, len(num_inchannels))
             raise ValueError(error_msg)
 
-    def _make_one_branch(self, branch_index, block, num_blocks, num_channels,
-                         stride=1):
+    def _make_one_branch(self, branch_index, block, num_blocks, num_channels, stride=1):
         downsample = None
         if stride != 1 or \
            self.num_inchannels[branch_index] != (num_channels[branch_index] *
@@ -148,7 +147,7 @@ class HighResolutionModule(nn.Module):
                           num_channels[branch_index] * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(num_channels[branch_index] * block.expansion,
-                       momentum=BN_MOMENTUM),
+                               momentum=BN_MOMENTUM)
             )
 
         layers = []
@@ -376,13 +375,9 @@ class HighResolutionNet(nn.Module):
             else:
                 reset_multi_scale_output = True
             modules.append(
-                HighResolutionModule(num_branches,
-                                     block,
-                                     num_blocks,
-                                     num_inchannels,
-                                     num_channels,
-                                     fuse_method,
-                                     reset_multi_scale_output)
+                HighResolutionModule(num_branches, block, num_blocks,
+                                     num_inchannels, num_channels,
+                                     fuse_method, reset_multi_scale_output)
             )
             num_inchannels = modules[-1].get_num_inchannels()
 
@@ -429,12 +424,12 @@ class HighResolutionNet(nn.Module):
 
         # Upsampling
         x0_h, x0_w = x[0].size(2), x[0].size(3)
-        x1 = F.interpolate(x[1], size=(x0_h, x0_w),
-                           mode='bilinear', align_corners=align_corners)
-        x2 = F.interpolate(x[2], size=(x0_h, x0_w),
-                           mode='bilinear', align_corners=align_corners)
-        x3 = F.interpolate(x[3], size=(x0_h, x0_w),
-                           mode='bilinear', align_corners=align_corners)
+        x1 = F.interpolate(x[1], size=(x0_h, x0_w), mode='bilinear',
+                           align_corners=align_corners)
+        x2 = F.interpolate(x[2], size=(x0_h, x0_w), mode='bilinear',
+                           align_corners=align_corners)
+        x3 = F.interpolate(x[3], size=(x0_h, x0_w), mode='bilinear',
+                           align_corners=align_corners)
 
         feats = torch.cat([x[0], x1, x2, x3], 1)
 
@@ -452,12 +447,10 @@ class HighResolutionNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
         if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained,
-                                         map_location={'cuda:0': 'cpu'})
+            pretrained_dict = torch.load(pretrained, map_location={'cuda:0': 'cpu'})
             print('=> loading pretrained model {}'.format(pretrained))
             model_dict = self.state_dict()
-            pretrained_dict = {k.replace('last_layer',
-                                         'aux_head').replace('model.', ''): v
+            pretrained_dict = {k.replace('last_layer', 'aux_head').replace('model.', ''): v
                                for k, v in pretrained_dict.items()}
             #print(set(model_dict) - set(pretrained_dict))
             #print(set(pretrained_dict) - set(model_dict))
@@ -469,8 +462,8 @@ class HighResolutionNet(nn.Module):
             raise RuntimeError('No such file {}'.format(pretrained))
 
 
-def get_seg_model():
-    model = HighResolutionNet()
-    model.init_weights(Path.cwd())
+def get_seg_model(**kwargs):
+    model = HighResolutionNet(**kwargs)
+    # model.init_weights(Path.cwd())
 
     return model

@@ -156,8 +156,8 @@ class OCRNet(nn.Module):
     def __init__(self, num_classes, criterion=None, **kwargs):
         super(OCRNet, self).__init__()
         self.criterion = criterion
-        self.backbone = hrnetv2.get_seg_model()
-        self.ocr = OCR_block(self.backbone.high_level_ch)
+        self.backbone = hrnetv2.get_seg_model(**kwargs)
+        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
         self.alpha = 0.4 if 'alpha' not in kwargs else kwargs['alpha']
         self.aux_rmi = False if 'aux_rmi' not in kwargs else kwargs['aux_rmi']
 
@@ -188,11 +188,10 @@ class OCRNetASPP(nn.Module):
     def __init__(self, num_classes, criterion=None, **kwargs):
         super(OCRNetASPP, self).__init__()
         self.criterion = criterion
-        self.backbone = hrnetv2.get_seg_model()
+        self.backbone = hrnetv2.get_seg_model(**kwargs)
         self.aspp, aspp_out_ch = get_aspp(self.backbone.high_level_ch,
-                                          bottleneck_ch=256,
-                                          output_stride=8)
-        self.ocr = OCR_block(aspp_out_ch)
+                                          bottleneck_ch=256, output_stride=8)
+        self.ocr = OCR_block(aspp_out_ch, **kwargs)
         self.alpha = 0.4 if 'alpha' not in kwargs else kwargs['alpha']
 
     def forward(self, inputs):
@@ -222,8 +221,8 @@ class MscaleOCR(nn.Module):
     def __init__(self, num_classes, criterion=None, **kwargs):
         super(MscaleOCR, self).__init__()
         self.criterion = criterion
-        self.backbone = hrnetv2.get_seg_model()
-        self.ocr = OCR_block(self.backbone.high_level_ch)
+        self.backbone = hrnetv2.get_seg_model(**kwargs)
+        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
 
         mid_channels = 512 if "mid_channels" not in kwargs else kwargs['mid_channels']
         self.scale_attn = make_attn_head(in_ch=mid_channels, out_ch=1)
@@ -411,9 +410,9 @@ class MscaleOCR(nn.Module):
         return self.two_scale_forward(inputs)
 
 
-def HRNet(num_classes, criterion):
-    return OCRNet(num_classes, trunk='hrnetv2', criterion=criterion)
+def HRNet(num_classes, criterion, **kwargs):
+    return OCRNet(num_classes, criterion=criterion, **kwargs)
 
 
-def HRNet_Mscale(num_classes, criterion):
-    return MscaleOCR(num_classes, trunk='hrnetv2', criterion=criterion)
+def HRNet_Mscale(num_classes, criterion, **kwargs):
+    return MscaleOCR(num_classes, criterion=criterion, **kwargs)

@@ -393,6 +393,7 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
     Returns a dictionary of loss functions given a config
     """
     from nnet_training.utilities.UnFlowLoss import unFlowLoss
+    from nnet_training.utilities.rmi import RMILoss
 
     loss_fn_dict = {}
     for loss_fn in loss_config:
@@ -408,6 +409,8 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
             loss_fn_dict[loss_fn['type']] = DepthAwareLoss(**loss_fn.args)
         elif loss_fn['function'] == "InvHuberLossPyr":
             loss_fn_dict[loss_fn['type']] = InvHuberLossPyr(**loss_fn.args)
+        elif loss_fn['function'] == "RMILoss":
+            loss_fn_dict[loss_fn['type']] = RMILoss(**loss_fn.args)
         else:
             raise NotImplementedError(loss_fn['function'])
 
