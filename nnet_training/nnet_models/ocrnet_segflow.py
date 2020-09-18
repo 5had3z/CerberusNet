@@ -56,7 +56,11 @@ class OCRNetSF(nn.Module):
         else:
             self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
-    def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor], final_scale: float):
+    def __str__(self):
+        return "OCRNet"+str(self.backbone)+str(self.flow_estimator)+str(self.context_networks)
+
+    def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor],
+                     final_scale: float):
         '''
         Auxillary forward method that does the flow prediction
         '''
