@@ -1,4 +1,6 @@
 
+from typing import List
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,9 +33,9 @@ class OCRNetSF(nn.Module):
         out_1x1 = 32 if '1x1_conv_out' not in kwargs else kwargs['1x1_conv_out']
         self.conv_1x1 = nn.ModuleList()
 
-        for lvl in range(len(kwargs['hrnetv2_config'].keys())):
+        for channels in reversed(kwargs['hrnetv2_config']['STAGE4']['NUM_CHANNELS']):
             self.conv_1x1.append(
-                pwc_conv(self.backbone.high_level_ch, out_1x1, kernel_size=1, stride=1, dilation=1)
+                pwc_conv(channels, out_1x1, kernel_size=1, stride=1, dilation=1)
             )
 
         dim_corr = (search_range * 2 + 1) ** 2
@@ -54,7 +56,7 @@ class OCRNetSF(nn.Module):
         else:
             self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
-    def flow_forward(self, im1_pyr, im2_pyr, final_scale):
+    def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor], final_scale: float):
         '''
         Auxillary forward method that does the flow prediction
         '''

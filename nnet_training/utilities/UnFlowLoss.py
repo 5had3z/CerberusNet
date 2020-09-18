@@ -254,7 +254,7 @@ class unFlowLoss(nn.modules.Module):
         :return:
         """
         pyramid_flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                         zip(pred_flow['flow_fw'], pred_flow['flow_bw'])]
+                         zip(pred_flow['fw'], pred_flow['bw'])]
 
         pyramid_warp_losses = []
         pyramid_smooth_losses = []

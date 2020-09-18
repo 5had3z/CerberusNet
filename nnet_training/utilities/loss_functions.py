@@ -14,7 +14,7 @@ __all__ = ['get_loss_function', 'MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEn
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
-    def __init__(self, aux=True, aux_weight=0.2, ignore_label=-1, **kwargs):
+    def __init__(self, aux=True, aux_weight=0.2, ignore_label=255, **kwargs):
         super(MixSoftmaxCrossEntropyLoss, self).__init__(ignore_index=ignore_label)
         self.aux = aux
         self.aux_weight = aux_weight
@@ -96,7 +96,7 @@ class SoftmaxCrossEntropyOHEMLoss(nn.Module):
 
 
 class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
-    def __init__(self, aux=False, aux_weight=0.2, ignore_index=-1, **kwargs):
+    def __init__(self, aux=False, aux_weight=0.2, ignore_index=255, **kwargs):
         super(MixSoftmaxCrossEntropyOHEMLoss, self).__init__(ignore_label=ignore_index, **kwargs)
         self.aux = aux
         self.aux_weight = aux_weight
@@ -122,7 +122,7 @@ class FocalLoss2D(nn.Module):
     """
     Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=2, ignore_index=-100, dynamic_weights=False,
+    def __init__(self, gamma=2, ignore_index=255, dynamic_weights=False,
                  scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 

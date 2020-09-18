@@ -153,8 +153,8 @@ class OCRNet(nn.Module):
     """
     def __init__(self, **kwargs):
         super(OCRNet, self).__init__()
-        self.backbone = get_seg_model(**kwargs)
-        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs)
+        self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
+        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs['ocr_config'])
 
     def forward(self, inputs):
         assert 'images' in inputs

@@ -37,7 +37,7 @@ class RMILoss(nn.Module):
     This version need a lot of memory if do not dwonsample.
     """
     def __init__(self, num_classes=21, rmi_radius=3, rmi_pool_way=1, rmi_pool_size=4,
-                 rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=-1):
+                 rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=255):
         super(RMILoss, self).__init__()
         self.num_classes = num_classes
         # radius choices
@@ -118,9 +118,6 @@ class RMILoss(nn.Module):
 
         return final_loss
 
-    def inverse(self, x):
-        return torch.inverse(x)
-    
     def rmi_lower_bound(self, labels_4D, probs_4D):
         """
         calculate the lower bound of the region mutual information.
@@ -175,8 +172,7 @@ class RMILoss(nn.Module):
         pr_cov = torch.matmul(pr_vectors, pr_vectors.transpose(2, 3))
         # https://github.com/pytorch/pytorch/issues/7500
         # waiting for batched torch.cholesky_inverse()
-        # pr_cov_inv = torch.inverse(pr_cov + diag_matrix.type_as(pr_cov) * _POS_ALPHA)
-        pr_cov_inv = self.inverse(pr_cov + diag_matrix.type_as(pr_cov) * _POS_ALPHA)
+        pr_cov_inv = torch.inverse(pr_cov + diag_matrix.type_as(pr_cov) * _POS_ALPHA)
         # if the dimension of the point is less than 9, you can use the below function
         # to acceleration computational speed.
         #pr_cov_inv = utils.batch_cholesky_inverse(pr_cov + diag_matrix.type_as(pr_cov) * _POS_ALPHA)

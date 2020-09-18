@@ -2,7 +2,7 @@
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
-        "batch_size" : 4,
+        "batch_size" : 2,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
@@ -38,13 +38,13 @@
             "function" : "RMILoss",
             "args" : {
                 "num_classes":19, "rmi_radius":3, "rmi_pool_way":1, "rmi_pool_size":4,
-                "rmi_pool_stride":4, "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":-1
+                "rmi_pool_stride":4, "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":255
             }
         }
     ],
     "trainer" : "MonoSegFlowTrainer",
     "model" : {
-        "name" : "OCRNet",
+        "name" : "OCRNetSF",
         "args" : {
             "ocr_config" : {
                 "mid_channels" : 512,
