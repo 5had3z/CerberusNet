@@ -6,8 +6,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import sys
 import time
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 import numpy as np
 
 import torch
@@ -21,7 +20,7 @@ __all__ = ['StereoSegDepthTrainer']
 
 class StereoSegDepthTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''

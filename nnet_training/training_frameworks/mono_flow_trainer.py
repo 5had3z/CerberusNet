@@ -3,21 +3,20 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
-from typing import Dict, List, TypeVar
-T = TypeVar('T')
+from typing import Dict, List, Union
 import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import OpticFlowMetric
 from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
-__all__ = ['MonoFlowTrainer', 'flow_to_image']
+__all__ = ['MonoFlowTrainer']
 
 def build_pyramid(image: torch.Tensor, lvl_stp: List[int]) -> List[torch.Tensor]:
     """
@@ -35,7 +34,7 @@ class MonoFlowTrainer(ModelTrainer):
     Monocular Flow Training Class
     '''
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''
@@ -59,7 +58,7 @@ class MonoFlowTrainer(ModelTrainer):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
-    
+
             # Put both image and target onto device
             img     = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
@@ -81,7 +80,7 @@ class MonoFlowTrainer(ModelTrainer):
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
-            
+
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
                     img, img_seq, pred_flow['flow_fw'][0].detach(),
@@ -95,7 +94,7 @@ class MonoFlowTrainer(ModelTrainer):
                 sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
                     self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
                     self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
-        
+
     def _validate_model(self, max_epoch):
         with torch.no_grad():
             self._model.eval()

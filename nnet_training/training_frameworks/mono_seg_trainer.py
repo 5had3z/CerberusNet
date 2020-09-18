@@ -3,22 +3,15 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, time, platform, multiprocessing
+import time
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
-from nnet_training.utilities.loss_functions import MixSoftmaxCrossEntropyLoss,\
-    MixSoftmaxCrossEntropyOHEMLoss, FocalLoss2D
-from nnet_training.nnet_models.fast_scnn import FastSCNN, Stereo_FastSCNN
-from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric
 from nnet_training.utilities.visualisation import get_color_pallete
 
@@ -28,7 +21,7 @@ __all__ = ['MonoSegmentationTrainer']
 
 class MonoSegmentationTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''
@@ -181,7 +174,6 @@ class MonoSegmentationTrainer(ModelTrainer):
         super(MonoSegmentationTrainer, self).plot_data()
         self.metric_loggers['seg'].plot_classwise_iou()
 
-from nnet_training.nnet_models.fast_scnn import FastSCNN
 
 if __name__ == "__main__":
     raise NotImplementedError

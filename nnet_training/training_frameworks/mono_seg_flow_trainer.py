@@ -3,18 +3,16 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
-from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
@@ -25,7 +23,7 @@ class MonoSegFlowTrainer(ModelTrainer):
     Monocular Flow Training Class
     '''
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''
@@ -36,7 +34,8 @@ class MonoSegFlowTrainer(ModelTrainer):
         self._flow_loss_fn = loss_fn['flow']
 
         self.metric_loggers = {
-            'seg' : SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='seg_data'),
+            'seg' : SegmentationMetric(19, base_dir=modelpath, main_metric="IoU",
+                                       savefile='seg_data'),
             'flow': OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data')
         }
 
@@ -195,9 +194,6 @@ class MonoSegFlowTrainer(ModelTrainer):
         super(MonoSegFlowTrainer, self).plot_data()
         self.metric_loggers['seg'].plot_classwise_iou()
 
-from nnet_training.nnet_models.mono_segflow import MonoSFNet
-from nnet_training.utilities.UnFlowLoss import unFlowLoss
-from nnet_training.utilities.loss_functions import FocalLoss2D
 
 if __name__ == "__main__":
     raise NotImplementedError

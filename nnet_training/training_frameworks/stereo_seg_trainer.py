@@ -3,15 +3,14 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 from nnet_training.utilities.metrics import SegmentationMetric
 from nnet_training.utilities.visualisation import get_color_pallete
@@ -21,7 +20,7 @@ __all__ = ['StereoSegTrainer']
 
 class StereoSegTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''

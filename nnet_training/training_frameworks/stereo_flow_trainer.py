@@ -3,21 +3,17 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import os, sys, time, platform, multiprocessing
+import sys
+import time
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 import numpy as np
 
 import torch
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-import torchvision.transforms as transforms
 
 from nnet_training.utilities.metrics import OpticFlowMetric
 from nnet_training.utilities.visualisation import flow_to_image
-from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.training_frameworks.trainer_base_class import ModelTrainer
 
 __all__ = ['StereoFlowTrainer']
@@ -27,7 +23,7 @@ class StereoFlowTrainer(ModelTrainer):
     Stereo Flow Training Class
     '''
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
-                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
+                 loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
                  modelpath: Path, checkpoints=True):
         '''
