@@ -147,12 +147,12 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
 
-        self._key = np.array([-1, -1, -1, -1, -1, -1,
-                              -1, -1, 0, 1, -1, -1,
-                              2, 3, 4, -1, -1, -1,
-                              5, -1, 6, 7, 8, 9,
+        self._key = np.array([255, 255, 255, 255, 255, 255,
+                              255, 255, 0, 1, 255, 255,
+                              2, 3, 4, 255, 255, 255,
+                              5, 255, 6, 7, 8, 9,
                               10, 11, 12, 13, 14, 15,
-                              -1, -1, 16, 17, 18])
+                              255, 255, 16, 17, 18])
         self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):

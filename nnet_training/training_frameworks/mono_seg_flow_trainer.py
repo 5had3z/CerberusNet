@@ -154,8 +154,8 @@ class MonoSegFlowTrainer(ModelTrainer):
             flow_12, seg_pred = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            np_flow_12 = flow_12['flow_fw'][0].detach().cpu().numpy()
-            pred_cpu = torch.argmax(seg_pred, dim=1, keepdim=True).cpu().numpy()
+            np_flow_12 = flow_12['fw'][0].detach().cpu().numpy()
+            pred_cpu = torch.argmax(seg_pred['fw'], dim=1, keepdim=True).cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 3, 1)
