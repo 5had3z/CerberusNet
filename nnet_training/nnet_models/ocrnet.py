@@ -31,7 +31,7 @@ from collections import OrderedDict
 
 from torch import nn
 
-import hrnetv2
+import nnet_training.nnet_models.hrnetv2 as hrnetv2
 
 from .nnet_ops import initialize_weights
 from .ocr_utils import BNReLU, SpatialGather_Module, SpatialOCR_Module, get_aspp

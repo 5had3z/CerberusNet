@@ -51,7 +51,7 @@
     ],
     "trainer" : "MonoSegFlowTrainer",
     "model" : {
-        "name" : "MonoSFNet",
+        "name" : "OCRNet",
         "args" : {
             "mid_channels" : 512,
             "key_channels" : 256,

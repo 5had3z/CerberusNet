@@ -10,11 +10,13 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import rmi_utils
+import nnet_training.utilities.rmi_utils as rmi_utils
 
 _euler_num = 2.718281828        # euler number
 _pi = 3.14159265		# pi
@@ -35,7 +37,7 @@ class RMILoss(nn.Module):
     This version need a lot of memory if do not dwonsample.
     """
     def __init__(self, num_classes=21, rmi_radius=3, rmi_pool_way=1, rmi_pool_size=4,
-                 rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=255):
+                 rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=-1):
         super(RMILoss, self).__init__()
         self.num_classes = num_classes
         # radius choices
@@ -109,8 +111,6 @@ class RMILoss(nn.Module):
         rmi_loss = self.rmi_lower_bound(valid_onehot_labels_4d, probs_4d)
 
         # add together
-        #logx.msg(f'lambda_way {self.lambda_way}')
-        #logx.msg(f'bce_loss {bce_loss} weight_lambda {self.weight_lambda} rmi_loss {rmi_loss}')
         if self.lambda_way:
             final_loss = self.weight_lambda * bce_loss + rmi_loss * (1 - self.weight_lambda)
         else:
@@ -205,3 +205,39 @@ class RMILoss(nn.Module):
 
         rmi_loss = torch.sum(rmi_per_class) if _IS_SUM else torch.mean(rmi_per_class)
         return rmi_loss
+
+class MultiScaleRMILoss(RMILoss):
+    def __init__(self, ocr_aux_rmi=False, supervised_mscale_wt=0.0, alpha=0.4, **kwargs):
+        super(MultiScaleRMILoss, self).__init__(**kwargs)
+        self.alpha = alpha
+        self.ocr_aux_rmi = ocr_aux_rmi
+        self.supervised_mscale_wt = supervised_mscale_wt
+
+    def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
+        aux_loss = super(MultiScaleRMILoss, self).__call__(
+            seg_pred['aux'], seg_gt, do_rmi=self.ocr_aux_rmi)
+
+        # Optionally turn off RMI loss for first epoch to try to work
+        # around cholesky errors of singular matrix
+        do_rmi_main = True  # cfg.EPOCH > 0
+        main_loss = super(MultiScaleRMILoss, self).__call__(
+            seg_pred['pred'], seg_gt, do_rmi=do_rmi_main)
+        loss = self.alpha * aux_loss + main_loss
+
+        # Optionally, apply supervision to the multi-scale predictions
+        # directly. Turn off RMI to keep things lightweight
+        if self.supervised_mscale_wt:
+            scaled_pred_05x = F.interpolate(
+                seg_pred['pred_05x'], size=tuple(seg_pred['pred_10x'][2:]),
+                mode='bilinear', align_corners=True, recompute_scale_factor=True)
+
+            loss_lo = super(MultiScaleRMILoss, self).__call__(
+                scaled_pred_05x, seg_gt, do_rmi=False)
+
+            loss_hi = super(MultiScaleRMILoss, self).__call__(
+                seg_pred['pred_10x'], seg_gt, do_rmi=False)
+
+            loss += self.supervised_mscale_wt * loss_lo
+            loss += self.supervised_mscale_wt * loss_hi
+
+        return loss
