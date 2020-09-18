@@ -24,7 +24,7 @@ from nnet_training.utilities.visualisation import get_color_pallete
 
 from .trainer_base_class import ModelTrainer
 
-__all__ = ['MonoSegmentationTrainer', 'Init_Training_MonoFSCNN']
+__all__ = ['MonoSegmentationTrainer']
 
 class MonoSegmentationTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
@@ -184,42 +184,4 @@ class MonoSegmentationTrainer(ModelTrainer):
 from nnet_training.nnet_models.fast_scnn import FastSCNN
 
 if __name__ == "__main__":
-    print(Path.cwd())
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = multiprocessing.cpu_count()
-
-    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
-    training_dir = {
-        'images': base_dir + 'leftImg8bit/train',
-        'labels': base_dir + 'gtFine/train'
-    }
-    validation_dir = {
-        'images': base_dir + 'leftImg8bit/val',
-        'labels': base_dir + 'gtFine/val'
-    }
-
-    datasets = dict(
-        Training=CityScapesDataset(training_dir),
-        Validation=CityScapesDataset(validation_dir)
-    )
-
-    dataloaders = dict(
-        Training=DataLoader(datasets["Training"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation=DataLoader(datasets["Validation"], batch_size=16, shuffle=True, num_workers=n_workers, drop_last=True),
-    )
-
-    filename = "Focal_HalfSize"
-    fastModel = FastSCNN(19)
-    # filename = "Stereo_Seg_Focal"
-    # fastModel = Stereo_FastSCNN(19)
-    # fastModel.load_state_dict(torch.load('torch_models/fast_scnn_citys.pth')) #   Original Weights
-    optimizer = torch.optim.SGD(fastModel.parameters(), lr=0.01, momentum=0.9)
-    # lossfn = MixSoftmaxCrossEntropyOHEMLoss(ignore_index=-1).to(torch.device("cuda"))
-    lossfn = FocalLoss2D(gamma=1,ignore_index=-1).to(torch.device("cuda"))
-
-    lr_sched = { "lr": 0.01, "mode":"poly" }
-    modeltrainer = MonoSegmentationTrainer(fastModel, optimizer, lossfn, dataloaders, lr_cfg=lr_sched, savefile=filename)
-    # modeltrainer.visualize_output()
-    modeltrainer.train_model(10)
+    raise NotImplementedError

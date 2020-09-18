@@ -10,7 +10,7 @@ import numpy as np
 
 __all__ = ['get_loss_function', 'MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss',
            'FocalLoss2D', 'DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
-           'ReconstructionLossV1', 'ReconstructionLossV2']
+           'DepthReconstructionLossV1', 'FlowReconstructionLossV1']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):

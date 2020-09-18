@@ -157,48 +157,4 @@ class StereoFlowTrainer(ModelTrainer):
                 plt.show()
 
 if __name__ == "__main__":
-    from nnet_training.utilities.loss_functions import ReconstructionLossV1
-    from nnet_training.nnet_models.nnet_models import StereoDepthSeparatedExp,\
-                                                      StereoDepthSeparatedReLu
-
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = multiprocessing.cpu_count()
-
-    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
-    training_dir = {
-        'images'        : base_dir + 'leftImg8bit/train',
-        'right_images'  : base_dir + 'rightImg8bit/train',
-        'disparity'     : base_dir + 'disparity/train'
-    }
-    validation_dir = {
-        'images'        : base_dir + 'leftImg8bit/val',
-        'right_images'  : base_dir + 'rightImg8bit/val',
-        'disparity'     : base_dir + 'disparity/val'
-    }
-
-    datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1, output_size=(1024, 512)),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1, output_size=(1024, 512))
-    )
-
-    dataloaders = dict(
-        Training    = DataLoader(datasets["Training"], batch_size=8,
-                                 shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=8,
-                                 shuffle=True, num_workers=n_workers, drop_last=True),
-    )
-
-    filename = "ReLuModel_ScaleInv"
-    disparityModel = StereoDepthSeparatedReLu()
-    optimizer = torch.optim.SGD(disparityModel.parameters(), lr=0.01, momentum=0.9)
-    # lossfn = DepthAwareLoss().to(torch.device("cuda"))
-    lossfn = ReconstructionLossV1(img_b=8, img_w=1024, img_h=512).to(torch.device("cuda"))
-    # lossfn = InvHuberLoss().to(torch.device("cuda"))
-
-    lr_sched = { "mode":"poly", "lr":0.01 }
-    modeltrainer = StereoFlowTrainer(disparityModel, optimizer, lossfn, dataloaders,
-                                     lr_cfg=lr_sched, modelpath=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(5)
+    raise NotImplementedError

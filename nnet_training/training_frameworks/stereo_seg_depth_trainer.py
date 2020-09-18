@@ -149,29 +149,29 @@ class StereoSegDepthTrainer(ModelTrainer):
             start_time = time.time()
 
             seg_pred, depth_pred = self._model(left, right)
-            seg_pred = torch.argmax(seg_pred,dim=1,keepdim=True)
+            seg_pred = torch.argmax(seg_pred, dim=1, keepdim=True)
 
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(1,5,1)
-                plt.imshow(np.moveaxis(left[i,0:3,:,:].cpu().numpy(),0,2))
+                plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
-                plt.subplot(1,5,2)
+                plt.subplot(1, 5, 2)
                 plt.imshow(get_color_pallete(seg_gt[i,:,:]))
                 plt.xlabel("Segmentation Ground Truth")
 
-                plt.subplot(1,5,3)
-                plt.imshow(get_color_pallete(seg_pred.cpu().numpy()[i,0,:,:]))
+                plt.subplot(1, 5, 3)
+                plt.imshow(get_color_pallete(seg_pred.cpu().numpy()[i, 0, :, :]))
                 plt.xlabel("Segmentation Prediction")
 
-                plt.subplot(1,5,4)
-                plt.imshow(depth_gt[i,:,:])
+                plt.subplot(1, 5, 4)
+                plt.imshow(depth_gt[i, :, :])
                 plt.xlabel("Depth Ground Truth")
 
-                plt.subplot(1,5,5)
-                plt.imshow(depth_pred.cpu().numpy()[i,0,:,:])
+                plt.subplot(1, 5, 5)
+                plt.imshow(depth_pred.cpu().numpy()[i, 0, :, :])
                 plt.xlabel("Depth Prediction")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
@@ -182,57 +182,4 @@ class StereoSegDepthTrainer(ModelTrainer):
         self.metric_loggers['seg'].plot_classwise_iou()
 
 if __name__ == "__main__":
-    import platform, multiprocessing
-    from nnet_training.utilities.loss_functions import FocalLoss2D, InvHuberLoss, DepthReconstructionLossV1
-    from nnet_training.nnet_models.nnet_models import StereoDepthSegSeparated2, StereoDepthSegSeparated3
-    from nnet_training.utilities.CityScapes import CityScapesDataset
-    from torch.utils.data import DataLoader
-
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = int(multiprocessing.cpu_count()/2)
-
-    base_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
-
-    training_dir = {
-        'images'        : base_dir + 'leftImg8bit/train',
-        'right_images'  : base_dir + 'rightImg8bit/train',
-        'seg'           : base_dir + 'gtFine/train',
-        'disparity'     : base_dir + 'disparity/train',
-        'cam'           : base_dir + 'camera/train'
-    }
-
-    validation_dir = {
-        'images'        : base_dir + 'leftImg8bit/val',
-        'right_images'  : base_dir + 'rightImg8bit/val',
-        'seg'           : base_dir + 'gtFine/val',
-        'disparity'     : base_dir + 'disparity/val',
-        'cam'           : base_dir + 'camera/val'
-    }
-
-    datasets = dict(
-        Training    = CityScapesDataset(training_dir, crop_fraction=1),
-        Validation  = CityScapesDataset(validation_dir, crop_fraction=1)
-    )
-
-    dataloaders=dict(
-        Training    = DataLoader(datasets["Training"], batch_size=6, shuffle=True, num_workers=n_workers, drop_last=True),
-        Validation  = DataLoader(datasets["Validation"], batch_size=6, shuffle=True, num_workers=n_workers, drop_last=True),
-    )
-
-    Model = StereoDepthSegSeparated2()
-    optimizer = torch.optim.SGD(Model.parameters(), lr=0.01, momentum=0.9)
-    lossfn = dict(
-        segmentation = FocalLoss2D(gamma=1, ignore_index=-1).to(torch.device("cuda")),
-        # depth          = InvHuberLoss(ignore_index=-1).to(torch.device("cuda"))
-        depth = DepthReconstructionLossV1(batch_size=6, height=512, width=1024, pred_type="depth").to(torch.device("cuda"))
-    )
-    
-    filename = Path.cwd() / 'torch_models' / str(Model)+'_SGD_Fcl_Recon2'
-    print("Loading " + filename)
-
-    lr_sched = {"lr": 0.01, "mode":"poly"}
-    modeltrainer = StereoSegDepthTrainer(Model, optimizer, lossfn, dataldr=dataloaders, lr_cfg=lr_sched, modelpath=filename)
-    modeltrainer.visualize_output()
-    # modeltrainer.train_model(3)
+    raise NotImplementedError
