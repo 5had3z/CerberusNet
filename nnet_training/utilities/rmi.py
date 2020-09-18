@@ -14,9 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from loss import rmi_utils
-from config import cfg
-from apex import amp
+import rmi_utils
 
 _euler_num = 2.718281828        # euler number
 _pi = 3.14159265		# pi
@@ -36,15 +34,8 @@ class RMILoss(nn.Module):
     I(A, B) = H(A) + H(B) - H(A, B)
     This version need a lot of memory if do not dwonsample.
     """
-    def __init__(self,
-                 num_classes=21,
-                 rmi_radius=3,
-                 rmi_pool_way=1,
-                 rmi_pool_size=4,
-                 rmi_pool_stride=4,
-                 loss_weight_lambda=0.5,
-                 lambda_way=1,
-                 ignore_index=255):
+    def __init__(self, num_classes=21, rmi_radius=3, rmi_pool_way=1, rmi_pool_size=4,
+                 rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=255):
         super(RMILoss, self).__init__()
         self.num_classes = num_classes
         # radius choices
@@ -72,11 +63,7 @@ class RMILoss(nn.Module):
         # torch.inverse aren't supported by half
         logits_4D.float()
         labels_4D.float()
-        if cfg.TRAIN.FP16:
-            with amp.disable_casts():
-                loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
-        else:
-            loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
+        loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
         return loss
 
     def forward_sigmoid(self, logits_4D, labels_4D, do_rmi=False):
@@ -88,40 +75,38 @@ class RMILoss(nn.Module):
                 do_rmi          :       bool
         """
         # label mask -- [N, H, W, 1]
-        label_mask_3D = labels_4D < self.num_classes
+        label_mask_3d = labels_4D < self.num_classes
 
         # valid label
-        valid_onehot_labels_4D = \
-            F.one_hot(labels_4D.long() * label_mask_3D.long(),
-                      num_classes=self.num_classes).float()
-        label_mask_3D = label_mask_3D.float()
-        label_mask_flat = label_mask_3D.view([-1, ])
-        valid_onehot_labels_4D = valid_onehot_labels_4D * \
-            label_mask_3D.unsqueeze(dim=3)
-        valid_onehot_labels_4D.requires_grad_(False)
+        valid_onehot_labels_4d = F.one_hot(labels_4D.long() * label_mask_3d.long(),
+                                           num_classes=self.num_classes).float()
+        label_mask_3d = label_mask_3d.float()
+        label_mask_flat = label_mask_3d.view([-1, ])
+        valid_onehot_labels_4d = valid_onehot_labels_4d * label_mask_3d.unsqueeze(dim=3)
+        valid_onehot_labels_4d.requires_grad_(False)
 
         # PART I -- calculate the sigmoid binary cross entropy loss
         valid_onehot_label_flat = \
-            valid_onehot_labels_4D.view([-1, self.num_classes]).requires_grad_(False)
+            valid_onehot_labels_4d.view([-1, self.num_classes]).requires_grad_(False)
         logits_flat = logits_4D.permute(0, 2, 3, 1).contiguous().view([-1, self.num_classes])
 
         # binary loss, multiplied by the not_ignore_mask
         valid_pixels = torch.sum(label_mask_flat)
-        binary_loss = F.binary_cross_entropy_with_logits(logits_flat,
-                                                         target=valid_onehot_label_flat,
-                                                         weight=label_mask_flat.unsqueeze(dim=1),
-                                                         reduction='sum')
+        binary_loss = F.binary_cross_entropy_with_logits(
+            logits_flat, target=valid_onehot_label_flat,
+            weight=label_mask_flat.unsqueeze(dim=1), reduction='sum')
+
         bce_loss = torch.div(binary_loss, valid_pixels + 1.0)
         if not do_rmi:
             return bce_loss
 
         # PART II -- get rmi loss
         # onehot_labels_4D -- [N, C, H, W]
-        probs_4D = logits_4D.sigmoid() * label_mask_3D.unsqueeze(dim=1) + _CLIP_MIN
-        valid_onehot_labels_4D = valid_onehot_labels_4D.permute(0, 3, 1, 2).requires_grad_(False)
+        probs_4d = logits_4D.sigmoid() * label_mask_3d.unsqueeze(dim=1) + _CLIP_MIN
+        valid_onehot_labels_4d = valid_onehot_labels_4d.permute(0, 3, 1, 2).requires_grad_(False)
 
         # get region mutual information
-        rmi_loss = self.rmi_lower_bound(valid_onehot_labels_4D, probs_4D)
+        rmi_loss = self.rmi_lower_bound(valid_onehot_labels_4d, probs_4d)
 
         # add together
         #logx.msg(f'lambda_way {self.lambda_way}')
@@ -148,25 +133,32 @@ class RMILoss(nn.Module):
         p, s = self.rmi_pool_size, self.rmi_pool_stride
         if self.rmi_pool_stride > 1:
             if self.rmi_pool_way == 0:
-                labels_4D = F.max_pool2d(labels_4D, kernel_size=p, stride=s, padding=self.kernel_padding)
-                probs_4D = F.max_pool2d(probs_4D, kernel_size=p, stride=s, padding=self.kernel_padding)
+                labels_4D = F.max_pool2d(labels_4D, kernel_size=p, stride=s,
+                                         padding=self.kernel_padding)
+                probs_4D = F.max_pool2d(probs_4D, kernel_size=p, stride=s,
+                                        padding=self.kernel_padding)
             elif self.rmi_pool_way == 1:
-                labels_4D = F.avg_pool2d(labels_4D, kernel_size=p, stride=s, padding=self.kernel_padding)
-                probs_4D = F.avg_pool2d(probs_4D, kernel_size=p, stride=s, padding=self.kernel_padding)
+                labels_4D = F.avg_pool2d(labels_4D, kernel_size=p, stride=s,
+                                         padding=self.kernel_padding)
+                probs_4D = F.avg_pool2d(probs_4D, kernel_size=p, stride=s,
+                                        padding=self.kernel_padding)
             elif self.rmi_pool_way == 2:
                 # interpolation
                 shape = labels_4D.size()
                 new_h, new_w = shape[2] // s, shape[3] // s
                 labels_4D = F.interpolate(labels_4D, size=(new_h, new_w), mode='nearest')
-                probs_4D = F.interpolate(probs_4D, size=(new_h, new_w), mode='bilinear', align_corners=True)
+                probs_4D = F.interpolate(probs_4D, size=(new_h, new_w), mode='bilinear',
+                                         align_corners=True)
             else:
                 raise NotImplementedError("Pool way of RMI is not defined!")
         # we do not need the gradient of label.
         label_shape = labels_4D.size()
         n, c = label_shape[0], label_shape[1]
 
-        # combine the high dimension points from label and probability map. new shape [N, C, radius * radius, H, W]
-        la_vectors, pr_vectors = rmi_utils.map_get_pairs(labels_4D, probs_4D, radius=self.rmi_radius, is_combine=0)
+        # combine the high dimension points from label and probability map.
+        # new shape [N, C, radius * radius, H, W]
+        la_vectors, pr_vectors = rmi_utils.map_get_pairs(
+            labels_4D, probs_4D, radius=self.rmi_radius, is_combine=0)
 
         la_vectors = la_vectors.view([n, c, self.half_d, -1]).type(torch.cuda.DoubleTensor).requires_grad_(False)
         pr_vectors = pr_vectors.view([n, c, self.half_d, -1]).type(torch.cuda.DoubleTensor)
