@@ -468,6 +468,6 @@ class HighResolutionNet(nn.Module):
 
 def get_seg_model(**kwargs):
     model = HighResolutionNet(**kwargs)
-    # model.init_weights(Path.cwd())
+    model.init_weights(Path.cwd() / 'torch_models' / kwargs['pretrained'])
 
     return model

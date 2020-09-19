@@ -174,21 +174,21 @@ class MonoSFNet(nn.Module):
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
 
-    def forward(self, im1_rgb, im2_rgb, seg_gt=None, consistency=True):
+    def forward(self, im1_rgb, im2_rgb, consistency=True):
         '''
         Forward method that returns the flow prediction and segmentation
         '''
         # outputs
-        flows = {}
+        forward = {}
+        backward = {}
 
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
-        if seg_gt is None:
-            seg_gt = self.segmentation_network(im1_pyr)
+        forward['seg'] = self.segmentation_network(im1_pyr)
+        forward['flow'] = self.aux_forward(im1_pyr, im2_pyr)
 
-        flows['fw'] = self.aux_forward(im1_pyr, im2_pyr)
         if consistency:
-            flows['bw'] = self.aux_forward(im2_pyr, im1_pyr)
+            backward['flow'] = self.aux_forward(im2_pyr, im1_pyr)
 
-        return flows, seg_gt
+        return forward, backward
