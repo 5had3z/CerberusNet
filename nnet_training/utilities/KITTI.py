@@ -60,6 +60,11 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         if "seg" in objectives:
             self.seg = []
 
+        if "disparity" in objectives:
+            self.l_disp = []
+            if "stereo" in objectives:
+                self.r_disp = []
+
         # Get all file names
         for dir_name, _, file_list in os.walk(os.path.join(directory, 'image_2')):
             for filename in sorted(file_list):
@@ -80,8 +85,17 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)
 
-                    if hasattr(self, 'disp'):
-                        raise NotImplementedError
+                    if hasattr(self, 'l_disp'):
+                        left_disp_path = os.path.join(directory, 'disp_noc_0', filename)
+                        if not os.path.isfile(left_disp_path):
+                            read_check = False
+                            print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                    if hasattr(self, 'r_disp'):
+                        right_disp_path = os.path.join(directory, 'disp_noc_1', filename)
+                        if not os.path.isfile(right_disp_path):
+                            read_check = False
+                            print("Error finding corresponding segmentation image to ", l_imgpath)
 
                     if hasattr(self, 'l_seq'):
                         seq_name = filename.replace('10.png', '11.png')
@@ -109,8 +123,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                             self.r_img.append(r_imgpath)
                         if hasattr(self, 'seg'):
                             self.seg.append(seg_path)
-                        if hasattr(self, 'disp'):
-                            raise NotImplementedError
+                        if hasattr(self, 'l_disp'):
+                            self.l_disp.append(left_disp_path)
+                        if hasattr(self, 'r_disp'):
+                            self.r_disp.append(right_disp_path)
                         if hasattr(self, 'l_seq'):
                             self.l_seq.append(left_seq_path)
                         if hasattr(self, 'r_seq'):
@@ -125,8 +141,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 self.r_img = [self.r_img[i] for i in id_vector]
             if hasattr(self, 'seg'):
                 self.seg = [self.seg[i] for i in id_vector]
-            if hasattr(self, 'disp'):
-                raise NotImplementedError
+            if hasattr(self, 'l_disp'):
+                self.l_disp.append(self.l_disp[i] for i in id_vector)
+            if hasattr(self, 'r_disp'):
+                self.r_disp.append(self.r_disp[i] for i in id_vector)
             if hasattr(self, 'l_seq'):
                 self.l_seq = [self.l_seq[i] for i in id_vector]
             if hasattr(self, 'r_seq'):
@@ -171,8 +189,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
         if hasattr(self, 'seg'):
             epoch_data["seg"] = Image.open(self.seg[idx])
-        if hasattr(self, 'disp'):
-            raise NotImplementedError
+        if hasattr(self, 'l_disp'):
+            epoch_data["l_disp"] = Image.open(self.l_disp[idx])
+        if hasattr(self, 'r_disp'):
+            epoch_data["r_disp"] = Image.open(self.r_disp[idx])
         if hasattr(self, 'l_seq'):
             epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
         if hasattr(self, 'r_seq'):
@@ -196,6 +216,19 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         else:
             self.mirror_x = 1.0
 
+        if hasattr(self, 'rand_rot'):
+            angle = random.uniform(0, self.rand_rot)
+            for key, data in epoch_data.items():
+                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.BILINEAR)
+                elif key in ["flow_b", "l_disp", "r_disp"]:
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.NEAREST, fill=0)
+                else:
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.NEAREST, fill=-1)
+
         if hasattr(self, 'crop_fraction'):
             # random crop
             crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
@@ -205,19 +238,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
             for key, data in epoch_data.items():
                 epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-
-        if hasattr(self, 'rand_rot'):
-            angle = random.uniform(0, self.rand_rot)
-            for key, data in epoch_data.items():
-                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                    epoch_data[key] = torchvision.transforms.functional.rotate(
-                        data, angle, resample=Image.BILINEAR)
-                elif key == "flow_b":
-                    epoch_data[key] = torchvision.transforms.functional.rotate(
-                        data, angle, resample=Image.NEAREST, fill=0)
-                else:
-                    epoch_data[key] = torchvision.transforms.functional.rotate(
-                        data, angle, resample=Image.NEAREST, fill=-1)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
@@ -233,8 +253,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             elif key == "seg":
                 data = data.resize(self.output_size, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
-            elif key == "disparity":
-                raise NotImplementedError
+            elif key in ["l_disp", "r_disp"]:
+                data = data.resize(self.output_size, Image.NEAREST)
+                epoch_data[key] = self._depth_transform(data)
 
         if all(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
             self._flow_transform(epoch_data)
@@ -243,9 +264,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
     @staticmethod
     def _depth_transform(disparity):
-        disparity = np.array(disparity).astype('float32') / 256.0
-        disparity[disparity == 0] = -1
-        return torch.FloatTensor(disparity.astype('float32'))
+        return torch.FloatTensor(np.array(disparity).astype('float32') / 256.0)
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
         # Resize to appropriate size first

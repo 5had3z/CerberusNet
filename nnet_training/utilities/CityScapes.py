@@ -55,7 +55,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'right_images':
                 self.r_img = []
             elif key == 'disparity':
-                self.disp = []
+                self.l_disp = []
             elif key == 'left_seq':
                 self.l_seq = []
             elif key == 'right_seq':
@@ -65,7 +65,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'pose':
                 self.pose = []
 
-        if not hasattr(self, 'seg') and not hasattr(self, 'disp') and \
+        if not hasattr(self, 'seg') and not hasattr(self, 'l_disp') and \
                 not (hasattr(self, 'l_seq') or hasattr(self, 'r_seq')):
             print("Neither Segmentation, Disparity or Img Sequence Keys are defined")
 
@@ -94,7 +94,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)
 
-                    if hasattr(self, 'disp'):
+                    if hasattr(self, 'l_disp'):
                         disp_name = filename.replace('leftImg8bit', 'disparity')
                         disp_path = os.path.join(directories['disparity'], foldername, disp_name)
                         if not os.path.isfile(disp_path):
@@ -140,8 +140,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             self.r_img.append(r_imgpath)
                         if hasattr(self, 'seg'):
                             self.seg.append(seg_path)
-                        if hasattr(self, 'disp'):
-                            self.disp.append(disp_path)
+                        if hasattr(self, 'l_disp'):
+                            self.l_disp.append(disp_path)
                         if hasattr(self, 'l_seq'):
                             self.l_seq.append(left_seq_path)
                         if hasattr(self, 'r_seq'):
@@ -158,8 +158,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.r_img = [self.r_img[i] for i in kwargs['id_vector']]
             if hasattr(self, 'seg'):
                 self.seg = [self.seg[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'disp'):
-                self.disp = [self.disp[i] for i in kwargs['id_vector']]
+            if hasattr(self, 'l_disp'):
+                self.l_disp = [self.l_disp[i] for i in kwargs['id_vector']]
             if hasattr(self, 'l_seq'):
                 self.l_seq = [self.l_seq[i] for i in kwargs['id_vector']]
             if hasattr(self, 'r_seq'):
@@ -195,7 +195,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         '''
         Returns relevant training data as a dict
-        @output l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose
+        @output l_img, r_img, seg, l_disp, l_seq, r_seq, cam, pose
         '''
         # Read image and labels
         epoch_data = {"l_img" : Image.open(self.l_img[idx]).convert('RGB')}
@@ -204,8 +204,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
         if hasattr(self, 'seg'):
             epoch_data["seg"] = Image.open(self.seg[idx])
-        if hasattr(self, 'disp'):
-            epoch_data["disparity"] = Image.open(self.disp[idx])
+        if hasattr(self, 'l_disp'):
+            epoch_data["l_disp"] = Image.open(self.l_disp[idx])
         if hasattr(self, 'l_seq'):
             epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
         if hasattr(self, 'r_seq'):
@@ -261,7 +261,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == "seg":
                 data = data.resize(self.output_size, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
-            elif key == "disparity":
+            elif key == "l_disp":
                 data = data.resize(self.output_size, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
 
@@ -283,13 +283,14 @@ class CityScapesDataset(torch.utils.data.Dataset):
         disparity = np.array(disparity).astype('float32')
         if not self.disparity_out:
             disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
-            disparity[disparity < 2] = -1 # Ignore value for loss functions
+            disparity[disparity < 2] = 0. # Ignore value for loss functions
             # Ignore sides and bottom of frame as these are patchy/glitchy
-            side_clip   = int(disparity.shape[1]/20)
-            bottom_clip = int(disparity.shape[0]/10)
-            disparity[-bottom_clip:-1, :] = -1  #bottom
-            disparity[:, :side_clip] = -1       #lhs
-            disparity[:, -side_clip:-1] = -1    #rhs
+            side_clip = int(disparity.shape[1] / 20)
+            bottom_clip = int(disparity.shape[0] / 10)
+            disparity[-bottom_clip:-1, :] = 0.  #bottom
+            disparity[:, :side_clip] = 0.       #lhs
+            disparity[:, -side_clip:-1] = 0.    #rhs
+
         return torch.FloatTensor(disparity.astype('float32'))
 
     def json_to_intrinsics(self, json_path):
