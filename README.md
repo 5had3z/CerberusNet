@@ -1,8 +1,14 @@
-# Stereo-to-All
+# <s>Stereo</s>Mono-to-All
 
-The aim of this project is to generate a pointcloud with motion vectors and semantic segmentation of stereoscopic image sequences. Targeting real-time deployment on an nVIDIA Xavier.
+The aim of this project is to generate a pointcloud with motion vectors and semantic segmentation of <s>stereoscopic</s> monoscopic image sequences. Targeting real-time deployment on an nVIDIA Xavier.
 
 This is Public Repository for my Final Year Project since all my other projects/work is under the private Monash Motorsport git, so others don't have to take my word for it that I'm somewhat experienced and have some actual code to show publicly.
+
+If I get all 3 objectives working well, I call shotgun on the name Cerberus-Net.
+
+Current WIP, still doing model exploration at the moment, no refinement or deeper cycles training yet.
+
+![HrnetV2 Segmentation + Flow](misc/E150_4.png)
 
 ## Dependencies
 ### On the C++ Side of Things:
@@ -17,8 +23,7 @@ This project utlizes many libraries that are included with Jetpack 4.4 which inc
 
 ### On the Python Side of Things:
 The usual suspects for the most part:
- - Pytorch 1.5
+ - Pytorch 1.6
  - Onnx 1.6.0
  - Numpy 1.18.3
  - Matplotlib
- - cityscapesScripts

@@ -15,7 +15,7 @@ def flow_to_image(flow, max_flow=256):
         max_flow = np.max(flow)
 
     n = 8
-    u, v = flow[:, :, 0] * 20, flow[:, :, 1] * 20
+    u, v = flow[:, :, 0], flow[:, :, 1]
     mag = np.sqrt(np.square(u) + np.square(v))
     angle = np.arctan2(v, u)
     im_h = np.mod(angle / (2 * np.pi) + 1, 1)

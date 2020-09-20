@@ -62,7 +62,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         # Get all file names
         for dir_name, _, file_list in os.walk(os.path.join(directory, 'image_2')):
-            for filename in file_list:
+            for filename in sorted(file_list):
                 frame_n = int(re.split("_", filename)[1][:2])
                 if filename.endswith(IMG_EXT) and frame_n == 10:
                     read_check = True
