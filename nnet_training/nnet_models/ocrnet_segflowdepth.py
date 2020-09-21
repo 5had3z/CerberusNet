@@ -21,7 +21,7 @@ class DepthHeadV1(nn.Module):
         self.net = nn.Sequential(
             nn.Conv2d(in_ch, inter_ch, 1),
             nn.ReLU(True),
-            nn.Conv2d(in_ch, inter_ch, 3),
+            nn.Conv2d(inter_ch, 1, 3),
             nn.ReLU(True)
         )
 
@@ -82,7 +82,7 @@ class OCRNetSFD(nn.Module):
         if 'depth_network' in kwargs:
             if kwargs['depth_network']['type'] == 'DepthHeadV1':
                 self.depth_head = DepthHeadV1(self.backbone.high_level_ch,
-                                              **kwargs['correlation_args'])
+                                              **kwargs['depth_network']['args'])
             else:
                 raise NotImplementedError(kwargs['depth_network']['type'])
         else:
@@ -157,5 +157,6 @@ class OCRNetSFD(nn.Module):
 
         forward['seg'] = scale_as(forward['seg'], im1_rgb)
         forward['seg_aux'] = scale_as(forward['seg_aux'], im1_rgb)
+        forward['depth'] = scale_as(forward['depth'], im1_rgb)
 
         return forward, backward

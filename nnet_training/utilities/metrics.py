@@ -511,13 +511,13 @@ class DepthMetric(MetricBaseClass):
     def add_sample(self, pred_depth, gt_depth, loss=None):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
-        # pred_depth = pred_depth.squeeze(axis=1) * gt_depth[gt_depth > 0]
-        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != -1]
-        pred_depth[pred_depth <= 0] = 0.00001
-        gt_depth = gt_depth[gt_depth != -1]
+
+        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != 0]
+        pred_depth[pred_depth == 0] += 0.00001
+        gt_depth = gt_depth[gt_depth != 0]
 
         n_pixels = gt_depth.size
-        difference = pred_depth-gt_depth
+        difference = pred_depth - gt_depth
         squared_diff = np.square(difference)
         log_diff = np.log(pred_depth) - np.log(gt_depth)
 

@@ -5,6 +5,7 @@ from .nnet_models import *
 from .pwcnet import PWCNet
 from .ocrnet import OCRNet, MscaleOCR
 from .ocrnet_segflow import OCRNetSF
+from .ocrnet_segflowdepth import OCRNetSFD
 
 def get_model(model_args):
     """
@@ -25,6 +26,8 @@ def get_model(model_args):
         model = MscaleOCR(**model_args.args)
     elif model_args.name == "OCRNetSF":
         model = OCRNetSF(**model_args.args)
+    elif model_args.name == "OCRNetSFD":
+        model = OCRNetSFD(**model_args.args)
     else:
         raise NotImplementedError(model_args.name)
 

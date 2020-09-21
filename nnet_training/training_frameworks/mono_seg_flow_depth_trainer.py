@@ -42,7 +42,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         }
 
         super(MonoSegFlowDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
-                                                 modelpath, checkpoints)
+                                                      modelpath, checkpoints)
 
     def _train_epoch(self, max_epoch):
         self._model.train()
@@ -58,7 +58,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             img = data['l_img'].to(self._device)
             img_seq = data['l_seq'].to(self._device)
             seg_gt = data['seg'].to(self._device)
-            depth_gt = data['disparity'].to(self._device)
+            depth_gt = data['l_disp'].to(self._device)
 
             if all(key in data.keys() for key in ["flow", "flow_mask"]):
                 flow_gt = {"flow": data['flow'].to(self._device),
@@ -68,17 +68,17 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow, depth_pred, seg_pred =\
-                self._model(im1_rgb=img, im2_rgb=img_seq, seg_gt=seg_gt)
+            forward, backward = self._model(im1_rgb=img, im2_rgb=img_seq)
 
             flow_loss, _, _, _ = self._flow_loss_fn(
-                pred_flow=pred_flow, im1_origin=img, im2_origin=img_seq)
+                pred_flow_fw=forward['flow'], pred_flow_bw=backward['flow'],
+                im1_origin=img, im2_origin=img_seq)
 
             seg_loss = self._seg_loss_fn(
-                seg_pred=seg_pred['seg_fw'], seg_gt=seg_gt)
+                seg_pred=forward, seg_gt=seg_gt)
 
             depth_loss = self._depth_loss_fn(
-                disp_pred_pyr=depth_pred['depth_fw'], disp_gt=depth_gt)
+                disp_pred=forward['depth'], disp_gt=depth_gt)
 
             loss = flow_loss + seg_loss + depth_loss
 
@@ -88,19 +88,19 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
                     seg_gt.cpu().data.numpy(),
                     loss=seg_loss.item()
                 )
 
                 self.metric_loggers['depth'].add_sample(
-                    depth_pred['depth_fw'][0].cpu().data.numpy(),
-                    data['disparity'].data.numpy(),
+                    forward['depth'].cpu().data.numpy(),
+                    data['l_disp'].data.numpy(),
                     loss=depth_loss.item()
                 )
 
@@ -123,7 +123,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 img = data['l_img'].to(self._device)
                 img_seq = data['l_seq'].to(self._device)
                 seg_gt = data['seg'].to(self._device)
-                depth_gt = data['disparity'].to(self._device)
+                depth_gt = data['l_disp'].to(self._device)
 
                 if all(key in data.keys() for key in ["flow", "flow_mask"]):
                     flow_gt = {"flow": data['flow'].to(self._device),
@@ -132,31 +132,32 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     flow_gt = None
 
                 # Caculate the loss and accuracy for the predictions
-                pred_flow, depth_pred, seg_pred = self._model(im1_rgb=img, im2_rgb=img_seq)
+                forward, backward = self._model(im1_rgb=img, im2_rgb=img_seq)
 
                 flow_loss, _, _, _ = self._flow_loss_fn(
-                    pred_flow=pred_flow, im1_origin=img, im2_origin=img_seq)
+                    pred_flow_fw=forward['flow'], pred_flow_bw=backward['flow'],
+                    im1_origin=img, im2_origin=img_seq)
 
                 seg_loss = self._seg_loss_fn(
-                    seg_pred=seg_pred['seg_fw'], seg_gt=seg_gt)
+                    seg_pred=forward, seg_gt=seg_gt)
 
                 depth_loss = self._depth_loss_fn(
-                    disp_pred_pyr=depth_pred['depth_fw'], disp_gt=depth_gt)
+                    disp_pred_pyr=forward['depth'], disp_gt=depth_gt)
 
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=flow_loss.item()
                 )
 
                 self.metric_loggers['seg'].add_sample(
-                    torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().data.numpy(),
+                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
                     data['seg'].data.numpy(),
                     loss=seg_loss.item()
                 )
 
                 self.metric_loggers['depth'].add_sample(
-                    depth_pred['depth_fw'][0].cpu().data.numpy(),
-                    data['disparity'].data.numpy(),
+                    forward['depth'].cpu().data.numpy(),
+                    data['l_disp'].data.numpy(),
                     loss=depth_loss.item()
                 )
 
@@ -181,12 +182,12 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             seq_left = data['l_seq'].to(self._device)
 
             start_time = time.time()
-            flow_12, depth_pred, seg_pred = self._model(left, seq_left)
+            forward, _ = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            np_flow_12 = flow_12['flow_fw'][0].detach().cpu().numpy()
-            sed_pred_cpu = torch.argmax(seg_pred['seg_fw'], dim=1, keepdim=True).cpu().numpy()
-            depth_pred_cpu = depth_pred['depth_fw'][0].detach().cpu().numpy()
+            np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+            sed_pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
+            depth_pred_cpu = forward['depth'][0].detach().cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 4, 1)

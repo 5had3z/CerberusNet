@@ -160,8 +160,8 @@ class DepthAwareLoss(nn.Module):
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
 
-        l_disp_pred = torch.log(disp_pred)
-        l_disp_gt = torch.log(disp_gt)
+        l_disp_pred = torch.log(disp_pred[disp_gt != 0])
+        l_disp_gt = torch.log(disp_gt[disp_gt != 0])
         regularization = 1 - torch.min(l_disp_pred, l_disp_gt) / torch.max(l_disp_pred, l_disp_gt)
 
         l_loss = F.smooth_l1_loss(disp_pred, disp_gt, size_average=self.size_average)
@@ -170,24 +170,20 @@ class DepthAwareLoss(nn.Module):
         return ((depth_aware_attention + regularization) * l_loss).mean()
 
 class ScaleInvariantError(nn.Module):
-    def __init__(self, lmda=1, ignore_index=-1, **kwargs):
+    def __init__(self, lmda=1, **kwargs):
         super(ScaleInvariantError, self).__init__()
         self.lmda = lmda
-        self._ignore_index = ignore_index
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+        disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
+        disp_pred[disp_pred == 0] += 0.1 # prevent nans during log
+
         #   Number of pixels per image
         n_pixels = disp_gt.shape[1]*disp_gt.shape[2]
         #   Number of valid pixels in target image
-        n_valid = (disp_gt != self._ignore_index).view(-1, n_pixels).float().sum(dim=1)
+        n_valid = (disp_gt != 0).view(-1, n_pixels).float().sum(dim=1)
 
-        #   Prevent infs and nans
-        disp_pred[disp_pred <= 0] = 0.00001
-        disp_pred = disp_pred.squeeze(dim=1)
-        disp_pred[disp_gt == self._ignore_index] = 0.00001
-        disp_gt[disp_gt == self._ignore_index] = 0.00001
-
-        log_diff = (torch.log(disp_pred) - torch.log(disp_gt)).view(-1, n_pixels)
+        log_diff = (torch.log(disp_pred[disp_gt != 0]) - torch.log(disp_gt[disp_gt != 0])).view(-1, n_pixels)
 
         element_wise = torch.pow(log_diff, 2).sum(dim=1) / n_valid
         scaled_error = self.lmda * (torch.pow(log_diff.sum(dim=1), 2) / (n_valid**2))
@@ -197,14 +193,14 @@ class InvHuberLoss(nn.Module):
     """
     Inverse Huber Loss for Depth/Disparity Training
     """
-    def __init__(self, ignore_index=-1, **kwargs):
+    def __init__(self, weight=1.0, **kwargs):
         super(InvHuberLoss, self).__init__()
-        self.ignore_index = ignore_index
+        self.weight = weight
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         pred_relu = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - disp_gt
-        mask = disp_gt != self.ignore_index
+        mask = disp_gt != 0
 
         err = (diff * mask.float()).abs()
         c = 0.2 * err.max()
@@ -212,19 +208,20 @@ class InvHuberLoss(nn.Module):
         mask_err = err <= c
         mask_err2 = err > c
         cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
-        return cost
+        return self.weight * cost
 
 class InvHuberLossPyr(InvHuberLoss):
-    def __init__(self, lvl_weights: List[int], ignore_index=-1, **kwargs):
+    def __init__(self, lvl_weights: List[int], **kwargs):
         self.lvl_weights = lvl_weights
-        super(InvHuberLossPyr, self).__init__(ignore_index=-1, **kwargs)
+        super(InvHuberLossPyr, self).__init__(**kwargs)
 
     def forward(self, disp_pred_pyr: List[torch.Tensor],
                 disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         loss = 0
 
         for lvl, disp_pred in enumerate(disp_pred_pyr):
-            disp_gt_scaled = F.interpolate(disp_gt.unsqueeze(1), tuple(disp_pred.size()[2:]), mode='nearest')
+            disp_gt_scaled = F.interpolate(disp_gt.unsqueeze(1), tuple(disp_pred.size()[2:]),
+                                           mode='nearest')
             lvl_loss = super(InvHuberLossPyr, self).forward(disp_pred, disp_gt_scaled)
             loss += (lvl_loss * self.lvl_weights[lvl])
 
