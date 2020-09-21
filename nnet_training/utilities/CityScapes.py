@@ -286,11 +286,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
             disparity[disparity > 0] = (0.209313 * 2262.52) / disparity[disparity > 0]
 
             # Ignore sides and bottom of frame as these are patchy/glitchy
-            # side_clip = int(disparity.shape[1] / 20)
-            # bottom_clip = int(disparity.shape[0] / 10)
-            # disparity[-bottom_clip:-1, :] = 0.  #bottom
-            # disparity[:, :side_clip] = 0.       #lhs
-            # disparity[:, -side_clip:-1] = 0.    #rhs
+            side_clip = int(disparity.shape[1] / 20)
+            bottom_clip = int(disparity.shape[0] / 10)
+            disparity[-bottom_clip:-1, :] = 0.  #bottom
+            disparity[:, :side_clip] = 0.       #lhs
+            disparity[:, -side_clip:-1] = 0.    #rhs
 
         return torch.FloatTensor(disparity)
 
