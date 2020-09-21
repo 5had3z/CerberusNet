@@ -13,7 +13,7 @@ from nnet_training.nnet_models import get_model
 
 from nnet_training.utilities.KITTI import get_kitti_dataset
 from nnet_training.utilities.CityScapes import get_cityscapse_dataset
-from nnet_training.utilities.loss_functions import get_loss_function
+from nnet_training.loss_functions import get_loss_function
 from nnet_training.training_frameworks import get_trainer, ModelTrainer
 
 def initialise_training_network(config_json: EasyDict, train_path: Path) -> ModelTrainer:

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from nnet_training.utilities.UnFlowLoss import flow_warp
+from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
 from .pwcnet_modules import *

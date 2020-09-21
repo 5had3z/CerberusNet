@@ -1,7 +1,9 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from nnet_training.utilities.loss_functions import SSIM
+
+from .loss_functions import SSIM
 
 __all__ = ['unFlowLoss', 'flow_warp']
 
@@ -166,7 +168,7 @@ def smooth_grad_1st(flow, image, alpha):
     loss_x = weights_x * dx.abs() / 2.
     loss_y = weights_y * dy.abs() / 2
 
-    return loss_x.mean() / 2. + loss_y.mean() / 2.
+    return (loss_x.mean() + loss_y.mean()) / 2.
 
 def smooth_grad_2nd(flow, image, alpha):
     img_dx, img_dy = gradient(image)
@@ -180,7 +182,7 @@ def smooth_grad_2nd(flow, image, alpha):
     loss_x = weights_x[:, :, :, 1:] * dx2.abs()
     loss_y = weights_y[:, :, 1:, :] * dy2.abs()
 
-    return loss_x.mean()/2. + loss_y.mean() / 2.
+    return (loss_x.mean() + loss_y.mean()) / 2.
 
 class unFlowLoss(nn.modules.Module):
     """

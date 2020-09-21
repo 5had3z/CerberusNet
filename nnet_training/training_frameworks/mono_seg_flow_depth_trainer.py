@@ -187,7 +187,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             np_flow_12 = forward['flow'][0].detach().cpu().numpy()
             sed_pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
-            depth_pred_cpu = forward['depth'][0].detach().cpu().numpy()
+            depth_pred_cpu = forward['depth'].detach().cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 4, 1)
@@ -205,7 +205,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.xlabel("Predicted Flow")
 
                 plt.subplot(2, 4, 4)
-                plt.imshow(data['disparity'][i, :, :])
+                plt.imshow(data['l_disp'][i, :, :])
                 plt.xlabel("Ground Truth Disparity")
 
                 plt.subplot(2, 4, 5)

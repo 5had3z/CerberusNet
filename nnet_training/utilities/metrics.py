@@ -13,7 +13,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
-from nnet_training.utilities.UnFlowLoss import flow_warp
+from nnet_training.loss_functions.UnFlowLoss import flow_warp
 
 __all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']

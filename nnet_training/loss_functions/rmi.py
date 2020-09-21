@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import nnet_training.utilities.rmi_utils as rmi_utils
+from .rmi_utils import map_get_pairs, log_det_by_cholesky
 
 _euler_num = 2.718281828        # euler number
 _pi = 3.14159265		# pi
@@ -154,7 +154,7 @@ class RMILoss(nn.Module):
 
         # combine the high dimension points from label and probability map.
         # new shape [N, C, radius * radius, H, W]
-        la_vectors, pr_vectors = rmi_utils.map_get_pairs(
+        la_vectors, pr_vectors = map_get_pairs(
             labels_4D, probs_4D, radius=self.rmi_radius, is_combine=0)
 
         la_vectors = la_vectors.view([n, c, self.half_d, -1]).type(torch.cuda.DoubleTensor).requires_grad_(False)
@@ -188,7 +188,7 @@ class RMILoss(nn.Module):
         #appro_var = torch.div(appro_var, n_points.type_as(appro_var)) + diag_matrix.type_as(appro_var) * 1e-6
 
         # The lower bound. If A is nonsingular, ln( det(A) ) = Tr( ln(A) ).
-        rmi_now = 0.5 * rmi_utils.log_det_by_cholesky(appro_var + diag_matrix.type_as(appro_var) * _POS_ALPHA)
+        rmi_now = 0.5 * log_det_by_cholesky(appro_var + diag_matrix.type_as(appro_var) * _POS_ALPHA)
         #rmi_now = 0.5 * torch.logdet(appro_var + diag_matrix.type_as(appro_var) * _POS_ALPHA)
 
         # mean over N samples. sum over classes.
