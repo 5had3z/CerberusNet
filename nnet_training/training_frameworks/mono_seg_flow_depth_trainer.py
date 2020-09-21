@@ -142,7 +142,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     seg_pred=forward, seg_gt=seg_gt)
 
                 depth_loss = self._depth_loss_fn(
-                    disp_pred_pyr=forward['depth'], disp_gt=depth_gt)
+                    disp_pred=forward['depth'], disp_gt=depth_gt)
 
                 self.metric_loggers['flow'].add_sample(
                     img, img_seq, forward['flow'][0],
