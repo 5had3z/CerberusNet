@@ -26,7 +26,8 @@ class DepthHeadV1(nn.Module):
             mod_list[f"conv{idx}"] = nn.Conv2d(inter_ch[idx-1], inter_ch[idx], 3)
             mod_list[f"relu{idx}"] = nn.ReLU(True)
 
-        mod_list[f"relu{len(inter_ch)-1}"] = nn.Conv2d(inter_ch[-1], 1, 3)
+        mod_list[f"conv{len(inter_ch)}"] = nn.Conv2d(inter_ch[-1], 1, 3)
+        mod_list[f"relu{len(inter_ch)}"] = nn.ReLU(True)
 
         self.net = nn.Sequential(mod_list)
 

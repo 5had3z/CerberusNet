@@ -175,6 +175,8 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         """
         Forward pass over a testing batch and displays the output
         """
+        MIN_DEPTH = 0.
+        MAX_DEPTH = 80.
         with torch.no_grad():
             self._model.eval()
             data = next(iter(self._validation_loader))
@@ -205,7 +207,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.xlabel("Predicted Flow")
 
                 plt.subplot(2, 4, 4)
-                plt.imshow(data['l_disp'][i, :, :])
+                plt.imshow(data['l_disp'][i, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Ground Truth Disparity")
 
                 plt.subplot(2, 4, 5)
@@ -223,7 +225,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     plt.xlabel("Ground Truth Flow")
 
                 plt.subplot(2, 4, 8)
-                plt.imshow(depth_pred_cpu[i, 0, :, :])
+                plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Predicted Depth")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))

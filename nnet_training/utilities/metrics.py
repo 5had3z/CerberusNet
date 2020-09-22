@@ -528,10 +528,10 @@ class DepthMetric(MetricBaseClass):
             np.mean(squared_diff/gt_depth))
 
         self.metric_data['Batch_RMSE_Linear'].append(
-            np.mean(np.sqrt(squared_diff)))
+            np.sqrt(np.mean(squared_diff)))
 
         self.metric_data['Batch_RMSE_Log'].append(
-            np.mean(np.sqrt(np.square(log_diff))))
+            np.sqrt(np.mean(np.square(log_diff))))
 
         eqn1 = np.mean(np.square(log_diff))
         eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
