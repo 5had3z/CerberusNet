@@ -1,4 +1,5 @@
 
+from collections import OrderedDict
 from typing import List
 
 import torch
@@ -16,14 +17,19 @@ class DepthHeadV1(nn.Module):
     """
     Ultra basic to get things started
     """
-    def __init__(self, in_ch, inter_ch, **kwargs):
+    def __init__(self, in_ch, inter_ch: List[int], **kwargs):
         super(DepthHeadV1, self).__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(in_ch, inter_ch, 1),
-            nn.ReLU(True),
-            nn.Conv2d(inter_ch, 1, 3),
-            nn.ReLU(True)
-        )
+        mod_list = OrderedDict({"conv0": nn.Conv2d(in_ch, inter_ch[0], 1)})
+        mod_list["relu0"] = nn.ReLU(True)
+
+        for idx in range(1, len(inter_ch)):
+            mod_list[f"conv{idx}"] = nn.Conv2d(inter_ch[idx-1], inter_ch[idx], 3)
+            mod_list[f"relu{idx}"] = nn.ReLU(True)
+
+        mod_list[f"relu{len(inter_ch)-1}"] = nn.Conv2d(inter_ch[-1], 1, 3)
+
+        self.net = nn.Sequential(mod_list)
+
 
     def __str__(self):
         return "_DpthV1"

@@ -178,6 +178,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self.rand_rot = kwargs['rand_rotation']
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
+        if 'rand_scale' in kwargs:
+            assert len(kwargs['rand_scale']) == 2
+            self.scale_range = kwargs['rand_scale']
 
         # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
         #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
@@ -253,6 +256,14 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
             for key, data in epoch_data.items():
                 epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+
+        #   Need to synchronise this across the batch?
+        # if hasattr(self, 'scale_range'):
+        #     scale = random.uniform(*self.scale_range)
+        #     scale_func = lambda x: int(scale * x / 32.0) * 32
+        #     output_shape = [scale_func(x) for x in self.output_size]
+        # else:
+        #     output_shape = self.output_size
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:

@@ -96,12 +96,6 @@
                     "FUSE_METHOD" : "SUM"
                 }
             },
-            "depth_est_network" : {
-                "type" : "DepthEstimator1",
-                "args" : {
-                    "pre_out_ch" : 32
-                }
-            },
             "correlation_args" : {
                 "pad_size" : 4,
                 "max_displacement" : 4,
@@ -121,7 +115,7 @@
             "1x1_conv_out" : 32,
             "depth_network" : {
                 "type" : "DepthHeadV1",
-                "args" : {"inter_ch" : 32}
+                "args" : {"inter_ch" : [128, 32]}
             }
         }
     },

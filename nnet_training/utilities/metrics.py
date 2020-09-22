@@ -433,7 +433,7 @@ class SegmentationMetric(MetricBaseClass):
     def _iou(self, prediction, target, ret_val):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
-        prediction = prediction * (target > 0).astype(prediction.dtype)
+        prediction = prediction * (target != 255).astype(prediction.dtype)
 
         # Compute area intersection:
         intersection = prediction * (prediction == target)

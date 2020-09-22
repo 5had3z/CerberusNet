@@ -211,8 +211,7 @@ class MultiScaleRMILoss(nn.Module):
         self.rmi = RMILoss(**kwargs)
 
     def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
-        aux_loss = super(MultiScaleRMILoss, self).__call__(
-            seg_pred['aux'], seg_gt, do_rmi=self.ocr_aux_rmi)
+        aux_loss = self.rmi(seg_pred['aux'], seg_gt, do_rmi=self.ocr_aux_rmi)
 
         # Optionally turn off RMI loss for first epoch to try to work
         # around cholesky errors of singular matrix
