@@ -200,11 +200,10 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
-                vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
-
-                plt.subplot(2, 4, 3)
-                plt.imshow(vis_flow)
-                plt.xlabel("Predicted Flow")
+                if "flow" in data:
+                    plt.subplot(2, 4, 3)
+                    plt.imshow(flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0])))
+                    plt.xlabel("Ground Truth Flow")
 
                 plt.subplot(2, 4, 4)
                 plt.imshow(data['l_disp'][i, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
@@ -218,11 +217,9 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.imshow(get_color_pallete(sed_pred_cpu[i, 0, :, :]))
                 plt.xlabel("Predicted Segmentation")
 
-                if "flow" in data:
-                    vis_flow = flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0]))
-                    plt.subplot(2, 4, 7)
-                    plt.imshow(vis_flow)
-                    plt.xlabel("Ground Truth Flow")
+                plt.subplot(2, 4, 7)
+                plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
+                plt.xlabel("Predicted Flow")
 
                 plt.subplot(2, 4, 8)
                 plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)

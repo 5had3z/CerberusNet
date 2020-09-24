@@ -142,9 +142,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             if hasattr(self, 'seg'):
                 self.seg = [self.seg[i] for i in id_vector]
             if hasattr(self, 'l_disp'):
-                self.l_disp.append(self.l_disp[i] for i in id_vector)
+                self.l_disp = [self.l_disp[i] for i in id_vector]
             if hasattr(self, 'r_disp'):
-                self.r_disp.append(self.r_disp[i] for i in id_vector)
+                self.r_disp = [self.r_disp[i] for i in id_vector]
             if hasattr(self, 'l_seq'):
                 self.l_seq = [self.l_seq[i] for i in id_vector]
             if hasattr(self, 'r_seq'):
