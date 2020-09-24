@@ -34,7 +34,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
     def __init__(self, directory: Path, objectives: List[str], id_vector=None,
-                 output_size=(1274, 375), disparity_out=False, **kwargs):
+                 output_size=(1274, 375), disparity_out=True, **kwargs):
         '''
         Initializer for KITTI 2015 dataset\n
         @input directory Path that contains the base directory of the KITTI Dataset\n
@@ -135,7 +135,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                             self.flow.append(flow_path)
 
         # Create dataset from specified ids if id_vector given else use all
-        if 'id_vector' is not None:
+        if id_vector is not None:
             self.l_img = [self.l_img[i] for i in id_vector]
             if hasattr(self, 'r_img'):
                 self.r_img = [self.r_img[i] for i in id_vector]
@@ -262,9 +262,11 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         elif any(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
             raise UserWarning("Partially missing flow data, need x, y and bit mask")
 
-    @staticmethod
-    def _depth_transform(disparity):
-        return torch.FloatTensor(np.array(disparity).astype('float32') / 256.0)
+    def _depth_transform(self, disparity):
+        disparity = torch.FloatTensor(np.array(disparity).astype('float32') / 256.0)
+        if not self.disparity_out:
+            raise NotImplementedError
+        return disparity
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
         # Resize to appropriate size first

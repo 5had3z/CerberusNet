@@ -63,7 +63,7 @@ class InvHuberLoss(nn.Module):
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         pred_relu = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - disp_gt
-        mask = disp_gt != 0
+        mask = disp_gt > 0
 
         err = (diff * mask.float()).abs()
         c = 0.2 * err.max()

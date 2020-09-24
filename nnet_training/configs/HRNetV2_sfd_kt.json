@@ -1,27 +1,18 @@
 {
     "dataset" : {
-        "type" : "Cityscapes",
-        "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
+        "type" : "Kitti",
+        "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
         "batch_size" : 2,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "output_size" : [512, 256],
-            "rand_brightness" : 10,
+            "crop_fraction" : 1.5,
+            "output_size" : [640, 192],
+            "rand_brightness" : 20,
             "rand_rotation" : 5
         },
-        "train_subdirs" : {
-            "images" : "leftImg8bit/train",
-            "left_seq" : "leftImg8bit_sequence/train",
-            "seg" : "gtFine/train",
-            "disparity": "disparity/train"
-        },
-        "val_subdirs" : {
-            "images" : "leftImg8bit/val",
-            "left_seq" : "leftImg8bit_sequence/val",
-            "seg" : "gtFine/val",
-            "disparity": "disparity/val"
-        }
+        "train_ratio" : 0.8,
+        "objectives" : ["flow", "seg", "disparity"]
     },
     "loss_functions" : [
         {   
@@ -51,7 +42,6 @@
             "function" : "InvHuberLoss",
             "args" : {"weight" : 0.5}
         }
-
     ],
     "trainer" : "MonoSegFlowDepthTrainer",
     "model" : {
@@ -95,6 +85,12 @@
                     "NUM_BLOCKS" : [4, 4, 4, 4],
                     "NUM_CHANNELS" : [48, 96, 192, 384],
                     "FUSE_METHOD" : "SUM"
+                }
+            },
+            "depth_est_network" : {
+                "type" : "DepthEstimator1",
+                "args" : {
+                    "pre_out_ch" : 32
                 }
             },
             "correlation_args" : {

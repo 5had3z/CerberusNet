@@ -94,7 +94,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
                 self.metric_loggers['seg'].add_sample(
                     torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
-                    seg_gt.cpu().data.numpy(),
+                    data['seg'].data.numpy(),
                     loss=seg_loss.item()
                 )
 

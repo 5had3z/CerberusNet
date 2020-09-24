@@ -382,7 +382,7 @@ class SegmentationMetric(MetricBaseClass):
         pixel_acc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
         miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-        print("Pixel Accuracy: %.4f\tmIoU: %.4f\tLoss: %.4f\n" % (pixel_acc, miou, loss))
+        print("Pixel Accuracy: %.4f\nmIoU: %.4f\nLoss: %.4f\n" % (pixel_acc, miou, loss))
 
     def get_epoch_statistics(self, main_metric=True, loss_metric=True):
         """
@@ -512,9 +512,8 @@ class DepthMetric(MetricBaseClass):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
 
-        pred_depth = pred_depth.squeeze(axis=1)[gt_depth != 0]
-        pred_depth[pred_depth == 0] += 0.00001
-        gt_depth = gt_depth[gt_depth != 0]
+        pred_depth = pred_depth.squeeze(axis=1)[gt_depth > 0]
+        gt_depth = gt_depth[gt_depth > 0]
 
         n_pixels = gt_depth.size
         difference = pred_depth - gt_depth
