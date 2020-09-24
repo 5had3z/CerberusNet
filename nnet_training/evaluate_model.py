@@ -70,7 +70,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sf_kt.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -108,45 +108,53 @@ if __name__ == "__main__":
             else:
                 flow_gt = None
 
-            LOGGERS['flow'].add_sample(
-                img, img_seq, forward['flow'][0], flow_gt
-            )
+            if 'flow' in forward.keys():
+                LOGGERS['flow'].add_sample(
+                    img, img_seq, forward['flow'][0], flow_gt
+                )
 
-            LOGGERS['seg'].add_sample(
-                torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
-                data['seg'].data.numpy(),
-            )
+            if 'seg' in forward.keys() and 'seg' in data.keys():
+                LOGGERS['seg'].add_sample(
+                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
+                    data['seg'].data.numpy(),
+                )
 
-            LOGGERS['depth'].add_sample(
-                forward['depth'].cpu().data.numpy(),
-                data['l_disp'].data.numpy(),
-            )
+            if 'l_disp' in data.keys() and 'depth' in forward.keys():
+                LOGGERS['depth'].add_sample(
+                    forward['depth'].cpu().data.numpy(),
+                    data['l_disp'].data.numpy(),
+                )
 
             if not batch_idx % 10:
-                seg_acc = LOGGERS['seg'].get_last_batch()
-                depth_acc = LOGGERS['depth'].get_last_batch()
-                flow_acc = LOGGERS['flow'].get_last_batch()
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed/(batch_idx+1)*(len(DATALOADER)-(batch_idx+1))
+
+                seg_acc = LOGGERS['seg'].get_last_batch() if 'seg' in forward.keys() else 0
+                depth_acc = LOGGERS['depth'].get_last_batch() if 'depth' in forward.keys() else 0
+                flow_acc = LOGGERS['flow'].get_last_batch() if 'flow' in forward.keys() else 0
+
                 sys.stdout.flush()
                 sys.stdout.write('\rValidaton Iter: [%4d/%4d] || mIoU: %.4f || EPE: %.4f || RMSE_Log: %.4f || Time Elapsed: %.2f sec Remain: %.2f sec' % (
                     batch_idx + 1, len(DATALOADER), seg_acc, flow_acc,
-                    time_elapsed, depth_acc, time_remain))
+                    depth_acc, time_elapsed, time_remain))
 
         for logger in LOGGERS.values():
             logger.print_epoch_statistics()
 
-        while bool(input("Display Example? (1/0): ")):
-            start_time = time.time()
+        while bool(input("Display Example? (Y): ")):
             data = next(iter(DATALOADER))
             left = data['l_img'].to(DEVICE)
             seq_left = data['l_seq'].to(DEVICE)
+
+            start_time = time.time()
             forward, _ = MODEL(left, seq_left)
             propagation_time = (time.time() - start_time)/DATALOADER.batch_size
 
             np_flow_12 = forward['flow'][0].detach().cpu().numpy()
             sed_pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
-            depth_pred_cpu = forward['depth'].detach().cpu().numpy()
+
+            if 'depth' in forward:
+                depth_pred_cpu = forward['depth'].detach().cpu().numpy()
 
             for i in range(DATALOADER.batch_size):
                 plt.subplot(2, 4, 1)
@@ -157,15 +165,16 @@ if __name__ == "__main__":
                 plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
-                vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
+                if "flow" in data:
+                    plt.subplot(2, 4, 3)
+                    plt.imshow(flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0])))
+                    plt.xlabel("Ground Truth Flow")
 
-                plt.subplot(2, 4, 3)
-                plt.imshow(vis_flow)
-                plt.xlabel("Predicted Flow")
-
-                plt.subplot(2, 4, 4)
-                plt.imshow(data['l_disp'][i, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                plt.xlabel("Ground Truth Disparity")
+                if 'l_disp' in data:
+                    plt.subplot(2, 4, 4)
+                    plt.imshow(data['l_disp'][i, :, :], cmap='magma',
+                               vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                    plt.xlabel("Ground Truth Disparity")
 
                 plt.subplot(2, 4, 5)
                 plt.imshow(get_color_pallete(data['seg'].numpy()[i, :, :]))
@@ -175,15 +184,15 @@ if __name__ == "__main__":
                 plt.imshow(get_color_pallete(sed_pred_cpu[i, 0, :, :]))
                 plt.xlabel("Predicted Segmentation")
 
-                if "flow" in data:
-                    vis_flow = flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0]))
-                    plt.subplot(2, 4, 7)
-                    plt.imshow(vis_flow)
-                    plt.xlabel("Ground Truth Flow")
+                plt.subplot(2, 4, 7)
+                plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
+                plt.xlabel("Predicted Flow")
 
-                plt.subplot(2, 4, 8)
-                plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                plt.xlabel("Predicted Depth")
+                if 'depth' in forward:
+                    plt.subplot(2, 4, 8)
+                    plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma',
+                               vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                    plt.xlabel("Predicted Depth")
 
                 plt.suptitle("Propagation time: " + str(propagation_time))
                 plt.show()
