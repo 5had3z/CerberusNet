@@ -130,11 +130,13 @@ class ModelTrainer(object):
             for metric in self.metric_loggers.values():
                 metric.new_epoch('training')
 
+            self._model.train()
             self._train_epoch(max_epoch)
 
             for metric in self.metric_loggers.values():
                 metric.new_epoch('validation')
 
+            self._model.eval()
             self._validate_model(max_epoch)
 
             epoch_duration = time.time() - epoch_start_time

@@ -263,10 +263,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             raise UserWarning("Partially missing flow data, need x, y and bit mask")
 
     def _depth_transform(self, disparity):
-        disparity = torch.FloatTensor(np.array(disparity).astype('float32') / 256.0)
+        disparity = np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
             raise NotImplementedError
-        return disparity
+        return torch.FloatTensor(disparity)
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
         # Resize to appropriate size first

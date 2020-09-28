@@ -43,7 +43,6 @@ class MonoSegFlowTrainer(ModelTrainer):
                                                  modelpath, checkpoints)
 
     def _train_epoch(self, max_epoch):
-        self._model.train()
 
         start_time = time.time()
 
@@ -99,7 +98,6 @@ class MonoSegFlowTrainer(ModelTrainer):
 
     def _validate_model(self, max_epoch):
         with torch.no_grad():
-            self._model.eval()
 
             start_time = time.time()
 

@@ -181,13 +181,10 @@ class MetricBaseClass(object):
                     hfile.copy('cache/'+mode+'/'+epoch, mode+'/'+epoch)
                     del hfile['cache/'+mode+'/'+epoch]
 
-    def plot_summary_data(self):
+    def get_summary_data(self):
         """
-        This plots all the summary statistics over all epochs
+        Returns dictionary with testing and validation statistics
         """
-        plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Summary Training and Validation Results')
-
         with h5py.File(self._path, 'r') as hfile:
             metrics = []
             for metric in list(hfile['training/Epoch_1']):
@@ -204,15 +201,30 @@ class MetricBaseClass(object):
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_func)):
                 testing_data[idx] = hfile['validation/'+epoch+'/Summary'][:]
 
-            print("# Training, ", len(list(hfile['training'])),
-                  "\t# Validation", len(list(hfile['validation'])))
-
+        ret_val = {}
         for idx, metric in enumerate(metrics):
-            plt.subplot(1, len(metrics), idx+1)
-            plt.plot(training_data[:, idx])
-            plt.plot(testing_data[:, idx])
+            ret_val[metric] = {
+                "Training" : training_data[:, idx],
+                "Validation" : testing_data[:, idx]
+            }
+
+        return ret_val
+
+    def plot_summary_data(self):
+        """
+        This plots all the summary statistics over all epochs
+        """
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Summary Training and Validation Results')
+
+        summary_data = self.get_summary_data()
+
+        for idx, metric in enumerate(summary_data):
+            plt.subplot(1, len(summary_data), idx+1)
+            plt.plot(summary_data[metric]["Training"])
+            plt.plot(summary_data[metric]["Validation"])
             plt.legend(["Training", "Validation"])
-            plt.title(metric + ' over Epochs')
+            plt.title(f'{metric} over Epochs')
             plt.xlabel('Epoch #')
 
         plt.show(block=False)

@@ -8,7 +8,8 @@
         "augmentations" : {
             "output_size" : [512, 256],
             "rand_brightness" : 10,
-            "rand_rotation" : 5
+            "rand_rotation" : 5,
+            "crop_fraction" : 2
         },
         "train_subdirs" : {
             "images" : "leftImg8bit/train",
