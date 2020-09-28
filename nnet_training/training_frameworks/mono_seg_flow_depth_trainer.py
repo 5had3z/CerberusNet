@@ -49,6 +49,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         start_time = time.time()
 
         for batch_idx, data in enumerate(self._training_loader):
+            self._training_loader.dataset.resample_scale()
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
@@ -116,6 +117,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             start_time = time.time()
 
+            self._training_loader.dataset.resample_scale(True)
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
                 img = data['l_img'].to(self._device)

@@ -9,7 +9,7 @@
             "output_size" : [512, 256],
             "rand_brightness" : 10,
             "rand_rotation" : 5,
-            "crop_fraction" : 2
+            "rand_scale" : [0.5, 1]
         },
         "train_subdirs" : {
             "images" : "leftImg8bit/train",

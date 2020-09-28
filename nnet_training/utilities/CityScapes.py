@@ -170,7 +170,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.pose = [self.pose[i] for i in kwargs['id_vector']]
 
         self.disparity_out = disparity_out
-        self.output_size = output_size
+        self.base_size = output_size
+        self.output_shape = output_size
 
         if 'crop_fraction' in kwargs:
             self.crop_fraction = kwargs['crop_fraction']
@@ -224,6 +225,14 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         return epoch_data
 
+    def resample_scale(self, reset=False):
+        if hasattr(self, 'scale_range') and not reset:
+            scale = random.uniform(*self.scale_range)
+            scale_func = lambda x: int(scale * x / 32.0) * 32
+            self.output_shape = [scale_func(x) for x in self.base_size]
+        else:
+            self.output_shape = self.base_size
+
     def _sync_transform(self, epoch_data):
         # random mirror
         if random.random() < 0.5:
@@ -257,23 +266,15 @@ class CityScapesDataset(torch.utils.data.Dataset):
             for key, data in epoch_data.items():
                 epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
-        #   Need to synchronise this across the batch?
-        # if hasattr(self, 'scale_range'):
-        #     scale = random.uniform(*self.scale_range)
-        #     scale_func = lambda x: int(scale * x / 32.0) * 32
-        #     output_shape = [scale_func(x) for x in self.output_size]
-        # else:
-        #     output_shape = self.output_size
-
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                data = data.resize(self.output_size, Image.BILINEAR)
+                data = data.resize(self.output_shape, Image.BILINEAR)
                 epoch_data[key] = self._img_transform(data)
             elif key == "seg":
-                data = data.resize(self.output_size, Image.NEAREST)
+                data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
             elif key == "l_disp":
-                data = data.resize(self.output_size, Image.NEAREST)
+                data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
 
     def _class_to_index(self, seg):

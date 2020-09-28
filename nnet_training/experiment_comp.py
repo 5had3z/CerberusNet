@@ -72,8 +72,8 @@ if __name__ == "__main__":
         })
 
     EXPER_LIST.append({
-        "name" : '424199045aa062d24ef1fbd49ec1b6bc',
-        "path" : ROOT_DIR / '424199045aa062d24ef1fbd49ec1b6bc'
+        "name" : 'a69da6bf96cd342f101294c4d93de26b',
+        "path" : ROOT_DIR / 'a69da6bf96cd342f101294c4d93de26b'
     })
 
     compare_experiments(EXPER_LIST)
