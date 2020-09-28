@@ -153,7 +153,8 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 self.flow = [self.flow[i] for i in id_vector]
 
         self.disparity_out = disparity_out
-        self.output_size = tuple(output_size)
+        self.base_size = tuple(output_size)
+        self.output_shape = tuple(output_size)
 
         self.std_kitti_dims = (1274, 375)
         self.mirror_x = 1.0
@@ -164,6 +165,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             self.rand_rot = kwargs['rand_rotation']
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
+        if 'rand_scale' in kwargs:
+            assert len(kwargs['rand_scale']) == 2
+            self.scale_range = kwargs['rand_scale']
 
         self._key = np.array([255, 255, 255, 255, 255, 255,
                               255, 255, 0, 1, 255, 255,
@@ -207,6 +211,14 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         return epoch_data
 
+    def resample_scale(self, reset=False):
+        if hasattr(self, 'scale_range') and not reset:
+            scale = random.uniform(*self.scale_range)
+            scale_func = lambda x: int(scale * x / 32.0) * 32
+            self.output_shape = [scale_func(x) for x in self.base_size]
+        else:
+            self.output_shape = self.base_size
+
     def _sync_transform(self, epoch_data):
         # random mirror
         if random.random() < 0.5:
@@ -248,13 +260,13 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                data = data.resize(self.output_size, Image.BILINEAR)
+                data = data.resize(self.output_shape, Image.BILINEAR)
                 epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
             elif key == "seg":
-                data = data.resize(self.output_size, Image.NEAREST)
+                data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
             elif key in ["l_disp", "r_disp"]:
-                data = data.resize(self.output_size, Image.NEAREST)
+                data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
 
         if all(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
@@ -270,11 +282,11 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
         # Resize to appropriate size first
-        bitmask = epoch_data['flow_b'].resize(self.output_size, Image.NEAREST)
-        flow_x = epoch_data['flow_x'].resize(self.output_size, Image.NEAREST)
-        flow_y = epoch_data['flow_y'].resize(self.output_size, Image.NEAREST)
-        scale_x = self.output_size[0] / self.std_kitti_dims[0]
-        scale_y = self.output_size[1] / self.std_kitti_dims[1]
+        bitmask = epoch_data['flow_b'].resize(self.output_shape, Image.NEAREST)
+        flow_x = epoch_data['flow_x'].resize(self.output_shape, Image.NEAREST)
+        flow_y = epoch_data['flow_y'].resize(self.output_shape, Image.NEAREST)
+        scale_x = float(self.output_shape[0]) / float(self.std_kitti_dims[0] / self.crop_fraction)
+        scale_y = float(self.output_shape[1]) / float(self.std_kitti_dims[1] / self.crop_fraction)
 
         # Apply transform indicated by the devkit including ignore mask
         flow_out_x = self.mirror_x * scale_x * (np.array(flow_x).astype('float32') - 2**15) / 64.0
