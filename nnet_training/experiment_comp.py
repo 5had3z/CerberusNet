@@ -61,23 +61,20 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
     parser = argparse.ArgumentParser()
-    parser.add_argument('-e1', '--experiment1', default='a8769a65bb701f77bce4d80053418b20')
-    parser.add_argument('-e2', '--experiment2', default='cdf66a3f794e9bd78247e48b4595ce82')
+    parser.add_argument('-e', '--experiments', nargs='+',
+        default=['a8769a65bb701f77bce4d80053418b20', 'cdf66a3f794e9bd78247e48b4595ce82'])
     args = parser.parse_args()
 
-    exper_1 = {
-        "name" : args.experiment1,
-        "path" : ROOT_DIR / args.experiment1
-    }
-    exper_2 = {
-        "name" : args.experiment2,
-        "path" : ROOT_DIR / args.experiment2
-    }
-    exper_3 = {
+    expers = []
+    for exper in args.experiments:
+        expers.append({
+            "name" : exper,
+            "path" : ROOT_DIR / exper
+        })
+
+    expers.append({
         "name" : '424199045aa062d24ef1fbd49ec1b6bc',
         "path" : ROOT_DIR / '424199045aa062d24ef1fbd49ec1b6bc'
-    }
-
-    expers = [exper_1, exper_2, exper_3]
+    })
 
     compare_experiments(expers)
