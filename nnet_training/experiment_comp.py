@@ -24,25 +24,39 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
                 experiment[m_type] = MetricBaseClass(
                     savefile=filename, base_dir=experiment["path"], main_metric="")
 
-    for metric in exper_1:
-        if metric not in ["path", "name"] and metric in exper_2.keys():
+    # Gather each type of objective available (seg, depth, flow)
+    objectives = set()
+    for experiment in experiment_list:
+        for objective in experiment.keys():
+            if objective not in ["path", "name"]:
+                objectives.add(objective)
 
-            data_1 = exper_1[metric].get_summary_data()
-            data_2 = exper_2[metric].get_summary_data()
+    for objective in objectives:
+        # Check to see if the objective is done and tracked
+        # in an experiment and add it to the dictionary to be plotted
+        data_dict = {}
+        for experiment in experiment_list:
+            if objective in experiment.keys():
+                data_dict[experiment["name"]] = experiment[objective].get_summary_data()
 
-            fig, ax = plt.subplots(1, len(data_1), figsize=(18, 5))
-            fig.suptitle(f"Comparision between {metric} Validation Results")
+        sample_data = next(iter(data_dict.values()))
 
-            for idx, data in enumerate(data_1):
-                ax[idx].plot(data_1[data]["Validation"], label=exper_1["name"])
-                ax[idx].plot(data_2[data]["Validation"], label=exper_2["name"])
-                ax[idx].set_title(f'{data} over Epochs')
-                ax[idx].set_xlabel('Epoch #')
+        fig, ax = plt.subplots(1, len(sample_data), figsize=(18, 5))
+        fig.suptitle(f"Comparision between {objective} Validation Results")
 
-            fig.axes[-1].set_label((exper_1["name"], exper_2["name"]))
-            handles, labels = fig.axes[-1].get_legend_handles_labels()
-            fig.legend(handles, labels, loc='upper right')
-            plt.show(block=False)
+        # Plot each metric on a different subplot
+        for idx, metric in enumerate(sample_data):
+            for name, summary_dict in data_dict.items():
+                ax[idx].plot(summary_dict[metric]["Validation"], label=name)
+
+            ax[idx].set_title(f'{metric} over Epochs')
+            ax[idx].set_xlabel('Epoch #')
+
+        handles, labels = fig.axes[-1].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='lower center')
+        plt.show(block=False)
+
+    plt.show()
 
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
@@ -59,8 +73,11 @@ if __name__ == "__main__":
         "name" : args.experiment2,
         "path" : ROOT_DIR / args.experiment2
     }
+    exper_3 = {
+        "name" : '424199045aa062d24ef1fbd49ec1b6bc',
+        "path" : ROOT_DIR / '424199045aa062d24ef1fbd49ec1b6bc'
+    }
 
-    expers = [exper_1, exper_2]
+    expers = [exper_1, exper_2, exper_3]
 
     compare_experiments(expers)
-    input()
