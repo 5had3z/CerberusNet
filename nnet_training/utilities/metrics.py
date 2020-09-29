@@ -5,13 +5,14 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
 import sys
-import multiprocessing
 from pathlib import Path
 from typing import Dict, List, Callable, Union
 
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+
+import torch
 
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 
@@ -366,26 +367,18 @@ class SegmentationMetric(MetricBaseClass):
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
-    def add_sample(self, preds, labels, loss=None):
+    def add_sample(self, preds: torch.Tensor, labels: torch.Tensor, loss=None):
         """
         Update Accuracy (and Loss) Metrics
         """
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
 
-        labels = labels.astype('int32') + 1
-        preds = np.squeeze(preds.astype('int32') + 1, 1)
+        labels = labels.type(torch.int32).cuda() + 1
+        preds = (preds.type(torch.int32) + 1).squeeze(dim=1)
 
-        rcv_px, send_px = multiprocessing.Pipe(False)
-        pxthread = multiprocessing.Process(target=self._pixelwise, args=(preds, labels, send_px))
-        rcv_iou, send_iou = multiprocessing.Pipe(False)
-        iouthread = multiprocessing.Process(target=self._iou, args=(preds, labels, send_iou))
-        pxthread.start()
-        iouthread.start()
-        pxthread.join()
-        iouthread.join()
-        self.metric_data["Batch_IoU"].append(rcv_iou.recv())
-        self.metric_data["Batch_PixelAcc"].append(rcv_px.recv())
+        self.metric_data["Batch_IoU"].append(self._iou(preds, labels))
+        self.metric_data["Batch_PixelAcc"].append(self._pixelwise(preds, labels))
 
     def print_epoch_statistics(self):
         """
@@ -442,32 +435,34 @@ class SegmentationMetric(MetricBaseClass):
         print("No File Specified for Segmentation Metric Manager")
         return None
 
-    def _iou(self, prediction, target, ret_val):
+    def _iou(self, prediction: torch.Tensor, target: torch.Tensor):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
-        prediction = prediction * (target != 255).astype(prediction.dtype)
+        prediction = prediction * (target != 255)
 
         # Compute area intersection:
         intersection = prediction * (prediction == target)
-        area_intersection, _ = np.histogram(intersection, bins=self._n_classes,
-                                            range=(1, self._n_classes))
+        area_intersection = torch.histc(intersection, bins=self._n_classes,
+                                        min=1, max=self._n_classes)
 
         # Compute area union:
-        area_pred, _ = np.histogram(prediction, bins=self._n_classes, range=(1, self._n_classes))
-        area_lab, _ = np.histogram(target, bins=self._n_classes, range=(1, self._n_classes))
+        area_pred = torch.histc(prediction, bins=self._n_classes, min=1, max=self._n_classes)
+        area_lab = torch.histc(target, bins=self._n_classes, min=1, max=self._n_classes)
         area_union = area_pred + area_lab - area_intersection
 
         iou = 1.0 * area_intersection / (np.spacing(1) + area_union)
-        ret_val.send(iou)
+
+        return iou.cpu().data.numpy()
 
     @staticmethod
-    def _pixelwise(prediction, target, ret_val):
+    def _pixelwise(prediction: torch.Tensor, target: torch.Tensor):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
-        correct = 1.0 * np.sum((prediction == target) * (target > 0))
-        total_pixels = np.spacing(1) + np.sum(target > 0)
+        correct = 1.0 * ((prediction == target) * (target != 255)).sum()
+        total_pixels = np.spacing(1) + (target != 255).sum()
         pix_acc = correct / total_pixels
-        ret_val.send(pix_acc)
+
+        return pix_acc.cpu().data.numpy()
 
     def _reset_metric(self):
         self.metric_data = dict(
