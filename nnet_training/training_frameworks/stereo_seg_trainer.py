@@ -29,7 +29,8 @@ class StereoSegTrainer(ModelTrainer):
         '''
         self._loss_function = loss_fn['segmentation']
         self.metric_loggers = {
-            'seg': SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='segmentation_data')
+            'seg': SegmentationMetric(
+                19, base_dir=modelpath, main_metric="IoU", savefile='segmentation_data')
         }
 
         super(StereoSegTrainer, self).__init__(model, optim, dataldr, lr_cfg,
@@ -68,11 +69,16 @@ class StereoSegTrainer(ModelTrainer):
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
+                time_remain = time_elapsed / (batch_idx + 1) * \
+                    (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
-                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                 f'Iter [{batch_idx + 1:4d}/{len(self._validation_loader):4d}] || '
+                                 f'lr: {self._lr_manager.get_lr():.8f} || '
+                                 f'Loss: {loss.item():.4f} || '
+                                 f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                 f'Est Time Remain: {time_remain:.2f} sec')
+
 
     def _validate_model(self, max_epoch):
         with torch.no_grad():
@@ -82,9 +88,9 @@ class StereoSegTrainer(ModelTrainer):
             self._training_loader.dataset.resample_scale(True)
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                left    = data['l_img'].to(self._device)
-                right   = data['r_img'].to(self._device)
-                target  = data['seg'].to(self._device)
+                left = data['l_img'].to(self._device)
+                right = data['r_img'].to(self._device)
+                target = data['seg'].to(self._device)
 
                 outputs = self._model(left, right)
 
@@ -100,11 +106,14 @@ class StereoSegTrainer(ModelTrainer):
                 if not batch_idx % 10:
                     batch_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
-                    time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
+                    time_remain = time_elapsed / (batch_idx + 1) * \
+                        (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
-                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                        batch_acc, loss.item(), time_elapsed, time_remain))
+                    sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                     f'Iter [{batch_idx+1:4d}/{len(self._validation_loader):4d}] ||'
+                                     f' Accuracy: {batch_acc:.4f} || Loss: {loss.item():.4f} || '
+                                     f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                     f'Est Time Remain: {time_remain:.2f} sec')
 
     def visualize_output(self):
         """
@@ -112,9 +121,9 @@ class StereoSegTrainer(ModelTrainer):
         """
         with torch.no_grad():
             self._model.eval()
-            data   = next(iter(self._validation_loader))
-            left   = data['l_img'].to(self._device)
-            right  = data['r_img'].to(self._device)
+            data = next(iter(self._validation_loader))
+            left = data['l_img'].to(self._device)
+            right = data['r_img'].to(self._device)
             seg_gt = data['seg']
 
             start_time = time.time()
@@ -136,7 +145,7 @@ class StereoSegTrainer(ModelTrainer):
                 plt.imshow(get_color_pallete(pred_cpu[i, 0, :, :]))
                 plt.xlabel("Prediction")
 
-                plt.suptitle("Propagation time: " + str(propagation_time))
+                plt.suptitle(f"Propagation time: {propagation_time}")
                 plt.show()
 
     def plot_data(self):

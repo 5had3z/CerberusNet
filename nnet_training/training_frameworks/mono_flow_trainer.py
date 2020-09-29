@@ -88,11 +88,15 @@ class MonoFlowTrainer(ModelTrainer):
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed / (batch_idx + 1) * (len(self._training_loader) - (batch_idx + 1))
+                time_remain = time_elapsed / (batch_idx + 1) * \
+                    (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
-                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                 f'Iter [{batch_idx + 1:4d}/{len(self._validation_loader):4d}] || '
+                                 f'lr: {self._lr_manager.get_lr():.8f} || '
+                                 f'Loss: {loss.item():.4f} || '
+                                 f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                 f'Est Time Remain: {time_remain:.2f} sec')
 
     def _validate_model(self, max_epoch):
         with torch.no_grad():
@@ -101,8 +105,8 @@ class MonoFlowTrainer(ModelTrainer):
 
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img         = data['l_img'].to(self._device)
-                img_seq     = data['l_seq'].to(self._device)
+                img = data['l_img'].to(self._device)
+                img_seq = data['l_seq'].to(self._device)
 
                 if all(key in data.keys() for key in ["flow", "flow_mask"]):
                     flow_gt = {"flow": data['flow'].to(self._device),
@@ -123,11 +127,14 @@ class MonoFlowTrainer(ModelTrainer):
                 if not batch_idx % 10:
                     batch_acc = self.metric_loggers['flow'].get_last_batch()
                     time_elapsed = time.time() - start_time
-                    time_remain = time_elapsed / (batch_idx + 1) * (len(self._validation_loader) - (batch_idx + 1))
+                    time_remain = time_elapsed / (batch_idx + 1) * \
+                        (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
-                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Accuracy: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                        batch_acc, loss.item(), time_elapsed, time_remain))
+                    sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                     f'Iter [{batch_idx+1:4d}/{len(self._validation_loader):4d}] ||'
+                                     f' Accuracy: {batch_acc:.4f} || Loss: {loss.item():.4f} || '
+                                     f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                     f'Est Time Remain: {time_remain:.2f} sec')
 
     def visualize_output(self):
         """
@@ -136,8 +143,8 @@ class MonoFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             data = next(iter(self._validation_loader))
-            left        = data['l_img'].to(self._device)
-            seq_left    = data['l_seq'].to(self._device)
+            left  = data['l_img'].to(self._device)
+            seq_left = data['l_seq'].to(self._device)
 
             start_time = time.time()
             flow_12 = self._model(left, seq_left)['flow_fw'][0]
@@ -160,7 +167,7 @@ class MonoFlowTrainer(ModelTrainer):
                 plt.imshow(vis_flow)
                 plt.xlabel("Predicted Flow")
 
-                plt.suptitle("Propagation time: " + str(propagation_time))
+                plt.suptitle(f"Propagation time: {propagation_time}")
                 plt.show()
 
 if __name__ == "__main__":

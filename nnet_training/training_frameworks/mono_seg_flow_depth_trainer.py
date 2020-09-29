@@ -36,7 +36,8 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         self._depth_loss_fn = loss_fn['depth']
 
         self.metric_loggers = {
-            'seg' : SegmentationMetric(19, base_dir=modelpath, main_metric="IoU", savefile='seg_data'),
+            'seg' : SegmentationMetric(
+                19, base_dir=modelpath, main_metric="IoU", savefile='seg_data'),
             'flow': OpticFlowMetric(base_dir=modelpath, main_metric="SAD", savefile='flow_data'),
             'depth': DepthMetric(base_dir=modelpath, main_metric="RMSE_Log", savefile='depth_data')
         }
@@ -106,11 +107,15 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed/(batch_idx+1)*(len(self._training_loader)-(batch_idx+1))
+                time_remain = time_elapsed / (batch_idx + 1) * \
+                    (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
-                sys.stdout.write('\rTrain Epoch: [%2d/%2d] Iter [%4d/%4d] || lr: %.8f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                    self.epoch, max_epoch, batch_idx + 1, len(self._training_loader),
-                    self._lr_manager.get_lr(), loss.item(), time_elapsed, time_remain))
+                sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                 f'Iter [{batch_idx + 1:4d}/{len(self._validation_loader):4d}] || '
+                                 f'lr: {self._lr_manager.get_lr():.8f} || '
+                                 f'Loss: {loss.item():.4f} || '
+                                 f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                 f'Est Time Remain: {time_remain:.2f} sec')
 
     def _validate_model(self, max_epoch):
         with torch.no_grad():
@@ -165,11 +170,14 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     loss = flow_loss + seg_loss + depth_loss
                     seg_acc = self.metric_loggers['seg'].get_last_batch()
                     time_elapsed = time.time() - start_time
-                    time_remain = time_elapsed/(batch_idx+1)*(len(self._validation_loader)-(batch_idx+1))
+                    time_remain = time_elapsed / (batch_idx + 1) * \
+                        (len(self._validation_loader) - (batch_idx + 1))
                     sys.stdout.flush()
-                    sys.stdout.write('\rValidaton Epoch: [%2d/%2d] Iter [%4d/%4d] || Seg mIoU: %.4f || Loss: %.4f || Time Elapsed: %.2f sec || Est Time Remain: %.2f sec' % (
-                        self.epoch, max_epoch, batch_idx + 1, len(self._validation_loader),
-                        seg_acc, loss.item(), time_elapsed, time_remain))
+                    sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                     f'Iter [{batch_idx+1:4d}/{len(self._validation_loader):4d}] ||'
+                                     f' Accuracy: {seg_acc:.4f}mIoU || Loss: {loss:.4f} || '
+                                     f'Time Elapsed: {time_elapsed:.2f} sec || '
+                                     f'Est Time Remain: {time_remain:.2f} sec')
 
     def visualize_output(self):
         """
@@ -225,7 +233,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Predicted Depth")
 
-                plt.suptitle("Propagation time: " + str(propagation_time))
+                plt.suptitle(f"Propagation time: {propagation_time}")
                 plt.show()
 
     def plot_data(self):

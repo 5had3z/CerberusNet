@@ -7,13 +7,11 @@ import os
 import time
 import sys
 from pathlib import Path
-from typing import Dict, TypeVar
-T = TypeVar('T')
+from typing import Dict, Union
 
 import torch
 
 from nnet_training.utilities.lr_scheduler import LRScheduler
-from nnet_training.utilities.metrics import MetricBaseClass
 
 __all__ = ['ModelTrainer']
 
@@ -22,8 +20,8 @@ class ModelTrainer(object):
     Base class that various model trainers inherit from
     """
     def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-                 dataloaders: Dict[str, torch.utils.data.DataLoader], lr_cfg: Dict[str, T],
-                 basepath: Path, checkpoints=True):
+                 dataloaders: Dict[str, torch.utils.data.DataLoader],
+                 lr_cfg: Dict[str, Union[str, float]], basepath: Path, checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -53,11 +51,10 @@ class ModelTrainer(object):
 
         if self._checkpoints:
             self.load_checkpoint(self._basepath / (str(self._model)+"_latest.pth"))
+        elif os.path.isfile(self._basepath / (str(self._model)+"_latest.pth")):
+            sys.stdout.write("\nWarning: Previous Checkpoint Exists and Checkpoints arent enabled!")
         else:
-            if os.path.isfile(self._basepath / (str(self._model)+"_latest.pth")):
-                sys.stdout.write("\nWarning: Checkpoint Already Exists!")
-            else:
-                sys.stdout.write("\nStarting From Scratch!")
+            sys.stdout.write("\nStarting From Scratch without Checkpoints!")
 
     def get_learning_rate(self) -> float:
         """
@@ -81,11 +78,11 @@ class ModelTrainer(object):
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epochs']
-            sys.stdout.write("\nCheckpoint loaded from " + str(path)
-                             + " starting from epoch:" + str(self.epoch) + "\n")
+            sys.stdout.write(f"\nCheckpoint loaded from {str(path)}"
+                             f" starting from epoch: {self.epoch}\n")
         else:
             #Raise Error if it does not exist
-            sys.stdout.write("\nCheckpoint Does Not Exist\nStarting From Scratch!")
+            sys.stdout.write("\nCheckpoint Does Not Exist, Starting From Scratch!")
 
     def save_checkpoint(self, path: Path, metrics=False):
         '''
@@ -107,10 +104,10 @@ class ModelTrainer(object):
         Writes a brief summary of the current state of an experiment in a text file
         """
         with open(self._basepath / "Summary.txt", "w") as txt_file:
-            txt_file.write("{} Summary, # Epochs: {}\n".format(str(self._model), self.epoch))
+            txt_file.write(f"{str(self._model)} Summary, # Epochs: {self.epoch}\n")
             for key, metric in self.metric_loggers.items():
                 name, value = metric.max_accuracy(main_metric=True)
-                txt_file.write("Objective: %s\tMetric: %s\tValue: %.3f\n"%(key, name, value[1]))
+                txt_file.write(f"Objective: {key}\tMetric: {name}\tValue: {value[1]:.3f}\n")
 
     def train_model(self, n_epochs):
         """
@@ -147,21 +144,20 @@ class ModelTrainer(object):
                                                             loss_metric=False)
                     _, prev_best = logger.max_accuracy(main_metric=True)
                     if prev_best[0](epoch_acc[0], prev_best[1]):
-                        filename = "{}_{}.pth".format(str(self._model), key)
+                        filename = f"{str(self._model)}_{key}.pth"
                         self.save_checkpoint(self._basepath / filename, metrics=False)
 
                 self.save_checkpoint(
-                    self._basepath / "{}_latest.pth".format(str(self._model)), metrics=True)
+                    self._basepath / f"{str(self._model)}_latest.pth", metrics=True)
 
                 self.write_summary()
 
             sys.stdout.flush()
-            sys.stdout.write('\rEpoch '+str(self.epoch)+' Finished, Time: '+
-                             str(epoch_duration)+'s\n')
+            sys.stdout.write(f'\rEpoch {str(self.epoch)} Finished, Time: {str(epoch_duration)}s\n')
 
         train_end_time = time.time()
 
-        print('\nTotal Traning Time:\t', train_end_time - train_start_time)
+        print(f"\nTotal Traning Time: \t{train_end_time - train_start_time}")
 
     def _train_epoch(self, max_epoch):
         raise NotImplementedError
