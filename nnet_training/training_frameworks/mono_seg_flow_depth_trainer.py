@@ -56,16 +56,19 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 param_group['lr'] = cur_lr
 
             # Put both image and target onto device
-            img = data['l_img'].to(self._device)
-            img_seq = data['l_seq'].to(self._device)
-            seg_gt = data['seg'].to(self._device)
-            depth_gt = data['l_disp'].to(self._device)
+            cuda_s = torch.cuda.Stream()
+            with torch.cuda.stream(cuda_s):
+                img = data['l_img'].cuda(non_blocking=True)
+                img_seq = data['l_seq'].cuda(non_blocking=True)
+                seg_gt = data['seg'].cuda(non_blocking=True)
+                depth_gt = data['l_disp'].cuda(non_blocking=True)
 
-            if all(key in data.keys() for key in ["flow", "flow_mask"]):
-                flow_gt = {"flow": data['flow'].to(self._device),
-                           "flow_mask": data['flow_mask'].to(self._device)}
-            else:
-                flow_gt = None
+                if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                    flow_gt = {"flow": data['flow'].cuda(non_blocking=True),
+                               "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
+                else:
+                    flow_gt = None
+            cuda_s.synchronize()
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
@@ -99,8 +102,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 )
 
                 self.metric_loggers['depth'].add_sample(
-                    forward['depth'].cpu().data.numpy(),
-                    data['l_disp'].data.numpy(),
+                    forward['depth'], depth_gt,
                     loss=depth_loss.item()
                 )
 
@@ -124,16 +126,19 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             self._training_loader.dataset.resample_scale(True)
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img = data['l_img'].to(self._device)
-                img_seq = data['l_seq'].to(self._device)
-                seg_gt = data['seg'].to(self._device)
-                depth_gt = data['l_disp'].to(self._device)
+                cuda_s = torch.cuda.Stream()
+                with torch.cuda.stream(cuda_s):
+                    img = data['l_img'].cuda(non_blocking=True)
+                    img_seq = data['l_seq'].cuda(non_blocking=True)
+                    seg_gt = data['seg'].cuda(non_blocking=True)
+                    depth_gt = data['l_disp'].cuda(non_blocking=True)
 
-                if all(key in data.keys() for key in ["flow", "flow_mask"]):
-                    flow_gt = {"flow": data['flow'].to(self._device),
-                               "flow_mask": data['flow_mask'].to(self._device)}
-                else:
-                    flow_gt = None
+                    if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                        flow_gt = {"flow": data['flow'].cuda(non_blocking=True),
+                                   "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
+                    else:
+                        flow_gt = None
+                cuda_s.synchronize()
 
                 # Caculate the loss and accuracy for the predictions
                 forward, backward = self._model(im1_rgb=img, im2_rgb=img_seq)
@@ -159,8 +164,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 )
 
                 self.metric_loggers['depth'].add_sample(
-                    forward['depth'].cpu().data.numpy(),
-                    data['l_disp'].data.numpy(),
+                    forward['depth'], depth_gt,
                     loss=depth_loss.item()
                 )
 
@@ -173,7 +177,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     sys.stdout.flush()
                     sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
                                      f'Iter [{batch_idx+1:4d}/{len(self._validation_loader):4d}] ||'
-                                     f' Accuracy: {seg_acc:.4f}mIoU || Loss: {loss:.4f} || '
+                                     f' Accuracy: {seg_acc:.4f} mIoU || Loss: {loss:.4f} || '
                                      f'Time Elapsed: {time_elapsed:.2f} sec || '
                                      f'Est Time Remain: {time_remain:.2f} sec')
 

@@ -515,34 +515,34 @@ class DepthMetric(MetricBaseClass):
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
-    def add_sample(self, pred_depth, gt_depth, loss=None):
+    def add_sample(self, pred_depth: torch.Tensor, gt_depth: torch.Tensor, loss=None):
         if loss is not None:
             self.metric_data["Batch_Loss"].append(loss)
 
-        pred_depth = pred_depth.squeeze(axis=1)[gt_depth > 0]
+        pred_depth = pred_depth.squeeze(dim=1)[gt_depth > 0]
         pred_depth[pred_depth == 0] += 1e-7
         gt_depth = gt_depth[gt_depth > 0]
 
-        n_pixels = gt_depth.size
         difference = pred_depth - gt_depth
-        squared_diff = np.square(difference)
-        log_diff = np.log(pred_depth) - np.log(gt_depth)
+        squared_diff = difference.pow(2)
+        log_diff = torch.log(pred_depth) - torch.log(gt_depth)
+        sq_log_diff = log_diff.pow(2).mean()
 
         self.metric_data['Batch_Absolute_Relative'].append(
-            np.mean(np.absolute(difference)/gt_depth))
+            torch.mean(difference.abs()/gt_depth).cpu().data.numpy())
 
         self.metric_data['Batch_Squared_Relative'].append(
-            np.mean(squared_diff/gt_depth))
+            torch.mean(squared_diff/gt_depth).cpu().data.numpy())
 
         self.metric_data['Batch_RMSE_Linear'].append(
-            np.sqrt(np.mean(squared_diff)))
+            torch.sqrt(squared_diff.mean()).cpu().data.numpy())
 
         self.metric_data['Batch_RMSE_Log'].append(
-            np.sqrt(np.mean(np.square(log_diff))))
+            torch.sqrt(sq_log_diff).cpu().data.numpy())
 
-        eqn1 = np.mean(np.square(log_diff))
-        eqn2 = np.square(np.sum(log_diff)) / n_pixels**2
-        self.metric_data['Batch_Invariant'].append(eqn1 - eqn2)
+        eqn1 = sq_log_diff
+        eqn2 = log_diff.abs().sum()**2 / gt_depth.shape[0]**2
+        self.metric_data['Batch_Invariant'].append((eqn1 - eqn2).cpu().data.numpy())
 
     def max_accuracy(self, main_metric=True):
         """

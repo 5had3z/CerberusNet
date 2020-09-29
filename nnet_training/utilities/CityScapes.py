@@ -356,14 +356,16 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
             batch_size=dataset_config.batch_size,
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
-            drop_last=dataset_config.drop_last
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
         ),
         'Validation' : torch.utils.data.DataLoader(
             datasets["Validation"],
             batch_size=dataset_config.batch_size,
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
-            drop_last=dataset_config.drop_last
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
         )
     }
 
@@ -440,21 +442,15 @@ def some_test_idk():
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
-    
+
     print(len(test_dset.l_img))
     print(len(test_dset.seg))
 
-    import multiprocessing
-    import matplotlib.pyplot as plt
-    from torch.utils.data import DataLoader
-
     batch_size = 2
-    testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=0)
+    test_loader = torch.utils.data.DataLoader(
+        test_dset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    for idx, data in enumerate(testLoader):
-        print("yes")
-
-    data = next(iter(testLoader))
+    data = next(iter(test_loader))
 
     image = data["l_img"].numpy()
     seg = data["seg"].numpy()
@@ -469,6 +465,7 @@ def some_test_idk():
         plt.show()
 
     # classes = {}
+    # import matplotlib.pyplot as plt
     # for i in range(batch_size):
     #     # # Get class for each individual pixel
     #     # for j in range(seg.shape[1]):

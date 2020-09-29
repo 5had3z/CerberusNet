@@ -363,14 +363,16 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
             batch_size=dataset_config.batch_size,
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
-            drop_last=dataset_config.drop_last
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
         ),
         'Validation' : torch.utils.data.DataLoader(
             datasets["Validation"],
             batch_size=dataset_config.batch_size,
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
-            drop_last=dataset_config.drop_last
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
         )
     }
 
