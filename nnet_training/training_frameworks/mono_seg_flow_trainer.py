@@ -10,6 +10,7 @@ from typing import Dict, Union
 import numpy as np
 
 import torch
+import apex.amp as amp
 import matplotlib.pyplot as plt
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric
@@ -25,7 +26,7 @@ class MonoSegFlowTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
                  loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
-                 modelpath: Path, checkpoints=True):
+                 modelpath: Path, amp_cfg="O0", checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -40,7 +41,7 @@ class MonoSegFlowTrainer(ModelTrainer):
         }
 
         super(MonoSegFlowTrainer, self).__init__(model, optim, dataldr, lr_cfg,
-                                                 modelpath, checkpoints)
+                                                 modelpath, amp_cfg, checkpoints)
 
     def _train_epoch(self, max_epoch):
 
@@ -74,7 +75,8 @@ class MonoSegFlowTrainer(ModelTrainer):
             loss = flow_loss + seg_loss
 
             self._optimizer.zero_grad()
-            loss.backward()
+            with amp.scale_loss(loss, self._optimizer) as scaled_loss:
+                scaled_loss.backward()
             self._optimizer.step()
 
             with torch.no_grad():

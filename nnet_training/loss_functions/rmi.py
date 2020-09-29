@@ -16,6 +16,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from apex import amp
+
 from .rmi_utils import map_get_pairs, log_det_by_cholesky
 
 _euler_num = 2.718281828        # euler number
@@ -65,7 +67,8 @@ class RMILoss(nn.Module):
         # torch.inverse aren't supported by half
         logits_4D.float()
         labels_4D.float()
-        loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
+        with amp.disable_casts():
+            loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
         return loss
 
     def forward_sigmoid(self, logits_4D, labels_4D, do_rmi=False):

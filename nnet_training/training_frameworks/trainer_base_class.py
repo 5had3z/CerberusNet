@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Union
 
 import torch
+import apex.amp as amp
 
 from nnet_training.utilities.lr_scheduler import LRScheduler
 
@@ -21,7 +22,8 @@ class ModelTrainer(object):
     """
     def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
                  dataloaders: Dict[str, torch.utils.data.DataLoader],
-                 lr_cfg: Dict[str, Union[str, float]], basepath: Path, checkpoints=True):
+                 lr_cfg: Dict[str, Union[str, float]], basepath: Path,
+                 amp_cfg="O0", checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -39,6 +41,9 @@ class ModelTrainer(object):
 
         self._model = model.to(self._device)
         self._optimizer = optimizer
+
+        self._model, self._optimizer = amp.initialize(
+            self._model, self._optimizer, opt_level=amp_cfg)
 
         self._lr_manager = LRScheduler(**lr_cfg)
 
@@ -78,8 +83,10 @@ class ModelTrainer(object):
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epochs']
-            sys.stdout.write(f"\nCheckpoint loaded from {str(path)}"
-                             f" starting from epoch: {self.epoch}\n")
+            if "amp" in checkpoint:
+                amp.load_state_dict(checkpoint["amp"])
+            sys.stdout.write(f"\nCheckpoint loaded from {str(path)} "
+                             f"starting from epoch: {self.epoch}\n")
         else:
             #Raise Error if it does not exist
             sys.stdout.write("\nCheckpoint Does Not Exist, Starting From Scratch!")
@@ -96,6 +103,7 @@ class ModelTrainer(object):
         torch.save({
             'model_state_dict'    : self._model.state_dict(),
             'optimizer_state_dict': self._optimizer.state_dict(),
+            'amp'                 : amp.state_dict(),
             'epochs'              : self.epoch
         }, path)
 

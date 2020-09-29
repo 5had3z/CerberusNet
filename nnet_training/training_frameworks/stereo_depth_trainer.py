@@ -11,6 +11,7 @@ T = TypeVar('T')
 import numpy as np
 
 import torch
+import apex.amp as amp
 import matplotlib.pyplot as plt
 
 from nnet_training.utilities.metrics import DepthMetric
@@ -25,7 +26,7 @@ class StereoDisparityTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
                  loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
-                 modelpath: Path, checkpoints=True):
+                 modelpath: Path, amp_cfg="O0", checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -35,8 +36,8 @@ class StereoDisparityTrainer(ModelTrainer):
             'depth' : DepthMetric(base_dir=modelpath, main_metric="RMSE_Log",savefile='depth_data')
         }
 
-        super(StereoDisparityTrainer, self).__init__(model, optim, dataldr,
-                                                     lr_cfg, modelpath, checkpoints)
+        super(StereoDisparityTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                     modelpath, amp_cfg, checkpoints)
 
     def _train_epoch(self, max_epoch):
 
@@ -62,7 +63,8 @@ class StereoDisparityTrainer(ModelTrainer):
             loss += self._loss_function(right, depth_pred, left, -baseline, data['cam'])
 
             self._optimizer.zero_grad()
-            loss.backward()
+            with amp.scale_loss(loss, self._optimizer) as scaled_loss:
+                scaled_loss.backward()
             self._optimizer.step()
 
             self.metric_loggers['depth'].add_sample(

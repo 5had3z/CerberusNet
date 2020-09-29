@@ -9,6 +9,7 @@ from typing import Dict, Union
 import numpy as np
 
 import torch
+import apex.amp as amp
 import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 
@@ -23,7 +24,7 @@ class MonoSegmentationTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
                  loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, Union[str, float]],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
-                 modelpath: Path, checkpoints=True):
+                 modelpath: Path, amp_cfg="O0", checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -34,7 +35,8 @@ class MonoSegmentationTrainer(ModelTrainer):
         }
         self._loss_function = loss_fn['segmentation']
 
-        super().__init__(model, optim, dataldr, lr_cfg, modelpath, checkpoints)
+        super(MonoSegmentationTrainer, self).__init__(model, optim, dataldr, lr_cfg,
+                                                      modelpath, amp_cfg, checkpoints)
 
     def _train_epoch(self, max_epoch):
 
@@ -57,7 +59,8 @@ class MonoSegmentationTrainer(ModelTrainer):
             loss = self._loss_function(outputs, target)
 
             self._optimizer.zero_grad()
-            loss.backward()
+            with amp.scale_loss(loss, self._optimizer) as scaled_loss:
+                scaled_loss.backward()
             self._optimizer.step()
 
             self.metric_loggers['seg'].add_sample(

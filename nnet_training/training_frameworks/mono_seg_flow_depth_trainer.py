@@ -11,6 +11,7 @@ T = TypeVar('T')
 import numpy as np
 
 import torch
+import apex.amp as amp
 import matplotlib.pyplot as plt
 
 from nnet_training.utilities.metrics import OpticFlowMetric, SegmentationMetric, DepthMetric
@@ -26,7 +27,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
     def __init__(self, model: torch.nn.Module, optim: torch.optim.Optimizer,
                  loss_fn: Dict[str, torch.nn.Module], lr_cfg: Dict[str, T],
                  dataldr: Dict[str, torch.utils.data.DataLoader],
-                 modelpath: Path, checkpoints=True):
+                 modelpath: Path, amp_cfg="O0", checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -43,7 +44,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
         }
 
         super(MonoSegFlowDepthTrainer, self).__init__(model, optim, dataldr, lr_cfg,
-                                                      modelpath, checkpoints)
+                                                      modelpath, amp_cfg, checkpoints)
 
     def _train_epoch(self, max_epoch):
 
@@ -87,7 +88,8 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             loss = flow_loss + seg_loss + depth_loss
 
             self._optimizer.zero_grad()
-            loss.backward()
+            with amp.scale_loss(loss, self._optimizer) as scaled_loss:
+                scaled_loss.backward()
             self._optimizer.step()
 
             with torch.no_grad():
@@ -112,7 +114,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                     (len(self._training_loader) - (batch_idx + 1))
                 sys.stdout.flush()
                 sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
-                                 f'Iter [{batch_idx + 1:4d}/{len(self._validation_loader):4d}] || '
+                                 f'Iter [{batch_idx + 1:4d}/{len(self._training_loader):4d}] || '
                                  f'lr: {self._lr_manager.get_lr():.8f} || '
                                  f'Loss: {loss.item():.4f} || '
                                  f'Time Elapsed: {time_elapsed:.2f} sec || '
