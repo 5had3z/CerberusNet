@@ -1,4 +1,5 @@
 {
+    "note" : "KITTI with depth out + bugfix random shuffle from loader",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
@@ -6,10 +7,10 @@
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "crop_fraction" : 1.5,
-            "output_size" : [640, 192],
+            "output_size" : [864, 256],
             "rand_brightness" : 20,
-            "rand_rotation" : 5
+            "rand_rotation" : 5,
+            "disparity_out" : false
         },
         "train_ratio" : 0.8,
         "objectives" : ["flow", "seg", "disparity"]
@@ -102,7 +103,7 @@
                 "corr_multiply" : 1
             },
             "flow_est_network" : {
-                "type" : "FlowEstimatorDense",
+                "type" : "FlowEstimatorLite",
                 "args" : {}
             },
             "context_network" : {
@@ -124,5 +125,6 @@
     },
     "lr_scheduler" : {
         "base_lr" : 1e-4, "mode" : "constant", "power" : 0.9
-    }
+    },
+    "amp_cfg": "O1"
 }

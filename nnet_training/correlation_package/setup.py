@@ -15,10 +15,15 @@ nvcc_args = [
 setup(
     name='correlation_pkg',
     ext_modules=[
-        CUDAExtension('correlation_pkg', [
-            'correlation_cuda.cpp',
-            'correlation_cuda_kernel.cu'
-        ], extra_compile_args={'cxx': cxx_args, 'nvcc': nvcc_args, 'cuda-path': ['/usr/local/cuda-10.2']})
+        CUDAExtension(
+            'correlation_pkg',
+            ['correlation_cuda.cpp', 'correlation_cuda_kernel.cu'],
+            extra_compile_args={
+                'cxx': cxx_args,
+                'nvcc': nvcc_args,
+                'cuda-path': ['/usr/local/cuda-10.2']
+                }
+        )
     ],
     cmdclass={
         'build_ext': BuildExtension

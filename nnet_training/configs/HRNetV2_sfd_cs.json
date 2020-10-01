@@ -3,7 +3,7 @@
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
-        "batch_size" : 4,
+        "batch_size" : 3,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {

@@ -36,7 +36,8 @@ class CorrelationFunction(torch.autograd.Function):
         ctx.stride2 = stride2
         ctx.corr_multiply = corr_multiply
 
-        output = correlation_pkg.forward(input1, input2, pad_size, kernel_size,
+        output = correlation_pkg.forward(
+            input1, input2, pad_size, kernel_size,
             max_displacement, stride1, stride2, corr_multiply)
 
         return output
@@ -45,10 +46,11 @@ class CorrelationFunction(torch.autograd.Function):
     def backward(ctx, grad_output):
         input1, input2 = ctx.saved_tensors
 
-        grad_input1, grad_input2 = correlation_pkg.backward(input1, input2, grad_output,
-            ctx.pad_size, ctx.kernel_size, ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
+        grad_input1, grad_input2 = correlation_pkg.backward(
+            input1, input2, grad_output, ctx.pad_size, ctx.kernel_size,
+            ctx.max_displacement, ctx.stride1, ctx.stride2, ctx.corr_multiply)
 
-        return grad_input1, grad_input2, None, None, None, None, None, None 
+        return grad_input1, grad_input2, None, None, None, None, None, None
 
 
 class Correlation(torch.nn.Module):

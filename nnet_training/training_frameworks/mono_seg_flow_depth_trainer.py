@@ -237,7 +237,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Predicted Depth")
 
-                plt.suptitle(f"Propagation time: {propagation_time}")
+                plt.suptitle(f"Propagation time: {propagation_time:.3f}")
                 plt.show()
 
     def plot_data(self):

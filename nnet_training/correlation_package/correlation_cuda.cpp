@@ -1,6 +1,7 @@
 #include "correlation_cuda_kernel.cuh"
 
 #include <torch/extension.h>
+#include <torch/script.h>
 
 #include <iostream>
 
@@ -51,6 +52,8 @@ std::vector<torch::Tensor> correlation_backward_cuda(
 
     return {gradInput1, gradInput2};
 }
+
+static auto registry = torch::RegisterOperators("cerberus::correlation", &correlation_forward_cuda);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");

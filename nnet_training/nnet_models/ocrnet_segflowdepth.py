@@ -11,7 +11,7 @@ from nnet_training.correlation_package.correlation import Correlation
 
 from .hrnetv2 import get_seg_model
 from .ocrnet import OCR_block, scale_as
-from .pwcnet_modules import FlowEstimatorDense, ContextNetwork, pwc_conv
+from .pwcnet_modules import FlowEstimatorDense, FlowEstimatorLite, ContextNetwork, pwc_conv
 
 class DepthHeadV1(nn.Module):
     """
@@ -73,6 +73,8 @@ class OCRNetSFD(nn.Module):
         if 'flow_est_network' in kwargs:
             if kwargs['flow_est_network']['type'] == 'FlowEstimatorDense':
                 self.flow_estimator = FlowEstimatorDense(num_ch_in)
+            elif kwargs['flow_est_network']['type'] == 'FlowEstimatorLite':
+                self.flow_estimator = FlowEstimatorLite(num_ch_in)
             else:
                 raise NotImplementedError(kwargs['flow_est_network']['type'])
         else:

@@ -66,73 +66,72 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 self.r_disp = []
 
         # Get all file names
-        for dir_name, _, file_list in os.walk(os.path.join(directory, 'image_2')):
-            for filename in sorted(file_list):
-                frame_n = int(re.split("_", filename)[1][:2])
-                if filename.endswith(IMG_EXT) and frame_n == 10:
-                    read_check = True
-                    l_imgpath = os.path.join(dir_name, filename)
+        for filename in sorted(os.listdir(os.path.join(directory, 'image_2'))):
+            frame_n = int(re.split("_", filename)[1][:2])
+            if filename.endswith(IMG_EXT) and frame_n == 10:
+                read_check = True
+                l_imgpath = os.path.join(directory, 'image_2', filename)
 
+                if hasattr(self, 'r_img'):
+                    r_imgpath = os.path.join(directory, 'image_3', filename)
+                    if not os.path.isfile(r_imgpath):
+                        read_check = False
+                        print("Error finding corresponding right image to ", l_imgpath)
+
+                if hasattr(self, 'seg'):
+                    seg_path = os.path.join(directory, 'semantic', filename)
+                    if not os.path.isfile(seg_path):
+                        read_check = False
+                        print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                if hasattr(self, 'l_disp'):
+                    left_disp_path = os.path.join(directory, 'disp_noc_0', filename)
+                    if not os.path.isfile(left_disp_path):
+                        read_check = False
+                        print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                if hasattr(self, 'r_disp'):
+                    right_disp_path = os.path.join(directory, 'disp_noc_1', filename)
+                    if not os.path.isfile(right_disp_path):
+                        read_check = False
+                        print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                if hasattr(self, 'l_seq'):
+                    seq_name = filename.replace('10.png', '11.png')
+                    left_seq_path = os.path.join(directory, 'image_2', seq_name)
+                    if not os.path.isfile(left_seq_path):
+                        read_check = False
+                        print("Error finding corresponding left sequence image to ", l_imgpath)
+
+                if hasattr(self, 'r_seq'):
+                    seq_name = filename.replace('10.png', '11.png')
+                    right_seq_path = os.path.join(directory, 'image_3', seq_name)
+                    if not os.path.isfile(right_seq_path):
+                        read_check = False
+                        print("Error finding corresponding right sequence image to ", l_imgpath)
+
+                if hasattr(self, 'flow'):
+                    flow_path = os.path.join(directory, 'flow_noc', filename)
+                    if not os.path.isfile(flow_path):
+                        read_check = False
+                        print("Error finding corresponding segmentation image to ", l_imgpath)
+
+                if read_check:
+                    self.l_img.append(l_imgpath)
                     if hasattr(self, 'r_img'):
-                        r_imgpath = os.path.join(directory, 'image_3', filename)
-                        if not os.path.isfile(r_imgpath):
-                            read_check = False
-                            print("Error finding corresponding right image to ", l_imgpath)
-
+                        self.r_img.append(r_imgpath)
                     if hasattr(self, 'seg'):
-                        seg_path = os.path.join(directory, 'semantic', filename)
-                        if not os.path.isfile(seg_path):
-                            read_check = False
-                            print("Error finding corresponding segmentation image to ", l_imgpath)
-
+                        self.seg.append(seg_path)
                     if hasattr(self, 'l_disp'):
-                        left_disp_path = os.path.join(directory, 'disp_noc_0', filename)
-                        if not os.path.isfile(left_disp_path):
-                            read_check = False
-                            print("Error finding corresponding segmentation image to ", l_imgpath)
-
+                        self.l_disp.append(left_disp_path)
                     if hasattr(self, 'r_disp'):
-                        right_disp_path = os.path.join(directory, 'disp_noc_1', filename)
-                        if not os.path.isfile(right_disp_path):
-                            read_check = False
-                            print("Error finding corresponding segmentation image to ", l_imgpath)
-
+                        self.r_disp.append(right_disp_path)
                     if hasattr(self, 'l_seq'):
-                        seq_name = filename.replace('10.png', '11.png')
-                        left_seq_path = os.path.join(directory, 'image_2', seq_name)
-                        if not os.path.isfile(left_seq_path):
-                            read_check = False
-                            print("Error finding corresponding left sequence image to ", l_imgpath)
-
+                        self.l_seq.append(left_seq_path)
                     if hasattr(self, 'r_seq'):
-                        seq_name = filename.replace('10.png', '11.png')
-                        right_seq_path = os.path.join(directory, 'image_3', seq_name)
-                        if not os.path.isfile(right_seq_path):
-                            read_check = False
-                            print("Error finding corresponding right sequence image to ", l_imgpath)
-
+                        self.r_seq.append(right_seq_path)
                     if hasattr(self, 'flow'):
-                        flow_path = os.path.join(directory, 'flow_noc', filename)
-                        if not os.path.isfile(flow_path):
-                            read_check = False
-                            print("Error finding corresponding segmentation image to ", l_imgpath)
-
-                    if read_check:
-                        self.l_img.append(l_imgpath)
-                        if hasattr(self, 'r_img'):
-                            self.r_img.append(r_imgpath)
-                        if hasattr(self, 'seg'):
-                            self.seg.append(seg_path)
-                        if hasattr(self, 'l_disp'):
-                            self.l_disp.append(left_disp_path)
-                        if hasattr(self, 'r_disp'):
-                            self.r_disp.append(right_disp_path)
-                        if hasattr(self, 'l_seq'):
-                            self.l_seq.append(left_seq_path)
-                        if hasattr(self, 'r_seq'):
-                            self.r_seq.append(right_seq_path)
-                        if hasattr(self, 'flow'):
-                            self.flow.append(flow_path)
+                        self.flow.append(flow_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if id_vector is not None:
@@ -153,10 +152,16 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                 self.flow = [self.flow[i] for i in id_vector]
 
         self.disparity_out = disparity_out
-        self.base_size = tuple(output_size)
-        self.output_shape = tuple(output_size)
+        self.base_size = output_size
+        self.output_shape = output_size
 
-        self.std_kitti_dims = (1274, 375)
+        self.width_to_focal = {
+            1242: 721.5377,
+            1241: 718.856,
+            1238: 718.3351,
+            1224: 707.0493
+        }
+
         self.mirror_x = 1.0
 
         if 'crop_fraction' in kwargs:
@@ -220,6 +225,8 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             self.output_shape = self.base_size
 
     def _sync_transform(self, epoch_data):
+        self.std_kitti_dims = (epoch_data["l_img"].size[0], epoch_data["l_img"].size[0])
+
         # random mirror
         if random.random() < 0.5:
             self.mirror_x = -1.0
@@ -277,7 +284,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
-            raise NotImplementedError
+            mask = disparity > 0
+            focal = self.width_to_focal[self.std_kitti_dims[1]]
+            disparity = focal * 0.54 / disparity
+            disparity[mask != 1] = 0
         return torch.FloatTensor(disparity)
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):
@@ -285,8 +295,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         bitmask = epoch_data['flow_b'].resize(self.output_shape, Image.NEAREST)
         flow_x = epoch_data['flow_x'].resize(self.output_shape, Image.NEAREST)
         flow_y = epoch_data['flow_y'].resize(self.output_shape, Image.NEAREST)
-        scale_x = float(self.output_shape[0]) / float(self.std_kitti_dims[0] / self.crop_fraction)
-        scale_y = float(self.output_shape[1]) / float(self.std_kitti_dims[1] / self.crop_fraction)
+
+        crop_scale = self.crop_fraction if hasattr(self, 'crop_fraction') else 1.0
+        scale_x = float(self.output_shape[0]) / float(self.std_kitti_dims[0] / crop_scale)
+        scale_y = float(self.output_shape[1]) / float(self.std_kitti_dims[1] / crop_scale)
 
         # Apply transform indicated by the devkit including ignore mask
         flow_out_x = self.mirror_x * scale_x * (np.array(flow_x).astype('float32') - 2**15) / 64.0
@@ -322,13 +334,10 @@ def id_vec_generator(train_ratio, directory):
         num_images += file.endswith(IMG_EXT)
 
     print("Number of Images:\t", num_images)
-    image_ids = list(range(num_images))
-    random.shuffle(image_ids)
+    n_train = int(num_images * train_ratio)
 
-    n_train = int(num_images*train_ratio)
-
-    train_ids = image_ids[0:n_train]
-    val_ids = image_ids[n_train+1:-1]
+    train_ids = list(range(n_train))
+    val_ids = list(range(n_train, num_images))
 
     return train_ids, val_ids
 
@@ -354,6 +363,7 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
         'Validation' : Kitti2015Dataset(dataset_config.rootdir,
                                         dataset_config.objectives,
                                         output_size=dataset_config.augmentations.output_size,
+                                        disparity_out=dataset_config.augmentations.disparity_out,
                                         id_vector=val_ids)
     }
 
