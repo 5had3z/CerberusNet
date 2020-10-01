@@ -1,5 +1,5 @@
 {
-    "note" : "KITTI with depth out + bugfix random shuffle from loader",
+    "note" : "KITTI trying custom rescaler",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
@@ -10,7 +10,8 @@
             "output_size" : [864, 256],
             "rand_brightness" : 20,
             "rand_rotation" : 5,
-            "disparity_out" : false
+            "disparity_out" : false,
+            "rand_scale" : [0.5, 1]
         },
         "train_ratio" : 0.8,
         "objectives" : ["flow", "seg", "disparity"]

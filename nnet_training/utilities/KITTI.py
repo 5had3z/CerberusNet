@@ -19,7 +19,9 @@ from PIL import Image
 
 import numpy as np
 
+from torch.utils.data import RandomSampler
 from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
+from nnet_training.utilities.CustomSampler import BatchSamplerRandScale
 
 __all__ = ['Kitti2015Dataset', 'get_kitti_dataset']
 
@@ -154,6 +156,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         self.disparity_out = disparity_out
         self.base_size = output_size
         self.output_shape = output_size
+        self.scale_factor = 1
 
         self.width_to_focal = {
             1242: 721.5377,
@@ -170,9 +173,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             self.rand_rot = kwargs['rand_rotation']
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
-        if 'rand_scale' in kwargs:
-            assert len(kwargs['rand_scale']) == 2
-            self.scale_range = kwargs['rand_scale']
 
         self._key = np.array([255, 255, 255, 255, 255, 255,
                               255, 255, 0, 1, 255, 255,
@@ -180,6 +180,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                               5, 255, 6, 7, 8, 9,
                               10, 11, 12, 13, 14, 15,
                               255, 255, 16, 17, 18])
+
         self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):
@@ -190,6 +191,9 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         Returns relevant training data as a dict
         @output l_img, r_img, seg, disparity, l_seq, r_seq, flow
         '''
+        if isinstance(idx, tuple):
+            idx, self.scale_factor = idx
+
         epoch_data = {}
         # Read image and labels
         epoch_data["l_img"] = Image.open(self.l_img[idx]).convert('RGB')
@@ -216,16 +220,10 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         return epoch_data
 
-    def resample_scale(self, reset=False):
-        if hasattr(self, 'scale_range') and not reset:
-            scale = random.uniform(*self.scale_range)
-            scale_func = lambda x: int(scale * x / 32.0) * 32
-            self.output_shape = [scale_func(x) for x in self.base_size]
-        else:
-            self.output_shape = self.base_size
-
     def _sync_transform(self, epoch_data):
         self.std_kitti_dims = (epoch_data["l_img"].size[0], epoch_data["l_img"].size[0])
+        scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
+        self.output_shape = [scale_func(x) for x in self.base_size]
 
         # random mirror
         if random.random() < 0.5:
@@ -368,14 +366,6 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     }
 
     dataloaders = {
-        'Training'   : torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        ),
         'Validation' : torch.utils.data.DataLoader(
             datasets["Validation"],
             batch_size=dataset_config.batch_size,
@@ -385,6 +375,25 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
             pin_memory=True
         )
     }
+
+    if hasattr(dataset_config.augmentations, 'rand_scale'):
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"], num_workers=n_workers, pin_memory=True,
+            batch_sampler=BatchSamplerRandScale(
+                sampler=RandomSampler(datasets["Training"]),
+                batch_size=dataset_config.batch_size,
+                drop_last=dataset_config.drop_last,
+                scale_range=dataset_config.augmentations.rand_scale)
+        )
+    else:
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"],
+            batch_size=dataset_config.batch_size,
+            shuffle=dataset_config.shuffle,
+            num_workers=n_workers,
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
+        )
 
     return dataloaders
 
