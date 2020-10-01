@@ -15,9 +15,12 @@ from typing import Dict
 
 import torch
 import torchvision
+from torch.utils.data import RandomSampler
 from PIL import Image
 
 import numpy as np
+
+from nnet_training.utilities.CustomSampler import BatchSamplerRandScale
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 
@@ -172,6 +175,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.disparity_out = disparity_out
         self.base_size = output_size
         self.output_shape = output_size
+        self.scale_factor = 1
 
         if 'crop_fraction' in kwargs:
             self.crop_fraction = kwargs['crop_fraction']
@@ -201,6 +205,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
         Returns relevant training data as a dict
         @output l_img, r_img, seg, l_disp, l_seq, r_seq, cam, pose
         '''
+        if isinstance(idx, tuple):
+            idx, self.scale_factor = idx
+
         # Read image and labels
         epoch_data = {"l_img" : Image.open(self.l_img[idx]).convert('RGB')}
 
@@ -225,15 +232,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         return epoch_data
 
-    def resample_scale(self, reset=False):
-        if hasattr(self, 'scale_range') and not reset:
-            scale = random.uniform(*self.scale_range)
-            scale_func = lambda x: int(scale * x / 32.0) * 32
-            self.output_shape = [scale_func(x) for x in self.base_size]
-        else:
-            self.output_shape = self.base_size
-
     def _sync_transform(self, epoch_data):
+        scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
+        self.output_shape = [scale_func(x) for x in self.base_size]
+
         # random mirror
         if random.random() < 0.5:
             for key, data in epoch_data.items():
@@ -347,18 +349,11 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
         'Validation' : CityScapesDataset(validation_dirs,
-                                         output_size=dataset_config.augmentations.output_size)
+                                         output_size=dataset_config.augmentations.output_size,
+                                         disparity_out=dataset_config.augmentations.disparity_out)
     }
 
     dataloaders = {
-        'Training'   : torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        ),
         'Validation' : torch.utils.data.DataLoader(
             datasets["Validation"],
             batch_size=dataset_config.batch_size,
@@ -368,6 +363,25 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
             pin_memory=True
         )
     }
+
+    if hasattr(dataset_config.augmentations, 'rand_scale'):
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"], num_workers=n_workers, pin_memory=True,
+            batch_sampler=BatchSamplerRandScale(
+                sampler=RandomSampler(datasets["Training"]),
+                batch_size=dataset_config.batch_size,
+                drop_last=dataset_config.drop_last,
+                scale_range=dataset_config.augmentations.rand_scale)
+        )
+    else:
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"],
+            batch_size=dataset_config.batch_size,
+            shuffle=dataset_config.shuffle,
+            num_workers=n_workers,
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
+        )
 
     return dataloaders
 
