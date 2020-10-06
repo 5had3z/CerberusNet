@@ -173,6 +173,11 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             self.rand_rot = kwargs['rand_rotation']
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
+        if 'img_normalize' in kwargs:
+            # Typical normalisation parameters:
+            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+            self.img_normalize = torchvision.transforms.Normalize(
+                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
 
         self._key = np.array([255, 255, 255, 255, 255, 255,
                               255, 255, 0, 1, 255, 255,
@@ -266,7 +271,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                 data = data.resize(self.output_shape, Image.BILINEAR)
-                epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
+                epoch_data[key] = self._img_transform(data)
             elif key == "seg":
                 data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
@@ -317,6 +322,12 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             assert value in self._mapping
         index = np.digitize(seg.ravel(), self._mapping, right=True)
         return self._key[index].reshape(seg.shape)
+
+    def _img_transform(self, img):
+        img = torchvision.transforms.functional.to_tensor(img)
+        if hasattr(self, 'img_normalize'):
+            img = self.img_normalize(img)
+        return img
 
     def _seg_transform(self, segmentaiton):
         target = self._class_to_index(np.array(segmentaiton).astype('int32'))

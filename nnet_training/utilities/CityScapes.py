@@ -187,9 +187,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
             assert len(kwargs['rand_scale']) == 2
             self.scale_range = kwargs['rand_scale']
         if 'img_normalize' in kwargs:
+            # Typical normalisation parameters:
+            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
             self.img_normalize = torchvision.transforms.Normalize(
-                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std']
-            )
+                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
 
         # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
         #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
