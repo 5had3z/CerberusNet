@@ -365,15 +365,14 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     train_ids, val_ids = id_vec_generator(dataset_config.train_ratio, seg_dir)
 
     datasets = {
-        'Training'   : Kitti2015Dataset(dataset_config.rootdir,
-                                        dataset_config.objectives,
-                                        **dataset_config.augmentations,
-                                        id_vector=train_ids),
-        'Validation' : Kitti2015Dataset(dataset_config.rootdir,
-                                        dataset_config.objectives,
-                                        output_size=dataset_config.augmentations.output_size,
-                                        disparity_out=dataset_config.augmentations.disparity_out,
-                                        id_vector=val_ids)
+        'Training'   : Kitti2015Dataset(
+            dataset_config.rootdir, dataset_config.objectives,
+            **dataset_config.augmentations, id_vector=train_ids),
+        'Validation' : Kitti2015Dataset(
+            dataset_config.rootdir, dataset_config.objectives,
+            output_size=dataset_config.augmentations.output_size,
+            disparity_out=dataset_config.augmentations.disparity_out,
+            id_vector=val_ids, img_normalize=dataset_config.augmentations.img_normalize)
     }
 
     dataloaders = {

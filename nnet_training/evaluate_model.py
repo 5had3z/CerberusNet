@@ -20,11 +20,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
+import torchvision
 from nnet_training.nnet_models import get_model
 
 from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
 from nnet_training.utilities.KITTI import Kitti2015Dataset
-from nnet_training.utilities.CityScapes import get_cityscapse_dataset
+from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric, OpticFlowMetric
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,18 +44,28 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
         n_workers = min(multiprocessing.cpu_count(), config_json.dataset.batch_size)
 
     if config_json.dataset.type == "Kitti":
-        dataset = Kitti2015Dataset(config_json.dataset.rootdir, config_json.dataset.objectives,
-                                   output_size=config_json.dataset.augmentations.output_size)
+        dataset = Kitti2015Dataset(
+            config_json.dataset.rootdir, config_json.dataset.objectives,
+            output_size=config_json.dataset.augmentations.output_size,
+            disparity_out=config_json.dataset.augmentations.disparity_out,
+            img_normalize=config_json.dataset.augmentations.img_normalize)
     elif config_json.dataset.type == "Cityscapes":
-        dataset = get_cityscapse_dataset(config_json.dataset)
+        validation_dirs = {}
+        for subset in config_json.dataset.val_subdirs:
+            validation_dirs[str(subset)] = config_json.dataset.rootdir +\
+                                            config_json.dataset.val_subdirs[str(subset)]
+        dataset = CityScapesDataset(
+            validation_dirs, output_size=config_json.dataset.augmentations.output_size,
+            disparity_out=config_json.dataset.augmentations.disparity_out,
+            img_normalize=config_json.dataset.augmentations.img_normalize)
     else:
         raise NotImplementedError(config_json.dataset.type)
 
     dataloader = torch.utils.data.DataLoader(
-        dataset,
+        dataset, num_workers=n_workers,
         batch_size=config_json.dataset.batch_size,
-        num_workers=n_workers,
-        drop_last=config_json.dataset.drop_last
+        drop_last=config_json.dataset.drop_last,
+        shuffle=config_json.dataset.shuffle
     )
 
     model = get_model(config_json.model).to(DEVICE)
@@ -70,7 +81,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sf_kt.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -87,7 +98,7 @@ if __name__ == "__main__":
 
     LOGGERS = {
         'seg' : SegmentationMetric(19, base_dir=Path.cwd(), main_metric="IoU", savefile=''),
-        'flow': OpticFlowMetric(base_dir=Path.cwd(), main_metric="EPE", savefile=''),
+        'flow': OpticFlowMetric(base_dir=Path.cwd(), main_metric="SAD", savefile=''),
         'depth': DepthMetric(base_dir=Path.cwd(), main_metric="RMSE_Log", savefile='')
     }
 
@@ -115,12 +126,12 @@ if __name__ == "__main__":
 
             if 'seg' in forward.keys() and 'seg' in data.keys():
                 LOGGERS['seg'].add_sample(
-                    torch.argmax(forward['seg'], dim=1, keepdim=True), data['seg']
+                    torch.argmax(forward['seg'], dim=1, keepdim=True), data['seg'].to(DEVICE)
                 )
 
             if 'l_disp' in data.keys() and 'depth' in forward.keys():
                 LOGGERS['depth'].add_sample(
-                    forward['depth'], data['l_disp']
+                    forward['depth'], data['l_disp'].to(DEVICE)
                 )
 
             if not batch_idx % 10:
@@ -154,13 +165,22 @@ if __name__ == "__main__":
             if 'depth' in forward:
                 depth_pred_cpu = forward['depth'].detach().cpu().numpy()
 
+            if hasattr(DATALOADER.dataset, 'img_normalize'):
+                img_mean = DATALOADER.dataset.img_normalize.mean
+                img_std = DATALOADER.dataset.img_normalize.std
+                inv_mean = [-mean / std for mean, std in zip(img_mean, img_std)]
+                inv_std = [1 / std for std in img_std]
+                img_norm = torchvision.transforms.Normalize(inv_mean, inv_std)
+            else:
+                img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
+
             for i in range(DATALOADER.batch_size):
                 plt.subplot(2, 4, 1)
-                plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(img_norm(left[i, :, :]).cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
                 plt.subplot(2, 4, 2)
-                plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(img_norm(seq_left[i, :, :]).cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
                 if "flow" in data:
