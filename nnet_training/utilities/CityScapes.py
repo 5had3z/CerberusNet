@@ -263,16 +263,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
 
-        if hasattr(self, 'crop_fraction'):
-            # random crop
-            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
-            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
-            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
-            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
-
-            for key, data in epoch_data.items():
-                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                 data = data.resize(self.output_shape, Image.BILINEAR)
@@ -283,6 +273,16 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == "l_disp":
                 data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
+
+        if hasattr(self, 'crop_fraction'):
+            # random crop
+            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
+            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
+            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
+            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
+
+            for key, data in epoch_data.items():
+                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
     def _class_to_index(self, seg):
         values = np.unique(seg)

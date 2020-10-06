@@ -251,16 +251,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
 
-        if hasattr(self, 'crop_fraction'):
-            # random crop
-            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
-            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
-            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
-            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
-
-            for key, data in epoch_data.items():
-                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
             for key, data in epoch_data.items():
@@ -283,6 +273,16 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             self._flow_transform(epoch_data)
         elif any(key in epoch_data.keys() for key in ["flow_x", "flow_y", "flow_b"]):
             raise UserWarning("Partially missing flow data, need x, y and bit mask")
+
+        if hasattr(self, 'crop_fraction'):
+            # random crop
+            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
+            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
+            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
+            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
+
+            for key, data in epoch_data.items():
+                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
