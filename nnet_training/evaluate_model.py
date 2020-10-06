@@ -115,14 +115,12 @@ if __name__ == "__main__":
 
             if 'seg' in forward.keys() and 'seg' in data.keys():
                 LOGGERS['seg'].add_sample(
-                    torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().data.numpy(),
-                    data['seg'].data.numpy(),
+                    torch.argmax(forward['seg'], dim=1, keepdim=True), data['seg']
                 )
 
             if 'l_disp' in data.keys() and 'depth' in forward.keys():
                 LOGGERS['depth'].add_sample(
-                    forward['depth'].cpu().data.numpy(),
-                    data['l_disp'].data.numpy(),
+                    forward['depth'], data['l_disp']
                 )
 
             if not batch_idx % 10:

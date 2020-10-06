@@ -1,5 +1,5 @@
 {
-    "note" : "Testing AMP with larger batch size",
+    "note" : "Testing Cityscapes with image normalisation",
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
@@ -10,7 +10,10 @@
             "output_size" : [512, 256],
             "rand_brightness" : 10,
             "rand_rotation" : 5,
-            "rand_scale" : [0.5, 1]
+            "disparity_out" : false,
+            "img_normalize" : {
+                "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+            }
         },
         "train_subdirs" : {
             "images" : "leftImg8bit/train",

@@ -523,6 +523,9 @@ class DepthMetric(MetricBaseClass):
         pred_depth[pred_depth == 0] += 1e-7
         gt_depth = gt_depth[gt_depth > 0]
 
+        pred_depth = pred_depth[gt_depth < 80]
+        gt_depth = gt_depth[gt_depth < 80]
+
         difference = pred_depth - gt_depth
         squared_diff = difference.pow(2)
         log_diff = torch.log(pred_depth) - torch.log(gt_depth)

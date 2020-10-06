@@ -186,6 +186,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if 'rand_scale' in kwargs:
             assert len(kwargs['rand_scale']) == 2
             self.scale_range = kwargs['rand_scale']
+        if 'img_normalize' in kwargs:
+            self.img_normalize = torchvision.transforms.Normalize(
+                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std']
+            )
 
         # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
         #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
@@ -287,7 +291,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return self._key[index].reshape(seg.shape)
 
     def _img_transform(self, img):
-        return torchvision.transforms.functional.to_tensor(img)
+        img = torchvision.transforms.functional.to_tensor(img)
+        if hasattr(self, 'img_normalize'):
+            img = self.img_normalize(img)
+        return img
 
     def _seg_transform(self, seg):
         target = self._class_to_index(np.array(seg).astype('int32'))
@@ -348,9 +355,10 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
-        'Validation' : CityScapesDataset(validation_dirs,
-                                         output_size=dataset_config.augmentations.output_size,
-                                         disparity_out=dataset_config.augmentations.disparity_out)
+        'Validation' : CityScapesDataset(
+            validation_dirs, output_size=dataset_config.augmentations.output_size,
+            disparity_out=dataset_config.augmentations.disparity_out,
+            img_normalize=dataset_config.augmentations.img_normalize)
     }
 
     dataloaders = {

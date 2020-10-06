@@ -11,6 +11,7 @@ T = TypeVar('T')
 import numpy as np
 
 import torch
+import torchvision
 import apex.amp as amp
 import matplotlib.pyplot as plt
 
@@ -201,13 +202,22 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             sed_pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
             depth_pred_cpu = forward['depth'].detach().cpu().numpy()
 
+            if hasattr(self._validation_loader.dataset, 'img_normalize'):
+                img_mean = self._validation_loader.dataset.img_normalize.mean
+                img_std = self._validation_loader.dataset.img_normalize.std
+                inv_mean = [-mean / std for mean, std in zip(img_mean, img_std)]
+                inv_std = [1 / std for std in img_std]
+                img_norm = torchvision.transforms.Normalize(inv_mean, inv_std)
+            else:
+                img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
+
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 4, 1)
-                plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(img_norm(left[i, :, :]).cpu().numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
                 plt.subplot(2, 4, 2)
-                plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(img_norm(seq_left[i, :, :]).cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
                 if "flow" in data:
