@@ -1,9 +1,9 @@
 {
-    "note" : "KITTI trying custom rescaler",
+    "note" : "KITTI, random crop being operated last",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
-        "batch_size" : 2,
+        "batch_size" : 5,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
@@ -11,7 +11,10 @@
             "rand_brightness" : 20,
             "rand_rotation" : 5,
             "disparity_out" : false,
-            "rand_scale" : [0.5, 1]
+            "img_normalize" : {
+                "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+            },
+            "crop_fraction": 1.5
         },
         "train_ratio" : 0.8,
         "objectives" : ["flow", "seg", "disparity"]

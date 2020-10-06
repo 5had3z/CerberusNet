@@ -81,7 +81,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
