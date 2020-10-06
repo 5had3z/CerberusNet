@@ -387,7 +387,7 @@ class SegmentationMetric(MetricBaseClass):
         pixel_acc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
         miou = np.asarray(self.metric_data["Batch_IoU"]).mean(axis=(0, 1))
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-        print("Pixel Accuracy: %.4f\nmIoU: %.4f\nLoss: %.4f\n" % (pixel_acc, miou, loss))
+        print(f"Pixel Accuracy: {pixel_acc:.4f}\nmIoU: {miou:.4f}\nLoss: {loss:.4f}")
 
     def get_epoch_statistics(self, main_metric=True, loss_metric=True):
         """

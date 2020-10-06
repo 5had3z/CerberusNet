@@ -276,13 +276,16 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
 
         if hasattr(self, 'crop_fraction'):
             # random crop
-            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
-            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
-            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
-            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
+            crop_h = int(epoch_data["l_img"].shape[1] / self.crop_fraction / 32.0) * 32
+            crop_w = int(epoch_data["l_img"].shape[2] / self.crop_fraction / 32.0) * 32
+            crop_x = random.randint(0, epoch_data["l_img"].shape[2] - crop_w)
+            crop_y = random.randint(0, epoch_data["l_img"].shape[1] - crop_h)
 
             for key, data in epoch_data.items():
-                epoch_data[key] = data.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
+                if key in ["seg", "l_disp", "r_disp"]:
+                    epoch_data[key] = data[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                else:
+                    epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
