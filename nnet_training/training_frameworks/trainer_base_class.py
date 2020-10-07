@@ -173,9 +173,6 @@ class ModelTrainer(object):
     def _validate_model(self, max_epoch):
         raise NotImplementedError
 
-    def _test_model(self):
-        raise NotImplementedError
-
     def plot_data(self):
         """
         Plots the main summary data for each of the metric loggers.\n

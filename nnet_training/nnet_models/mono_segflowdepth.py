@@ -175,25 +175,23 @@ class MonoSFDNet(nn.Module):
         Forward method that returns the flow prediction and segmentation
         '''
         # outputs
-        flows = {}
-        depths = {}
-        segs = {}
+        preds = {}
 
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
 
-        segs['fw'] = self.segmentation_network(im1_pyr)
-        segs['bw'] = self.segmentation_network(im2_pyr)
+        preds['seg'] = self.segmentation_network(im1_pyr)
+        preds['seg_b'] = self.segmentation_network(im2_pyr)
 
         # I'll revisit using GT, will have to make a
         # new tensor and cat for each class and give them
         # each a magnitude that is typical of output
         if seg_gt is None and False:
-            seg_gt = segs['fw']
+            seg_gt = preds['seg']
 
-        flows['fw'], depths['fw'] = self.aux_forward(im1_pyr, im2_pyr, segs['fw'])
+        preds['flow'], preds['depth'] = self.aux_forward(im1_pyr, im2_pyr, seg_gt)
 
         if consistency:
-            flows['bw'], depths['bw'] = self.aux_forward(im2_pyr, im1_pyr, segs['bw'])
+            preds['flow_b'], preds['depth_b'] = self.aux_forward(im2_pyr, im1_pyr, preds['seg_b'])
 
-        return flows, depths, segs
+        return preds

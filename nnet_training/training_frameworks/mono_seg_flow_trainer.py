@@ -66,10 +66,13 @@ class MonoSegFlowTrainer(ModelTrainer):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            forward, backward = self._model(img, img_seq)
+            forward = self._model(img, img_seq)
 
             flow_loss, _, _, _ = self._flow_loss_fn(
-                forward['flow'], backward['flow'], img, img_seq)
+                pred_flow_fw=forward['flow'],
+                pred_flow_bw=forward['flow_b'],
+                im1_origin=img, im2_origin=img_seq)
+
             seg_loss = self._seg_loss_fn(forward, seg_gt)
 
             loss = flow_loss + seg_loss
@@ -161,22 +164,21 @@ class MonoSegFlowTrainer(ModelTrainer):
             data = next(iter(self._validation_loader))
             left = data['l_img'].to(self._device)
             seq_left = data['l_seq'].to(self._device)
-            seg_gt = data['seg']
 
             start_time = time.time()
-            forward, _ = self._model(left, seq_left)
+            forward = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+            np_flow_12 = forward['flow'][0].cpu().numpy()
             pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
 
             for i in range(self._validation_loader.batch_size):
                 plt.subplot(2, 3, 1)
-                plt.imshow(np.moveaxis(left[i, 0:3, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(data['l_img'][i, 0:3, :, :].numpy(), 0, 2))
                 plt.xlabel("Base Image")
 
                 plt.subplot(2, 3, 2)
-                plt.imshow(np.moveaxis(seq_left[i, :, :].cpu().numpy(), 0, 2))
+                plt.imshow(np.moveaxis(data['l_seq'][i, :, :].numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
                 vis_flow = flow_to_image(np_flow_12[i].transpose([1, 2, 0]))
@@ -186,7 +188,7 @@ class MonoSegFlowTrainer(ModelTrainer):
                 plt.xlabel("Predicted Flow")
 
                 plt.subplot(2, 3, 4)
-                plt.imshow(get_color_pallete(seg_gt.numpy()[i, :, :]))
+                plt.imshow(get_color_pallete(data['seg'].numpy()[i, :, :]))
                 plt.xlabel("Ground Truth Segmentation")
 
                 plt.subplot(2, 3, 5)

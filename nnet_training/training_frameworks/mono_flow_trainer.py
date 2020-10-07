@@ -75,7 +75,10 @@ class MonoFlowTrainer(ModelTrainer):
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
             pred_flow = self._model(img, img_seq)
-            loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
+            loss, _, _, _ = self._loss_function(
+                pred_flow_fw=pred_flow['flow'],
+                pred_flow_bw=pred_flow['flow_b'],
+                im1_origin=img, im2_origin=img_seq)
 
             self._optimizer.zero_grad()
             with amp.scale_loss(loss, self._optimizer) as scaled_loss:
@@ -84,7 +87,7 @@ class MonoFlowTrainer(ModelTrainer):
 
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0].detach(),
+                    img, img_seq, pred_flow['flow'][0],
                     flow_gt, loss=loss.item()
                 )
 
@@ -145,11 +148,11 @@ class MonoFlowTrainer(ModelTrainer):
         with torch.no_grad():
             self._model.eval()
             data = next(iter(self._validation_loader))
-            left  = data['l_img'].to(self._device)
+            left = data['l_img'].to(self._device)
             seq_left = data['l_seq'].to(self._device)
 
             start_time = time.time()
-            flow_12 = self._model(left, seq_left)['flow_fw'][0]
+            flow_12 = self._model(left, seq_left)['flow'][0]
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             np_flow_12 = flow_12.detach().cpu().numpy()

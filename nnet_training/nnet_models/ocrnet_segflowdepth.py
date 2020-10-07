@@ -144,7 +144,6 @@ class OCRNetSFD(nn.Module):
 
     def forward(self, im1_rgb: torch.Tensor, im2_rgb: torch.Tensor, consistency=True):
         forward = {}
-        backward = {}
 
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(im1_rgb)
@@ -162,10 +161,10 @@ class OCRNetSFD(nn.Module):
 
         if consistency:
             # Flow pass with image 2
-            backward['flow'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
+            forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
         forward['seg'] = scale_as(forward['seg'], im1_rgb)
         forward['seg_aux'] = scale_as(forward['seg_aux'], im1_rgb)
         forward['depth'] = scale_as(forward['depth'], im1_rgb)
 
-        return forward, backward
+        return forward

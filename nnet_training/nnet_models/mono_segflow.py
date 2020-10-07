@@ -180,7 +180,6 @@ class MonoSFNet(nn.Module):
         '''
         # outputs
         forward = {}
-        backward = {}
 
         im1_pyr = self.feature_pyramid_extractor(im1_rgb)
         im2_pyr = self.feature_pyramid_extractor(im2_rgb)
@@ -189,6 +188,6 @@ class MonoSFNet(nn.Module):
         forward['flow'] = self.aux_forward(im1_pyr, im2_pyr)
 
         if consistency:
-            backward['flow'] = self.aux_forward(im2_pyr, im1_pyr)
+            forward['flow_b'] = self.aux_forward(im2_pyr, im1_pyr)
 
-        return forward, backward
+        return forward

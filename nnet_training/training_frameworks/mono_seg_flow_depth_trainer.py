@@ -73,10 +73,11 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            forward, backward = self._model(im1_rgb=img, im2_rgb=img_seq)
+            forward = self._model(im1_rgb=img, im2_rgb=img_seq)
 
             flow_loss, _, _, _ = self._flow_loss_fn(
-                pred_flow_fw=forward['flow'], pred_flow_bw=backward['flow'],
+                pred_flow_fw=forward['flow'],
+                pred_flow_bw=forward['flow_b'],
                 im1_origin=img, im2_origin=img_seq)
 
             seg_loss = self._seg_loss_fn(
@@ -142,10 +143,10 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 cuda_s.synchronize()
 
                 # Caculate the loss and accuracy for the predictions
-                forward, backward = self._model(im1_rgb=img, im2_rgb=img_seq)
+                forward = self._model(im1_rgb=img, im2_rgb=img_seq)
 
                 flow_loss, _, _, _ = self._flow_loss_fn(
-                    pred_flow_fw=forward['flow'], pred_flow_bw=backward['flow'],
+                    pred_flow_fw=forward['flow'], pred_flow_bw=forward['flow_b'],
                     im1_origin=img, im2_origin=img_seq)
 
                 seg_loss = self._seg_loss_fn(
@@ -195,7 +196,7 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
             seq_left = data['l_seq'].to(self._device)
 
             start_time = time.time()
-            forward, _ = self._model(left, seq_left)
+            forward = self._model(left, seq_left)
             propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
             np_flow_12 = forward['flow'][0].detach().cpu().numpy()
