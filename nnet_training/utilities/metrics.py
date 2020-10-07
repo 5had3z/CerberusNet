@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 import torch
 
+from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 
 __all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
@@ -117,10 +118,8 @@ class MetricBaseClass(object):
 
         # Cache data if it hasn't been saved yet (probably not a best epoch or
         # something, but the next might be, so we want to keep this data)
-        for metric in self.metric_data.values():
-            if len(metric) > 0:
-                self._cache_data()
-                break
+        if all(len(metric) > 0 for metric in self.metric_data.values()):
+            self._cache_data()
 
         self.mode = mode
         self._reset_metric()
@@ -170,7 +169,7 @@ class MetricBaseClass(object):
                 top_group.create_dataset('Summary', data=summary_stats)
 
         else:
-            print("No File Specified for Segmentation Metric Manager")
+            print("No File Specified for Metric Manager")
 
     def _flush_to_main(self):
         """
@@ -189,7 +188,7 @@ class MetricBaseClass(object):
         with h5py.File(self._path, 'r') as hfile:
             metrics = []
             for metric in list(hfile['training/Epoch_1']):
-                if metric != 'Summary':
+                if metric[:5] == 'Batch':
                     metrics.append(metric)
 
             training_data = np.zeros((len(list(hfile['training'])), len(metrics)))
@@ -225,7 +224,7 @@ class MetricBaseClass(object):
             plt.plot(summary_data[metric]["Training"])
             plt.plot(summary_data[metric]["Validation"])
             plt.legend(["Training", "Validation"])
-            plt.title(f'{metric} over Epochs')
+            plt.title(f'{metric.replace("Batch_", "")} over Epochs')
             plt.xlabel('Epoch #')
 
         plt.show(block=False)
@@ -241,20 +240,20 @@ class MetricBaseClass(object):
             training_metrics = {}
             validation_metrics = {}
             for metric in list(hfile['training/Epoch_1']):
-                if metric != 'Summary':
+                if metric[:5] == 'Batch':
                     training_metrics[metric] = np.zeros((1, 1))
                     validation_metrics[metric] = np.zeros((1, 1))
 
             for epoch in list(hfile['training']):
                 for metric in list(hfile['training/'+epoch]):
-                    if metric != 'Summary':
+                    if metric[:5] == 'Batch':
                         training_metrics[metric] = np.append(
                             training_metrics[metric],
                             hfile['training/'+epoch+'/'+metric][:])
 
             for epoch in list(hfile['validation']):
                 for metric in list(hfile['validation/'+epoch]):
-                    if metric != 'Summary':
+                    if metric[:5] == 'Batch':
                         validation_metrics[metric] = np.append(
                             validation_metrics[metric],
                             hfile['validation/'+epoch+'/'+metric][:])
@@ -285,17 +284,14 @@ class MetricBaseClass(object):
         """
         ret_val = ()
         if main_metric:
-            invariant = np.asarray(self.metric_data[self.main_metric]).mean()
-            ret_val += (invariant,)
+            ret_val += (np.asarray(self.metric_data[self.main_metric]).mean(),)
             if loss_metric:
-                loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-                ret_val += (loss,)
+                ret_val += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
 
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key != "Batch_Loss" or loss_metric:
-                    mean_data = np.asarray(data).mean()
-                    ret_val += (mean_data,)
+                    ret_val += (np.asarray(data).mean(),)
 
         return ret_val
 
@@ -371,28 +367,30 @@ class SegmentationMetric(MetricBaseClass):
         """
         Update Accuracy (and Loss) Metrics
         """
-        if loss is not None:
-            self.metric_data["Batch_Loss"].append(loss)
+        self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
         labels = labels.type(torch.int32).cuda()
         preds = preds.type(torch.int32).squeeze(dim=1)
 
         conf_mat = self._confusion_mat(preds, labels)
-        self.metric_data["Batch_ConfMat"].append(conf_mat.cpu().data.numpy())
 
         pix_acc = torch.true_divide(torch.diag(conf_mat).sum(), conf_mat.sum())
         self.metric_data["Batch_PixelAcc"].append(pix_acc.cpu().data.numpy())
 
-        divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
-        iou = torch.true_divide(torch.diag(conf_mat), divisor)
-        self.metric_data["Batch_IoU"].append(iou.cpu().data.numpy())
+        self.metric_data["Batch_IoU"].append(self._confmat_cls_iou(conf_mat))
+
+        self.metric_data["Confusion_Mat"] += conf_mat.cpu()
 
     def print_epoch_statistics(self):
         """
         Prints all the statistics
         """
-        pixel_acc = np.asarray(self.metric_data["Batch_PixelAcc"]).mean()
-        miou = np.nanmean(np.asarray(self.metric_data["Batch_IoU"]), axis=(0, 1))
+        pixel_acc = torch.true_divide(torch.diag(self.metric_data["Confusion_Mat"]).sum(),
+                                      self.metric_data["Confusion_Mat"].sum())
+        pixel_acc = pixel_acc.cpu().data.numpy()
+
+        miou = np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"]))
+
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
         print(f"Pixel Accuracy: {pixel_acc:.4f}\nmIoU: {miou:.4f}\nLoss: {loss:.4f}")
 
@@ -406,28 +404,19 @@ class SegmentationMetric(MetricBaseClass):
         ret_val = ()
         if main_metric:
             if self.main_metric == 'Batch_IoU':
-                mean_data = np.nanmean(np.asarray(self.metric_data[self.main_metric]), axis=(0, 1))
-            elif self.main_metric == 'Batch_ConfMat':
-                data = np.asarray(self.metric_data[self.main_metric]).sum(axis=2)
-                acc_cls = np.diag(data) / data.sum(axis=1)
-                mean_data = np.nanmean(acc_cls)
+                ret_val += (np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
             else:
-                mean_data = np.asarray(self.metric_data[self.main_metric]).mean()
-            ret_val += (mean_data,)
+                ret_val += (np.asarray(self.metric_data[self.main_metric]).mean(),)
             if loss_metric:
                 loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
                 ret_val += (loss,)
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key == 'Batch_IoU':
-                    mean_data = np.nanmean(np.asarray(data), axis=(0, 1))
-                elif key == 'Batch_ConfMat':
-                    data = np.asarray(data).sum(axis=2)
-                    acc_cls = np.diag(data) / data.sum(axis=1)
-                    mean_data = np.nanmean(acc_cls)
-                elif (key != 'Batch_Loss' or loss_metric):
-                    mean_data = np.asarray(data).mean()
-                ret_val += (mean_data,)
+                    ret_val += (np.nanmean(
+                        self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
+                elif (key != 'Batch_Loss' or loss_metric) and key[:5] == 'Batch':
+                    ret_val += (np.asarray(data).mean(),)
 
         return ret_val
 
@@ -440,7 +429,6 @@ class SegmentationMetric(MetricBaseClass):
         cost_func = {
             "Batch_IoU" : [max, 0.0],
             "Batch_PixelAcc" : [max, 0.0],
-            "Batch_ConfMat" : [max, 0.0],
             "Batch_Loss" : [min, sys.float_info.max]
         }
 
@@ -451,7 +439,12 @@ class SegmentationMetric(MetricBaseClass):
         print("No File Specified for Segmentation Metric Manager")
         return None
 
-    def _iou(self, prediction: torch.Tensor, target: torch.Tensor):
+    @staticmethod
+    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor:
+        divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
+        return torch.true_divide(torch.diag(conf_mat), divisor).cpu().data.numpy()
+
+    def _basic_iou(self, prediction: torch.Tensor, target: torch.Tensor):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
         prediction = prediction * (target != 255)
@@ -471,7 +464,7 @@ class SegmentationMetric(MetricBaseClass):
         return iou.cpu().data.numpy()
 
     @staticmethod
-    def _pixelwise(prediction: torch.Tensor, target: torch.Tensor):
+    def _basic_pixelwise(prediction: torch.Tensor, target: torch.Tensor):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
         correct = 1.0 * ((prediction == target) * (target != 255)).sum()
@@ -504,12 +497,12 @@ class SegmentationMetric(MetricBaseClass):
         return ret_val
 
     def _reset_metric(self):
-        self.metric_data = dict(
-            Batch_Loss=[],
-            Batch_PixelAcc=[],
-            Batch_IoU=[],
-            Batch_ConfMat=[]
-        )
+        self.metric_data = {
+            'Batch_Loss': [],
+            'Batch_PixelAcc': [],
+            'Batch_IoU': [],
+            'Confusion_Mat': torch.zeros((self._n_classes, self._n_classes))
+        }
 
     def plot_classwise_iou(self):
         """
@@ -531,15 +524,12 @@ class SegmentationMetric(MetricBaseClass):
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
                 testing_data[idx] = hfile['validation/'+epoch+'/Batch_IoU'][:].mean(axis=0)
 
-            print("# Training, ", len(list(hfile['training'])),
-                  "\t# Validation", len(list(hfile['validation'])))
-
         for idx in range(n_classes):
-            plt.subplot(3, (n_classes//3+1), idx+1)
+            plt.subplot(3, n_classes//3+1, idx+1)
             plt.plot(training_data[:, idx])
             plt.plot(testing_data[:, idx])
             plt.legend(["Training", "Validation"])
-            plt.title('Class: '+str(idx)+' over Epochs')
+            plt.title(f'{trainId2name[idx]} over Epochs')
             plt.xlabel('Epoch #')
 
         plt.show(block=False)
@@ -556,8 +546,7 @@ class DepthMetric(MetricBaseClass):
         assert self.main_metric in self.metric_data.keys()
 
     def add_sample(self, pred_depth: torch.Tensor, gt_depth: torch.Tensor, loss=None):
-        if loss is not None:
-            self.metric_data["Batch_Loss"].append(loss)
+        self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
         pred_depth = pred_depth.squeeze(dim=1)[gt_depth > 0]
         pred_depth[pred_depth == 0] += 1e-7
@@ -637,8 +626,7 @@ class OpticFlowMetric(MetricBaseClass):
         """
         @input list of original, prediction and sequence images i.e. [left, right]
         """
-        if loss is not None:
-            self.metric_data["Batch_Loss"].append(loss)
+        self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
         if flow_target is not None:
             diff = flow_pred - flow_target["flow"]

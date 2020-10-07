@@ -1,9 +1,9 @@
 {
-    "note" : "KITTI, random crop being operated last",
+    "note" : "KITTI testing new IoU Calculation method",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
-        "batch_size" : 5,
+        "batch_size" : 4,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {

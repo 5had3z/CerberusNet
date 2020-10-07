@@ -81,7 +81,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -135,19 +135,26 @@ if __name__ == "__main__":
                 )
 
             if not batch_idx % 10:
+                sys.stdout.write(f'\rValidaton Iter: [{batch_idx+1:4d}/{len(DATALOADER):4d}]')
+
+                if 'seg' in forward.keys():
+                    sys.stdout.write(f" || {LOGGERS['seg'].main_metric}: "\
+                                     f"{LOGGERS['seg'].get_last_batch():.4f}")
+                if 'l_disp' in data.keys() and 'depth' in forward.keys():
+                    sys.stdout.write(f" || {LOGGERS['depth'].main_metric}: "\
+                                     f"{LOGGERS['depth'].get_last_batch():.4f}")
+                if 'flow' in forward.keys():
+                    sys.stdout.write(f" || {LOGGERS['flow'].main_metric}: "\
+                                     f"{LOGGERS['flow'].get_last_batch():.4f}")
+
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed/(batch_idx+1)*(len(DATALOADER)-(batch_idx+1))
-
-                seg_acc = LOGGERS['seg'].get_last_batch() if 'seg' in forward.keys() else 0
-                depth_acc = LOGGERS['depth'].get_last_batch() if 'depth' in forward.keys() else 0
-                flow_acc = LOGGERS['flow'].get_last_batch() if 'flow' in forward.keys() else 0
-
+                sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f}'\
+                                 f'sec Remain: {time_remain:.1f} sec')
                 sys.stdout.flush()
-                sys.stdout.write('\rValidaton Iter: [%4d/%4d] || mIoU: %.4f || EPE: %.4f || RMSE_Log: %.4f || Time Elapsed: %.2f sec Remain: %.2f sec' % (
-                    batch_idx + 1, len(DATALOADER), seg_acc, flow_acc,
-                    depth_acc, time_elapsed, time_remain))
 
-        for logger in LOGGERS.values():
+        for name, logger in LOGGERS.items():
+            print(name)
             logger.print_epoch_statistics()
 
         while bool(input("Display Example? (Y): ")):

@@ -1,9 +1,9 @@
 {
-    "note" : "Testing Cityscapes with image normalisation",
+    "note" : "Testing Cityscapes with crop fraction and new seg stats",
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
-        "batch_size" : 3,
+        "batch_size" : 6,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
@@ -13,7 +13,8 @@
             "disparity_out" : false,
             "img_normalize" : {
                 "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
-            }
+            },
+            "crop_fraction": 1.5
         },
         "train_subdirs" : {
             "images" : "leftImg8bit/train",
