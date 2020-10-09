@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Dict
 
 import matplotlib.pyplot as plt
-from nnet_training.utilities.metrics import MetricBaseClass
+from nnet_training.utilities.metrics import MetricBaseClass, SegmentationMetric
 
 __all__ = ['compare_experiments']
 
@@ -57,12 +57,29 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
 
     plt.show()
 
+def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
+    """
+    Tool for analysing segmentation data
+    """
+    for experiment in experiment_list:
+        if "seg_data.hdf5" in os.listdir(experiment["path"]):
+            experiment['data'] = SegmentationMetric(
+                19, savefile="seg_data", base_dir=experiment["path"], main_metric="IoU")
+        else:
+            Warning(f'{experiment} does not have segmentation perf data')
+
+    for experiment in experiment_list:
+        experiment['data'].confusion_mat_summary()
+
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
     PARSER = argparse.ArgumentParser()
+    # PARSER.add_argument('-e', '--experiments', nargs='+',
+    #                     default=['23e48d7169d91baa423d7d56d24e71af',
+    #                              '24d44de94af25bb79f4975bebfa81513'])
     PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['23e48d7169d91baa423d7d56d24e71af',
-                                 '24d44de94af25bb79f4975bebfa81513'])
+                        default=['62c31076a3cf8565cd29775b76f7abad'])
+                                 
 
     EXPER_LIST = []
     for exper in PARSER.parse_args().experiments:
@@ -71,4 +88,5 @@ if __name__ == "__main__":
             "path" : ROOT_DIR / exper
         })
 
-    compare_experiments(EXPER_LIST)
+    # compare_experiments(EXPER_LIST)
+    segmentation_analysis(EXPER_LIST)

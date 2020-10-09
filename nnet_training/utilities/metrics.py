@@ -11,6 +11,8 @@ from typing import Dict, List, Callable, Union
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sn
+import pandas as pd
 
 import torch
 
@@ -501,7 +503,7 @@ class SegmentationMetric(MetricBaseClass):
             'Batch_Loss': [],
             'Batch_PixelAcc': [],
             'Batch_IoU': [],
-            'Confusion_Mat': torch.zeros((self._n_classes, self._n_classes))
+            'Confusion_Mat': torch.zeros((self._n_classes, self._n_classes), dtype=torch.int32)
         }
 
     def plot_classwise_iou(self):
@@ -533,6 +535,33 @@ class SegmentationMetric(MetricBaseClass):
             plt.xlabel('Epoch #')
 
         plt.show(block=False)
+
+    def confusion_mat_summary(self):
+
+        with h5py.File(self._path, 'r') as hfile:
+            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape[1]
+
+            training_data = np.zeros((len(list(hfile['training'])), n_classes, n_classes))
+            testing_data = np.zeros((len(list(hfile['validation'])), n_classes, n_classes))
+
+            sort_lmbda = lambda x: int(x[6:])
+            for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
+                training_data[idx] = hfile['training/'+epoch+'/Confusion_Mat'][:]
+
+            for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
+                testing_data[idx] = hfile['validation/'+epoch+'/Confusion_Mat'][:]
+
+        class_count_1 = training_data[80, :, :].sum(axis=1)
+        class_count_2 = training_data[1, :, :].sum(axis=1)
+
+        for idx in range(19):
+            percent_diff = 100*abs(1-class_count_1[idx]/class_count_2[idx])
+            print(f'{class_count_1[idx]} vs {class_count_2[idx]}: ({percent_diff:.3f}%)')
+
+        test = pd.DataFrame(testing_data[-1, :, :], range(19), range(19))
+        sn.set(font_scale=1.4)
+        sn.heatmap(test, annot=True, annot_kws={"size":8})
+        plt.show()
 
 class DepthMetric(MetricBaseClass):
     """
