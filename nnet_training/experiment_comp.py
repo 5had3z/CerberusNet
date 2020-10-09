@@ -49,7 +49,7 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
             for name, summary_dict in experiment_data.items():
                 axis[idx].plot(summary_dict[metric]["Validation"], label=name)
 
-            axis[idx].set_title(f'{metric} over Epochs')
+            axis[idx].set_title(f'{metric}')
             axis[idx].set_xlabel('Epoch #')
 
         fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
@@ -70,6 +70,9 @@ def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
 
     for experiment in experiment_list:
         experiment['data'].confusion_mat_summary()
+        experiment['data'].plot_classwise_iou()
+
+    plt.show()
 
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"

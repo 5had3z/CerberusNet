@@ -371,10 +371,10 @@ class SegmentationMetric(MetricBaseClass):
         """
         self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
-        labels = labels.type(torch.int32).cuda()
-        preds = preds.type(torch.int32).squeeze(dim=1)
+        labels = labels.type(torch.int8).cuda()
+        preds = preds.type(torch.int8).squeeze(dim=1)
 
-        conf_mat = self._confusion_mat(preds, labels)
+        conf_mat = self._gen_confusion_mat(preds, labels)
 
         pix_acc = torch.true_divide(torch.diag(conf_mat).sum(), conf_mat.sum())
         self.metric_data["Batch_PixelAcc"].append(pix_acc.cpu().data.numpy())
@@ -446,6 +446,27 @@ class SegmentationMetric(MetricBaseClass):
         divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
         return torch.true_divide(torch.diag(conf_mat), divisor).cpu().data.numpy()
 
+    @staticmethod
+    def _confmat_cls_iou(conf_mat: np.ndarray) -> np.ndarray:
+        divisor = conf_mat.sum(axis=1) + conf_mat.sum(axis=0) - np.diag(conf_mat)
+        return np.true_divide(np.diag(conf_mat), divisor)
+
+    @staticmethod
+    def _confmat_cls_pr_rc(conf_mat: np.ndarray) -> np.ndarray:
+        """
+        Returns tuple of classwise average precision and recall
+        The below calculations are made, but simplified in the actual code:
+        cls_tp = np.diag(conf_mat)
+        cls_fp = np.sum(conf_mat, axis=0) - cls_tp
+        cls_fn = np.sum(conf_mat, axis=1) - cls_tp
+
+        cls_precision = cls_tp / (cls_tp + cls_fp)
+        cls_recall = cls_tp / (cls_tp + cls_fn)
+        """
+        cls_precision = np.diag(conf_mat) / np.sum(conf_mat, axis=0)
+        cls_recall = np.diag(conf_mat) / np.sum(conf_mat, axis=1)
+        return cls_precision, cls_recall
+
     def _basic_iou(self, prediction: torch.Tensor, target: torch.Tensor):
         # Remove classes from unlabeled pixels in gt image.
         # We should not penalize detections in unlabeled portions of the image.
@@ -475,7 +496,7 @@ class SegmentationMetric(MetricBaseClass):
 
         return pix_acc.cpu().data.numpy()
 
-    def _confusion_mat(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def _gen_confusion_mat(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         mask = target != 255
         conf_mat = torch.bincount(self._n_classes * target[mask] + prediction[mask],
                                   minlength=self._n_classes**2)
@@ -521,10 +542,10 @@ class SegmentationMetric(MetricBaseClass):
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                training_data[idx] = hfile['training/'+epoch+'/Batch_IoU'][:].mean(axis=0)
+                training_data[idx] = np.nanmean(hfile['training/'+epoch+'/Batch_IoU'][:], axis=0)
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                testing_data[idx] = hfile['validation/'+epoch+'/Batch_IoU'][:].mean(axis=0)
+                testing_data[idx] = np.nanmean(hfile['validation/'+epoch+'/Batch_IoU'][:], axis=0)
 
         for idx in range(n_classes):
             plt.subplot(3, n_classes//3+1, idx+1)
@@ -551,17 +572,65 @@ class SegmentationMetric(MetricBaseClass):
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
                 testing_data[idx] = hfile['validation/'+epoch+'/Confusion_Mat'][:]
 
-        class_count_1 = training_data[80, :, :].sum(axis=1)
-        class_count_2 = training_data[1, :, :].sum(axis=1)
+        test_iou = np.zeros((training_data.shape[0], n_classes))
+        train_iou = np.zeros((training_data.shape[0], n_classes))
 
-        for idx in range(19):
-            percent_diff = 100*abs(1-class_count_1[idx]/class_count_2[idx])
-            print(f'{class_count_1[idx]} vs {class_count_2[idx]}: ({percent_diff:.3f}%)')
+        test_precision = np.zeros((training_data.shape[0], n_classes))
+        train_precision = np.zeros((training_data.shape[0], n_classes))
 
-        test = pd.DataFrame(testing_data[-1, :, :], range(19), range(19))
-        sn.set(font_scale=1.4)
-        sn.heatmap(test, annot=True, annot_kws={"size":8})
-        plt.show()
+        test_recall = np.zeros((training_data.shape[0], n_classes))
+        train_recall = np.zeros((training_data.shape[0], n_classes))
+
+        for idx in range(training_data.shape[0]):
+            test_iou[idx] = self._confmat_cls_iou(testing_data[idx, :, :])
+            train_iou[idx] = self._confmat_cls_iou(training_data[idx, :, :])
+
+            test_precision[idx], test_recall[idx] = self._confmat_cls_pr_rc(testing_data[idx, :, :])
+            train_precision[idx], train_recall[idx] = self._confmat_cls_pr_rc(training_data[idx, :, :])
+
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' IoU')
+
+        for idx in range(n_classes):
+            plt.subplot(3, n_classes//3+1, idx+1)
+            plt.plot(train_iou[:, idx])
+            plt.plot(test_iou[:, idx])
+            plt.legend(["Training", "Validation"])
+            plt.title(f'{trainId2name[idx]}')
+            plt.xlabel('Epoch #')
+
+        plt.show(block=False)
+
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Precision')
+
+        for idx in range(n_classes):
+            plt.subplot(3, n_classes//3+1, idx+1)
+            plt.plot(train_precision[:, idx])
+            plt.plot(test_precision[:, idx])
+            plt.legend(["Training", "Validation"])
+            plt.title(f'{trainId2name[idx]}')
+            plt.xlabel('Epoch #')
+
+        plt.show(block=False)
+
+        plt.figure(figsize=(18, 5))
+        plt.suptitle(self._path.name + ' Recall')
+
+        for idx in range(n_classes):
+            plt.subplot(3, n_classes//3+1, idx+1)
+            plt.plot(train_recall[:, idx])
+            plt.plot(test_recall[:, idx])
+            plt.legend(["Training", "Validation"])
+            plt.title(f'{trainId2name[idx]}')
+            plt.xlabel('Epoch #')
+
+        plt.show(block=False)
+
+        # test = pd.DataFrame(testing_data[-1, :, :], range(19), range(19))
+        # sn.set(font_scale=1.4)
+        # sn.heatmap(test, annot=True, annot_kws={"size":8})
+        
 
 class DepthMetric(MetricBaseClass):
     """
