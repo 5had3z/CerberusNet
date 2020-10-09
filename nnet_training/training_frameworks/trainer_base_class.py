@@ -135,11 +135,15 @@ class ModelTrainer(object):
             for metric in self.metric_loggers.values():
                 metric.new_epoch('training')
 
+            torch.cuda.empty_cache()
+
             self._model.train()
             self._train_epoch(max_epoch)
 
             for metric in self.metric_loggers.values():
                 metric.new_epoch('validation')
+
+            torch.cuda.empty_cache()
 
             self._model.eval()
             self._validate_model(max_epoch)
