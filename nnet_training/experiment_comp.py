@@ -70,7 +70,6 @@ def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
 
     for experiment in experiment_list:
         experiment['data'].confusion_mat_summary()
-        experiment['data'].plot_classwise_iou()
 
     plt.show()
 
@@ -82,7 +81,6 @@ if __name__ == "__main__":
     #                              '24d44de94af25bb79f4975bebfa81513'])
     PARSER.add_argument('-e', '--experiments', nargs='+',
                         default=['62c31076a3cf8565cd29775b76f7abad'])
-                                 
 
     EXPER_LIST = []
     for exper in PARSER.parse_args().experiments:

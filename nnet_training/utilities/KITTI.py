@@ -290,10 +290,8 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
-            mask = disparity > 0
             focal = self.width_to_focal[self.std_kitti_dims[1]]
-            disparity = focal * 0.54 / disparity
-            disparity[mask != 1] = 0
+            disparity[disparity > 0] = focal * 0.54 / disparity[disparity > 0]
         return torch.FloatTensor(disparity)
 
     def _flow_transform(self, epoch_data: Dict[str, Image.Image]):

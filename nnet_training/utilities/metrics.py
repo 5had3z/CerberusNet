@@ -6,7 +6,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Callable, Union
+from typing import Dict, List, Callable, Union, overload
 
 import h5py
 import numpy as np
@@ -371,8 +371,8 @@ class SegmentationMetric(MetricBaseClass):
         """
         self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
-        labels = labels.type(torch.int8).cuda()
-        preds = preds.type(torch.int8).squeeze(dim=1)
+        labels = labels.type(torch.int32).cuda()
+        preds = preds.type(torch.int32).squeeze(dim=1)
 
         conf_mat = self._gen_confusion_mat(preds, labels)
 
@@ -441,15 +441,24 @@ class SegmentationMetric(MetricBaseClass):
         print("No File Specified for Segmentation Metric Manager")
         return None
 
+    @overload
     @staticmethod
-    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor:
-        divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
-        return torch.true_divide(torch.diag(conf_mat), divisor).cpu().data.numpy()
+    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor: ...
+
+    @overload
+    @staticmethod
+    def _confmat_cls_iou(conf_mat: np.ndarray) -> np.ndarray: ...
 
     @staticmethod
-    def _confmat_cls_iou(conf_mat: np.ndarray) -> np.ndarray:
-        divisor = conf_mat.sum(axis=1) + conf_mat.sum(axis=0) - np.diag(conf_mat)
-        return np.true_divide(np.diag(conf_mat), divisor)
+    def _confmat_cls_iou(conf_mat):
+        if isinstance(conf_mat, torch.Tensor):
+            divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
+            return torch.true_divide(torch.diag(conf_mat), divisor).cpu().data.numpy()
+        elif isinstance(conf_mat, np.ndarray):
+            divisor = conf_mat.sum(axis=1) + conf_mat.sum(axis=0) - np.diag(conf_mat)
+            return np.true_divide(np.diag(conf_mat), divisor)
+        else:
+            raise NotImplementedError(type(conf_mat))
 
     @staticmethod
     def _confmat_cls_pr_rc(conf_mat: np.ndarray) -> np.ndarray:
@@ -627,10 +636,16 @@ class SegmentationMetric(MetricBaseClass):
 
         plt.show(block=False)
 
-        # test = pd.DataFrame(testing_data[-1, :, :], range(19), range(19))
-        # sn.set(font_scale=1.4)
-        # sn.heatmap(test, annot=True, annot_kws={"size":8})
-        
+        plt.figure(figsize=(18, 5))
+
+        labels = [trainId2name[i] for i in range(19)]
+        normalised_data = testing_data[-1, :, :] / \
+            np.sum(testing_data[-1, :, :], axis=1, keepdims=True)
+        conf_mat = pd.DataFrame(normalised_data, labels, labels)
+        sn.set(font_scale=1)
+        sn.heatmap(conf_mat, annot=True, annot_kws={"size":8})
+
+        plt.show(block=False)
 
 class DepthMetric(MetricBaseClass):
     """
