@@ -226,7 +226,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         return epoch_data
 
     def _sync_transform(self, epoch_data):
-        self.std_kitti_dims = (epoch_data["l_img"].size[0], epoch_data["l_img"].size[0])
+        self.std_kitti_dims = (epoch_data["l_img"].size[0], epoch_data["l_img"].size[1])
         scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
         self.output_shape = [scale_func(x) for x in self.base_size]
 
@@ -290,7 +290,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
-            focal = self.width_to_focal[self.std_kitti_dims[1]]
+            focal = self.width_to_focal[self.std_kitti_dims[0]]
             disparity[disparity > 0] = focal * 0.54 / disparity[disparity > 0]
         return torch.FloatTensor(disparity)
 
