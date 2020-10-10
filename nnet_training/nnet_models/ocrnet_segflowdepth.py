@@ -141,8 +141,7 @@ class OCRNetSFD(nn.Module):
 
         return flows[::-1]
 
-    def forward(self, l_img: torch.Tensor, l_seq: torch.Tensor,
-                consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(self, l_img: torch.Tensor, consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         """
         Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs
         """
@@ -150,7 +149,6 @@ class OCRNetSFD(nn.Module):
 
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(l_img)
-        _, im2_pyr = self.backbone(l_seq)
 
         # Segmentation pass with image 1
         forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
@@ -158,13 +156,16 @@ class OCRNetSFD(nn.Module):
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
 
-        # Flow pass with image 1
-        scale_factor = l_img.size()[-1] // forward['seg'].size()[-1]
-        forward['flow'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)
+        if 'l_seq' in kwargs:
+            _, im2_pyr = self.backbone(kwargs['l_seq'])
 
-        if consistency:
-            # Flow pass with image 2
-            forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
+            # Flow pass with image 1
+            scale_factor = l_img.size()[-1] // forward['seg'].size()[-1]
+            forward['flow'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)
+
+            if consistency:
+                # Flow pass with image 2
+                forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
         forward['seg'] = scale_as(forward['seg'], l_img)
         forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)

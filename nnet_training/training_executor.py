@@ -63,7 +63,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_f_kt.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_s_kt.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
