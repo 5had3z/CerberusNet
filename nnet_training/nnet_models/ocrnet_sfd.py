@@ -1,3 +1,61 @@
+"""
+Example Config Structure
+
+"model" : {
+    "name" : "OCRNetSFD",
+    "args" : {
+        "ocr_config" : {
+            "mid_channels" : 512, "key_channels" : 256, "classes" : 19
+        },
+        "hrnetv2_config" : {
+            "pretrained" : "hrnetv2_w48_imagenet_pretrained.pth",
+            "STAGE1" : {
+                "NUM_MODULES" : 1, "NUM_BRANCHES" : 1, "BLOCK": "BOTTLENECK",
+                "NUM_BLOCKS" : [4], "NUM_CHANNELS" : [64],
+                "FUSE_METHOD" : "SUM"
+            },
+            "STAGE2" : {
+                "NUM_MODULES" : 1, "NUM_BRANCHES" : 2, "BLOCK": "BASIC",
+                "NUM_BLOCKS" : [4, 4], "NUM_CHANNELS" : [48, 96],
+                "FUSE_METHOD" : "SUM"
+            },
+            "STAGE3" : {
+                "NUM_MODULES" : 4, "NUM_BRANCHES" : 3, "BLOCK": "BASIC",
+                "NUM_BLOCKS" : [4, 4, 4], "NUM_CHANNELS" : [48, 96, 192],
+                "FUSE_METHOD" : "SUM"
+            },
+            "STAGE4" : {
+                "NUM_MODULES" : 3, "NUM_BRANCHES" : 4, "BLOCK": "BASIC",
+                "NUM_BLOCKS" : [4, 4, 4, 4], "NUM_CHANNELS" : [48, 96, 192, 384],
+                "FUSE_METHOD" : "SUM"
+            }
+        },
+        "depth_est_network" : {
+            "type" : "DepthEstimator1",
+            "args" : { "pre_out_ch" : 32 }
+        },
+        "correlation_args" : {
+            "pad_size" : 4, "max_displacement" : 4,
+            "kernel_size" : 1, "stride1" : 1,
+            "stride2" : 1, "corr_multiply" : 1
+        },
+        "flow_est_network" : {
+            "type" : "FlowEstimatorLite",
+            "args" : {}
+        },
+        "context_network" : {
+            "type" : "ContextNetwork",
+            "args" : {}
+        },
+        "1x1_conv_out" : 32,
+        "depth_network" : {
+            "type" : "DepthHeadV1",
+            "args" : {"inter_ch" : [128, 32]}
+        }
+    }
+}
+
+"""
 
 from collections import OrderedDict
 from typing import List, Dict

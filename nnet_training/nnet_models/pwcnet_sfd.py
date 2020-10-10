@@ -1,3 +1,43 @@
+"""
+Example Config Structure
+
+"model" : {
+    "name" : "MonoSFDNet",
+    "args" : {
+        "feature_pyramid_extractor" : {
+            "type" : "FeatureExtractor",
+            "args" : { "channels" : [3, 16, 32, 64, 96, 128, 192] }
+        },
+        "segmentation_network": {
+            "type" : "SegmentationNet1",
+            "args" : {
+                "classes" : 19, "interm_ch" : 48,
+                "stride" : 1, "t" : 1, "g_noise" : 0.2
+            }
+        },
+        "depth_est_network" : {
+            "type" : "DepthEstimator1",
+            "args" : { "pre_out_ch" : 32 }
+        },
+        "correlation_args" : {
+            "pad_size" : 4, "max_displacement" : 4,
+            "kernel_size" : 1, "stride1" : 1,
+            "stride2" : 1, "corr_multiply" : 1
+        },
+        "flow_est_network" : {
+            "type" : "FlowEstimatorDense",
+            "args" : {}
+        },
+        "context_network" : {
+            "type" : "ContextNetwork",
+            "args" : {}
+        },
+        "1x1_conv_out" : 32
+    }
+}
+
+"""
+
 from typing import List
 
 import torch
