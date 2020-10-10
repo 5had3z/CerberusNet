@@ -223,45 +223,42 @@ class ModelTrainer(object):
                 sys.stdout.write("\033[K")
                 sys.stdout.flush()
 
-
+    @torch.no_grad()
     def _validate_model(self, max_epoch):
-        with torch.no_grad():
+        start_time = time.time()
 
-            start_time = time.time()
+        for batch_idx, batch_data in enumerate(self._validation_loader):
+            # Put both image and target onto device
+            self._data_to_gpu(batch_data)
 
-            for batch_idx, batch_data in enumerate(self._validation_loader):
-                # Put both image and target onto device
-                self._data_to_gpu(batch_data)
+            # Caculate the loss and accuracy for the predictions
+            forward = self._model(**batch_data)
 
-                # Caculate the loss and accuracy for the predictions
-                forward = self._model(**batch_data)
+            losses = self.calculate_losses(forward, batch_data)
 
-                losses = self.calculate_losses(forward, batch_data)
+            self.log_output_performance(forward, batch_data, losses)
 
-                self.log_output_performance(forward, batch_data, losses)
+            if not batch_idx % 10:
+                sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                                 f'Iter: [{batch_idx+1:4d}/{len(self._validation_loader):4d}]')
 
-                if not batch_idx % 10:
-                    sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
-                                     f'Iter: [{batch_idx+1:4d}/{len(self._validation_loader):4d}]')
+                if 'seg' in self.metric_loggers.keys():
+                    sys.stdout.write(f" || {self.metric_loggers['seg'].main_metric}: "\
+                                     f"{self.metric_loggers['seg'].get_last_batch():.4f}")
+                if 'depth' in self.metric_loggers.keys():
+                    sys.stdout.write(f" || {self.metric_loggers['depth'].main_metric}: "\
+                                     f"{self.metric_loggers['depth'].get_last_batch():.4f}")
+                if 'flow' in self.metric_loggers.keys():
+                    sys.stdout.write(f" || {self.metric_loggers['flow'].main_metric}: "\
+                                     f"{self.metric_loggers['flow'].get_last_batch():.4f}")
 
-                    if 'seg' in self.metric_loggers.keys():
-                        sys.stdout.write(f" || {self.metric_loggers['seg'].main_metric}: "\
-                                         f"{self.metric_loggers['seg'].get_last_batch():.4f}")
-                    if 'depth' in self.metric_loggers.keys():
-                        sys.stdout.write(f" || {self.metric_loggers['depth'].main_metric}: "\
-                                         f"{self.metric_loggers['depth'].get_last_batch():.4f}")
-                    if 'flow' in self.metric_loggers.keys():
-                        sys.stdout.write(f" || {self.metric_loggers['flow'].main_metric}: "\
-                                         f"{self.metric_loggers['flow'].get_last_batch():.4f}")
-
-                    time_elapsed = time.time() - start_time
-                    time_remain = time_elapsed/(batch_idx+1)*\
-                        (len(self._validation_loader)-batch_idx+1)
-                    sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
-                                     f' Remain: {time_remain:.1f} s')
-                    sys.stdout.write("\033[K")
-                    sys.stdout.flush()
-
+                time_elapsed = time.time() - start_time
+                time_remain = time_elapsed/(batch_idx+1)*\
+                    (len(self._validation_loader)-batch_idx+1)
+                sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
+                                 f' Remain: {time_remain:.1f} s')
+                sys.stdout.write("\033[K")
+                sys.stdout.flush()
 
     @staticmethod
     def _data_to_gpu(data):
@@ -280,28 +277,28 @@ class ModelTrainer(object):
                 data['flow_gt'] = None
         cuda_s.synchronize()
 
+    @torch.no_grad()
     def log_output_performance(self, nnet_outputs, batch_data, losses):
         """
         Calculates different metrics for each of the output types
         """
-        with torch.no_grad():
-            if 'flow' in self.metric_loggers:
-                self.metric_loggers['flow'].add_sample(
-                    batch_data['l_img'], batch_data['l_seq'], nnet_outputs['flow'][0],
-                    batch_data['flow_gt'], loss=losses['flow'].item()
-                )
+        if 'flow' in self.metric_loggers:
+            self.metric_loggers['flow'].add_sample(
+                batch_data['l_img'], batch_data['l_seq'], nnet_outputs['flow'][0],
+                batch_data['flow_gt'], loss=losses['flow'].item()
+            )
 
-            if 'seg' in self.metric_loggers:
-                self.metric_loggers['seg'].add_sample(
-                    torch.argmax(nnet_outputs['seg'], dim=1, keepdim=True),
-                    batch_data['seg'], loss=losses['seg'].item()
-                )
+        if 'seg' in self.metric_loggers:
+            self.metric_loggers['seg'].add_sample(
+                torch.argmax(nnet_outputs['seg'], dim=1, keepdim=True),
+                batch_data['seg'], loss=losses['seg'].item()
+            )
 
-            if 'depth' in self.metric_loggers:
-                self.metric_loggers['depth'].add_sample(
-                    nnet_outputs['depth'], batch_data['l_disp'],
-                    loss=losses['depth'].item()
-                )
+        if 'depth' in self.metric_loggers:
+            self.metric_loggers['depth'].add_sample(
+                nnet_outputs['depth'], batch_data['l_disp'],
+                loss=losses['depth'].item()
+            )
 
     def calculate_losses(self, nnet_outputs, batch_data):
         """
@@ -337,82 +334,82 @@ class ModelTrainer(object):
         if 'seg' in self.metric_loggers.keys():
             self.metric_loggers['seg'].plot_classwise_iou()
 
+    @torch.no_grad()
     def visualize_output(self):
         """
         Displays the outputs of the network
         """
         self._model.eval()
 
-        with torch.no_grad():
-            batch_data = next(iter(self._validation_loader))
-            self._data_to_gpu(batch_data)
+        batch_data = next(iter(self._validation_loader))
+        self._data_to_gpu(batch_data)
 
-            start_time = time.time()
-            forward = self._model(**batch_data)
-            propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
+        start_time = time.time()
+        forward = self._model(**batch_data)
+        propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
-            if 'depth' in forward and 'l_disp' in batch_data:
-                depth_pred_cpu = forward['depth'].detach().cpu().numpy()
-                depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
+        if 'depth' in forward and 'l_disp' in batch_data:
+            depth_pred_cpu = forward['depth'].detach().cpu().numpy()
+            depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
 
-            if 'seg' in forward:
-                seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
+        if 'seg' in forward:
+            seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
+
+        if 'flow' in forward:
+            np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+
+        if hasattr(self._validation_loader.dataset, 'img_normalize'):
+            img_mean = self._validation_loader.dataset.img_normalize.mean
+            img_std = self._validation_loader.dataset.img_normalize.std
+            inv_mean = [-mean / std for mean, std in zip(img_mean, img_std)]
+            inv_std = [1 / std for std in img_std]
+            img_norm = torchvision.transforms.Normalize(inv_mean, inv_std)
+        else:
+            img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
+
+        for i in range(self._validation_loader.batch_size):
+            plt.subplot(2, 4, 1)
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Base Image")
+
+            if 'l_seq' in batch_data:
+                plt.subplot(2, 4, 2)
+                plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
+                plt.xlabel("Sequential Image")
+
+            if 'seg' in forward and 'seg' in batch_data:
+                plt.subplot(2, 4, 5)
+                plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
+                plt.xlabel("Ground Truth Segmentation")
+
+                plt.subplot(2, 4, 6)
+                plt.imshow(get_color_pallete(seg_pred_cpu[i]))
+                plt.xlabel("Predicted Segmentation")
+
+            if 'flow' in batch_data['flow_gt']:
+                plt.subplot(2, 4, 3)
+                plt.imshow(flow_to_image(
+                    batch_data['flow_gt']['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
+                plt.xlabel("Ground Truth Flow")
 
             if 'flow' in forward:
-                np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+                plt.subplot(2, 4, 7)
+                plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
+                plt.xlabel("Predicted Flow")
 
-            if hasattr(self._validation_loader.dataset, 'img_normalize'):
-                img_mean = self._validation_loader.dataset.img_normalize.mean
-                img_std = self._validation_loader.dataset.img_normalize.std
-                inv_mean = [-mean / std for mean, std in zip(img_mean, img_std)]
-                inv_std = [1 / std for std in img_std]
-                img_norm = torchvision.transforms.Normalize(inv_mean, inv_std)
-            else:
-                img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
+            if 'depth' in forward and 'l_disp' in batch_data:
+                plt.subplot(2, 4, 4)
+                plt.imshow(depth_gt_cpu[i], cmap='magma',
+                           vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                plt.xlabel("Ground Truth Disparity")
 
-            for i in range(self._validation_loader.batch_size):
-                plt.subplot(2, 4, 1)
-                plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
-                plt.xlabel("Base Image")
+                plt.subplot(2, 4, 8)
+                plt.imshow(depth_pred_cpu[i, 0], cmap='magma',
+                           vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                plt.xlabel("Predicted Depth")
 
-                if 'l_seq' in batch_data:
-                    plt.subplot(2, 4, 2)
-                    plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
-                    plt.xlabel("Sequential Image")
-
-                if 'seg' in forward and 'seg' in batch_data:
-                    plt.subplot(2, 4, 5)
-                    plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
-                    plt.xlabel("Ground Truth Segmentation")
-
-                    plt.subplot(2, 4, 6)
-                    plt.imshow(get_color_pallete(seg_pred_cpu[i]))
-                    plt.xlabel("Predicted Segmentation")
-
-                if 'flow' in batch_data['flow_gt']:
-                    plt.subplot(2, 4, 3)
-                    plt.imshow(flow_to_image(
-                        batch_data['flow_gt']['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
-                    plt.xlabel("Ground Truth Flow")
-
-                if 'flow' in forward:
-                    plt.subplot(2, 4, 7)
-                    plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
-                    plt.xlabel("Predicted Flow")
-
-                if 'depth' in forward and 'l_disp' in batch_data:
-                    plt.subplot(2, 4, 4)
-                    plt.imshow(depth_gt_cpu[i], cmap='magma',
-                               vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                    plt.xlabel("Ground Truth Disparity")
-
-                    plt.subplot(2, 4, 8)
-                    plt.imshow(depth_pred_cpu[i, 0], cmap='magma',
-                               vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                    plt.xlabel("Predicted Depth")
-
-                plt.suptitle("Propagation time: " + str(propagation_time))
-                plt.show()
+            plt.suptitle("Propagation time: " + str(propagation_time))
+            plt.show()
 
 if __name__ == "__main__":
     raise NotImplementedError
