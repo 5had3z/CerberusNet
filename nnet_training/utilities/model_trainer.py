@@ -218,7 +218,7 @@ class ModelTrainer(object):
                                  f'Iter [{batch_idx + 1:4d}/{len(self._training_loader):4d}] || '
                                  f'lr: {self._lr_manager.get_lr():.8f} || '
                                  f'Loss: {loss.item():.4f} || '
-                                 f'Time Elapsed: {time_elapsed:.2f} s || '
+                                 f'Time Elapsed: {time_elapsed:.2f} s '
                                  f'Remain: {time_remain:.2f} s')
                 sys.stdout.write("\033[K")
                 sys.stdout.flush()

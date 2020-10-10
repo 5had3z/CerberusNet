@@ -43,6 +43,7 @@ class MetricBaseClass(object):
                     hfile.create_group('cache')
                     print("Training Statitsics created at ", self._path)
             else:
+                # Clear any previously cached data
                 with h5py.File(self._path, 'a') as hfile:
                     if 'cache' in list(hfile):
                         del hfile['cache']
@@ -60,11 +61,6 @@ class MetricBaseClass(object):
             if 'cache' in list(hfile) and 'training' in list(hfile['cache']):
                 n_epochs += len(list(hfile['cache/training']))
             return n_epochs
-
-    def __del__(self):
-        with h5py.File(self._path, 'a') as hfile:
-            if 'cache' in list(hfile):
-                del hfile['cache']
 
     def save_epoch(self):
         """
