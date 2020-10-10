@@ -4,9 +4,11 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
+import json
 import argparse
 from pathlib import Path
 from typing import List, Dict
+from easydict import EasyDict
 
 import matplotlib.pyplot as plt
 from nnet_training.utilities.metrics import MetricBaseClass, SegmentationMetric
@@ -73,19 +75,33 @@ def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
 
     plt.show()
 
+def parse_expeiments(root_dir: Path):
+    """
+    Parses each of the experiment subfolders and prints summaries.
+    """
+    for _, directories, _ in os.walk(root_dir):
+        for directory in directories:
+            for filename in os.listdir(root_dir / directory):
+                if filename.endswith(".json"):
+                    with open(root_dir / directory / filename) as f:
+                        experiment_cfg = EasyDict(json.load(f))
+                        break
+            print(f'{directory}: {experiment_cfg.note}')
+
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
-    PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['b81f8227a42faffbd2ba1c01726fd56f',
-                                 '7dee07cd53414f690cd11a766898f4ec'])
+    parse_expeiments(ROOT_DIR)
+    # PARSER = argparse.ArgumentParser()
+    # PARSER.add_argument('-e', '--experiments', nargs='+',
+    #                     default=['b81f8227a42faffbd2ba1c01726fd56f',
+    #                              '7dee07cd53414f690cd11a766898f4ec'])
 
-    EXPER_LIST = []
-    for exper in PARSER.parse_args().experiments:
-        EXPER_LIST.append({
-            "name" : exper,
-            "path" : ROOT_DIR / exper
-        })
+    # EXPER_LIST = []
+    # for exper in PARSER.parse_args().experiments:
+    #     EXPER_LIST.append({
+    #         "name" : exper,
+    #         "path" : ROOT_DIR / exper
+    #     })
 
-    compare_experiments(EXPER_LIST)
+    # compare_experiments(EXPER_LIST)
     # segmentation_analysis(EXPER_LIST)
