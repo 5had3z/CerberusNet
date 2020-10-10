@@ -173,8 +173,9 @@ class ModelTrainer(object):
 
                 self.write_summary()
 
-            sys.stdout.flush()
             sys.stdout.write(f'\rEpoch {str(self.epoch)} Finished, Time: {str(epoch_duration)}s\n')
+            sys.stdout.write("\033[K")
+            sys.stdout.flush()
 
         train_end_time = time.time()
 
@@ -212,13 +213,15 @@ class ModelTrainer(object):
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * \
                     (len(self._training_loader) - (batch_idx + 1))
-                sys.stdout.flush()
+
                 sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
                                  f'Iter [{batch_idx + 1:4d}/{len(self._training_loader):4d}] || '
                                  f'lr: {self._lr_manager.get_lr():.8f} || '
                                  f'Loss: {loss.item():.4f} || '
                                  f'Time Elapsed: {time_elapsed:.2f} s || '
-                                 f'Est Time Remain: {time_remain:.2f} s')
+                                 f'Remain: {time_remain:.2f} s')
+                sys.stdout.write("\033[K")
+                sys.stdout.flush()
 
 
     def _validate_model(self, max_epoch):
@@ -256,6 +259,7 @@ class ModelTrainer(object):
                         (len(self._validation_loader)-batch_idx+1)
                     sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
                                      f' Remain: {time_remain:.1f} s')
+                    sys.stdout.write("\033[K")
                     sys.stdout.flush()
 
 

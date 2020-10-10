@@ -357,12 +357,16 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
         validation_dirs[str(subset)] = dataset_config.rootdir +\
                                         dataset_config.val_subdirs[str(subset)]
 
+    aux_aug = {}
+    if 'img_normalize' in dataset_config.augmentations:
+        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
+    if 'disparity_out' in dataset_config.augmentations:
+        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
+
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
         'Validation' : CityScapesDataset(
-            validation_dirs, output_size=dataset_config.augmentations.output_size,
-            disparity_out=dataset_config.augmentations.disparity_out,
-            img_normalize=dataset_config.augmentations.img_normalize)
+            validation_dirs, output_size=dataset_config.augmentations.output_size, **aux_aug)
     }
 
     dataloaders = {

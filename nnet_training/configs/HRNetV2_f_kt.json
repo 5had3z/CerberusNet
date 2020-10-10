@@ -1,5 +1,5 @@
 {
-    "note" : "KITTI testing new IoU Calculation method no cropping",
+    "note" : "KITTI testing flow only performance",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",

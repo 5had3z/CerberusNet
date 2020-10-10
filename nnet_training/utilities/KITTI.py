@@ -365,6 +365,12 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     seg_dir = os.path.join(dataset_config.rootdir, "semantic")
     train_ids, val_ids = id_vec_generator(dataset_config.train_ratio, seg_dir)
 
+    aux_aug = {}
+    if 'img_normalize' in dataset_config.augmentations:
+        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
+    if 'disparity_out' in dataset_config.augmentations:
+        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
+
     datasets = {
         'Training'   : Kitti2015Dataset(
             dataset_config.rootdir, dataset_config.objectives,
@@ -372,8 +378,7 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
         'Validation' : Kitti2015Dataset(
             dataset_config.rootdir, dataset_config.objectives,
             output_size=dataset_config.augmentations.output_size,
-            disparity_out=dataset_config.augmentations.disparity_out,
-            id_vector=val_ids, img_normalize=dataset_config.augmentations.img_normalize)
+            id_vector=val_ids, **aux_aug)
     }
 
     dataloaders = {
