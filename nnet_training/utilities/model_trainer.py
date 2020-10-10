@@ -386,7 +386,7 @@ class ModelTrainer(object):
                 plt.imshow(get_color_pallete(seg_pred_cpu[i]))
                 plt.xlabel("Predicted Segmentation")
 
-            if 'flow' in batch_data['flow_gt']:
+            if batch_data['flow_gt'] is not None:
                 plt.subplot(2, 4, 3)
                 plt.imshow(flow_to_image(
                     batch_data['flow_gt']['flow'].cpu().numpy()[i].transpose([1, 2, 0])))

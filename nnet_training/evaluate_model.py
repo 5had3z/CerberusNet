@@ -32,6 +32,22 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MIN_DEPTH = 0.
 MAX_DEPTH = 80.
 
+def data_to_gpu(data):
+    """Put both image and target onto device"""
+    cuda_s = torch.cuda.Stream()
+    with torch.cuda.stream(cuda_s):
+        for key in data:
+            if key in ['l_img', 'l_seq', 'seg', 'l_disp', 'r_img', 'r_seq', 'r_disp']:
+                data[key] = data[key].cuda(non_blocking=True)
+
+        if all(key in data.keys() for key in ["flow", "flow_mask"]):
+            data['flow_gt'] = {"flow": data['flow'].cuda(non_blocking=True),
+                               "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
+            del data['flow'], data['flow_mask']
+        else:
+            data['flow_gt'] = None
+    cuda_s.synchronize()
+
 def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
         -> Tuple[torch.nn.Module, torch.utils.data.DataLoader]:
     """
@@ -80,24 +96,16 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
     return model, dataloader
 
 def run_evaluation(model, dataloader, loggers):
+    """Runs evaluation on the model"""
     start_time = time.time()
 
     for batch_idx, data in enumerate(dataloader):
-        # Put both image and target onto device
-        img = data['l_img'].to(DEVICE)
-        img_seq = data['l_seq'].to(DEVICE)
-
-        forward = model(im1_rgb=img, im2_rgb=img_seq)
-
-        if all(key in data.keys() for key in ["flow", "flow_mask"]):
-            flow_gt = {"flow": data['flow'].to(DEVICE),
-                       "flow_mask": data['flow_mask'].to(DEVICE)}
-        else:
-            flow_gt = None
+        data_to_gpu(data)
+        forward = model(**data)
 
         if 'flow' in forward.keys():
             loggers['flow'].add_sample(
-                img, img_seq, forward['flow'][0], flow_gt
+                data['l_img'], data['l_seq'], forward['flow'][0], data['flow_gt']
             )
 
         if 'seg' in forward.keys() and 'seg' in data.keys():
@@ -115,32 +123,38 @@ def run_evaluation(model, dataloader, loggers):
 
             if 'seg' in forward.keys():
                 sys.stdout.write(f" || {loggers['seg'].main_metric}: "\
-                                    f"{loggers['seg'].get_last_batch():.4f}")
+                                 f"{loggers['seg'].get_last_batch():.4f}")
             if 'l_disp' in data.keys() and 'depth' in forward.keys():
                 sys.stdout.write(f" || {loggers['depth'].main_metric}: "\
-                                    f"{loggers['depth'].get_last_batch():.4f}")
+                                 f"{loggers['depth'].get_last_batch():.4f}")
             if 'flow' in forward.keys():
                 sys.stdout.write(f" || {loggers['flow'].main_metric}: "\
-                                    f"{loggers['flow'].get_last_batch():.4f}")
+                                 f"{loggers['flow'].get_last_batch():.4f}")
 
             time_elapsed = time.time() - start_time
             time_remain = time_elapsed/(batch_idx+1)*(len(dataloader)-(batch_idx+1))
             sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
-                                f' Remain: {time_remain:.1f} s')
+                             f' Remain: {time_remain:.1f} s')
             sys.stdout.flush()
 
 def display_output(model, dataloader):
-    data = next(iter(dataloader))
+    """Displays some sample outputs"""
+    batch_data = next(iter(dataloader))
+    data_to_gpu(batch_data)
 
     start_time = time.time()
-    forward = model(data['l_img'].to(DEVICE), data['l_seq'].to(DEVICE))
+    forward = model(**batch_data)
     propagation_time = (time.time() - start_time)/dataloader.batch_size
 
-    np_flow_12 = forward['flow'][0].detach().cpu().numpy()
-    sed_pred_cpu = torch.argmax(forward['seg'], dim=1, keepdim=True).cpu().numpy()
-
-    if 'depth' in forward:
+    if 'depth' in forward and 'l_disp' in batch_data:
         depth_pred_cpu = forward['depth'].detach().cpu().numpy()
+        depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
+
+    if 'seg' in forward:
+        seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
+
+    if 'flow' in forward:
+        np_flow_12 = forward['flow'][0].detach().cpu().numpy()
 
     if hasattr(dataloader.dataset, 'img_normalize'):
         img_mean = dataloader.dataset.img_normalize.mean
@@ -153,39 +167,42 @@ def display_output(model, dataloader):
 
     for i in range(dataloader.batch_size):
         plt.subplot(2, 4, 1)
-        plt.imshow(np.moveaxis(img_norm(data['l_img'][i, :, :]).numpy(), 0, 2))
+        plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
         plt.xlabel("Base Image")
 
-        plt.subplot(2, 4, 2)
-        plt.imshow(np.moveaxis(img_norm(data['l_seq'][i, :, :]).numpy(), 0, 2))
-        plt.xlabel("Sequential Image")
+        if 'l_seq' in batch_data:
+            plt.subplot(2, 4, 2)
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Sequential Image")
 
-        if "flow" in data:
+        if 'seg' in forward and 'seg' in batch_data:
+            plt.subplot(2, 4, 5)
+            plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
+            plt.xlabel("Ground Truth Segmentation")
+
+            plt.subplot(2, 4, 6)
+            plt.imshow(get_color_pallete(seg_pred_cpu[i]))
+            plt.xlabel("Predicted Segmentation")
+
+        if batch_data['flow_gt'] is not None:
             plt.subplot(2, 4, 3)
-            plt.imshow(flow_to_image(data['flow'].numpy()[i].transpose([1, 2, 0])))
+            plt.imshow(flow_to_image(
+                batch_data['flow_gt']['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
             plt.xlabel("Ground Truth Flow")
 
-        if 'l_disp' in data:
+        if 'flow' in forward:
+            plt.subplot(2, 4, 7)
+            plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
+            plt.xlabel("Predicted Flow")
+
+        if 'depth' in forward and 'l_disp' in batch_data:
             plt.subplot(2, 4, 4)
-            plt.imshow(data['l_disp'][i, :, :], cmap='magma',
+            plt.imshow(depth_gt_cpu[i], cmap='magma',
                        vmin=MIN_DEPTH, vmax=MAX_DEPTH)
             plt.xlabel("Ground Truth Disparity")
 
-        plt.subplot(2, 4, 5)
-        plt.imshow(get_color_pallete(data['seg'].numpy()[i, :, :]))
-        plt.xlabel("Ground Truth Segmentation")
-
-        plt.subplot(2, 4, 6)
-        plt.imshow(get_color_pallete(sed_pred_cpu[i, 0, :, :]))
-        plt.xlabel("Predicted Segmentation")
-
-        plt.subplot(2, 4, 7)
-        plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
-        plt.xlabel("Predicted Flow")
-
-        if 'depth' in forward:
             plt.subplot(2, 4, 8)
-            plt.imshow(depth_pred_cpu[i, 0, :, :], cmap='magma',
+            plt.imshow(depth_pred_cpu[i, 0], cmap='magma',
                        vmin=MIN_DEPTH, vmax=MAX_DEPTH)
             plt.xlabel("Predicted Depth")
 
@@ -193,21 +210,34 @@ def display_output(model, dataloader):
         plt.show()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
-    args = parser.parse_args()
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
+    # PARSER.add_argument('-e', '--experiment', default='b81f8227a42faffbd2ba1c01726fd56f')
 
-    with open(args.config) as f:
-        cfg = EasyDict(json.load(f))
+    if 'config' in PARSER.parse_args():
+        with open(PARSER.parse_args().config) as f:
+            CFG = EasyDict(json.load(f))
 
-    encoding = hashlib.md5(json.dumps(cfg).encode('utf-8'))
-    training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
-    if not os.path.isdir(training_path):
-        raise EnvironmentError("Existing not Found")
+        ENCODING = hashlib.md5(json.dumps(CFG).encode('utf-8'))
+        MODEL_PATH = Path.cwd() / "torch_models" / str(ENCODING.hexdigest())
+        if not os.path.isdir(MODEL_PATH):
+            raise EnvironmentError("Existing not Found")
 
-    print("Experiment # ", encoding.hexdigest())
+        print("Experiment # ", ENCODING.hexdigest())
 
-    MODEL, DATALOADER = initialise_evaluation(cfg, training_path)
+    elif 'experiment' in PARSER.parse_args():
+        MODEL_PATH = Path.cwd() / "torch_models" / PARSER.parse_args().experiment
+
+        if not os.path.isdir(MODEL_PATH):
+            raise EnvironmentError("Existing not Found")
+        else:
+            for filename in os.listdir(MODEL_PATH):
+                if filename.endswith('.json'):
+                    with open(MODEL_PATH / filename) as f:
+                        CFG = EasyDict(json.load(f))
+                    break
+
+    MODEL, DATALOADER = initialise_evaluation(CFG, MODEL_PATH)
 
     LOGGERS = {
         'seg' : SegmentationMetric(19, base_dir=Path.cwd(), main_metric="IoU", savefile=''),

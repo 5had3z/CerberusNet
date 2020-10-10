@@ -77,9 +77,8 @@ if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['35861eca1a3c1f6c7fe337a8315e49a2',
-                                 '7dee07cd53414f690cd11a766898f4ec',
-                                 'aa441fcbcdedcf97b5d37af1d8f28716'])
+                        default=['b81f8227a42faffbd2ba1c01726fd56f',
+                                 '7dee07cd53414f690cd11a766898f4ec'])
 
     EXPER_LIST = []
     for exper in PARSER.parse_args().experiments:

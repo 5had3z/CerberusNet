@@ -1,5 +1,5 @@
 {
-    "note" : "KITTI testing flow only performance",
+    "note" : "KITTI testing depth only performance",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
@@ -16,21 +16,13 @@
             }
         },
         "train_ratio" : 0.8,
-        "objectives" : ["flow"]
+        "objectives" : ["depth"]
     },
     "loss_functions" : [
-        {   
-            "type" : "flow",
-            "function" : "unFlowLoss",
-            "args" : {
-                "weight" : 5.0,
-                "weights" : {"l1":0.15, "ssim":0.85},
-                "smooth" : {"degree": 2, "alpha" : 0.2, "weighting": 75.0},
-                "w_wrp_scales" : [1.0, 1.0, 1.0, 1.0, 0.0],
-                "w_sm_scales" : [1.0, 0.0, 0.0, 0.0, 0.0],
-                "consistency" : true,
-                "back_occ_only" : false
-            }
+        {
+            "type" :"depth",
+            "function" : "InvHuberLoss",
+            "args" : {"weight" : 0.5}
         }
     ],
     "model" : {
@@ -115,7 +107,7 @@
         "base_lr" : 1e-4, "mode" : "constant", "power" : 0.9
     },
     "logger_cfg" : {
-        "flow" : "Batch_EPE"
+        "depth" : "Batch_RMSE_Linear"
     },
     "amp_cfg": "O1"
 }
