@@ -50,6 +50,8 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         '''
         self.l_img = []
 
+        assert any(objective in objectives for objective in ["flow", "seg", "disparity"])
+
         if "stereo" in objectives:
             self.r_img = []
 
