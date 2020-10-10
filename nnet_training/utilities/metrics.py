@@ -819,6 +819,29 @@ class ClassificationMetric(MetricBaseClass):
     def _reset_metric(self):
         raise NotImplementedError
 
+def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricBaseClass]:
+    """
+    Given a dictionary of [key, value] = [objective type, main metric] and
+    basepath to save the file returns a dictionary that consists of performance
+    metric trackers.
+    """
+    loggers = {}
+
+    for logger_type, main_metric in logger_cfg.items():
+        if logger_type == 'flow':
+            loggers['flow'] = OpticFlowMetric(
+                'flow_data', main_metric=main_metric, base_dir=basepath)
+        elif logger_type == 'seg':
+            loggers['seg'] = SegmentationMetric(
+                19, 'seg_data', main_metric=main_metric, base_dir=basepath)
+        elif logger_type == 'depth':
+            loggers['depth'] = DepthMetric(
+                'depth_data', main_metric=main_metric, base_dir=basepath)
+        else:
+            raise NotImplementedError(logger_type)
+
+    return loggers
+
 if __name__ == "__main__":
     FILENAME = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_seg"
     TEST = MetricBaseClass(savefile=FILENAME, main_metric="Batch_EPE",

@@ -76,11 +76,10 @@ def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
     PARSER = argparse.ArgumentParser()
-    # PARSER.add_argument('-e', '--experiments', nargs='+',
-    #                     default=['23e48d7169d91baa423d7d56d24e71af',
-    #                              '24d44de94af25bb79f4975bebfa81513'])
     PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['62c31076a3cf8565cd29775b76f7abad'])
+                        default=['35861eca1a3c1f6c7fe337a8315e49a2',
+                                 '7dee07cd53414f690cd11a766898f4ec',
+                                 'aa441fcbcdedcf97b5d37af1d8f28716'])
 
     EXPER_LIST = []
     for exper in PARSER.parse_args().experiments:
@@ -89,5 +88,5 @@ if __name__ == "__main__":
             "path" : ROOT_DIR / exper
         })
 
-    # compare_experiments(EXPER_LIST)
-    segmentation_analysis(EXPER_LIST)
+    compare_experiments(EXPER_LIST)
+    # segmentation_analysis(EXPER_LIST)

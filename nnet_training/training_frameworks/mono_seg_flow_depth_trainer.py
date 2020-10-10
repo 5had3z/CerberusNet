@@ -146,7 +146,8 @@ class MonoSegFlowDepthTrainer(ModelTrainer):
                 forward = self._model(im1_rgb=img, im2_rgb=img_seq)
 
                 flow_loss, _, _, _ = self._flow_loss_fn(
-                    pred_flow_fw=forward['flow'], pred_flow_bw=forward['flow_b'],
+                    pred_flow_fw=forward['flow'],
+                    pred_flow_bw=forward['flow_b'],
                     im1_origin=img, im2_origin=img_seq)
 
                 seg_loss = self._seg_loss_fn(

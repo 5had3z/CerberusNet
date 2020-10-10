@@ -29,6 +29,7 @@ POSSIBILITY OF SUCH DAMAGE.
 """
 from collections import OrderedDict
 
+import torch
 from torch import nn
 
 from .hrnetv2 import get_seg_model
@@ -156,16 +157,15 @@ class OCRNet(nn.Module):
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs['ocr_config'])
 
-    def forward(self, inputs):
-        assert 'images' in inputs
-        x = inputs['images']
+    def forward(self, l_img: torch.Tensor, **kwargs):
+        outputs = {}
 
-        high_level_features, _ = self.backbone(x)
+        high_level_features, _ = self.backbone(l_img)
         cls_out, aux_out, _ = self.ocr(high_level_features)
-        aux_out = scale_as(aux_out, x)
-        cls_out = scale_as(cls_out, x)
+        outputs['seg_aux'] = scale_as(aux_out, l_img)
+        outputs['seg'] = scale_as(cls_out, l_img)
 
-        return cls_out
+        return outputs
 
 class OCRNetASPP(nn.Module):
     """
@@ -178,17 +178,16 @@ class OCRNetASPP(nn.Module):
                                           bottleneck_ch=256, output_stride=8)
         self.ocr = OCR_block(aspp_out_ch, **kwargs)
 
-    def forward(self, inputs):
-        assert 'images' in inputs
-        x = inputs['images']
+    def forward(self, l_img: torch.Tensor, **kwargs):
+        outputs = {}
 
-        _, _, high_level_features = self.backbone(x)
+        _, _, high_level_features = self.backbone(l_img)
         aspp = self.aspp(high_level_features)
         cls_out, aux_out, _ = self.ocr(aspp)
-        aux_out = scale_as(aux_out, x)
-        cls_out = scale_as(cls_out, x)
+        outputs['seg_aux'] = scale_as(aux_out, l_img)
+        outputs['seg'] = scale_as(cls_out, l_img)
 
-        return cls_out
+        return outputs
 
 
 class MscaleOCR(nn.Module):

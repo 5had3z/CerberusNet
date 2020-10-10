@@ -1,3 +1,5 @@
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -102,12 +104,13 @@ class PWCNet(nn.Module):
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
 
-    def forward(self, im1_rgb, im2_rgb, consistency=True):
+    def forward(self, l_img: torch.Tensor, l_seq: torch.Tensor,
+                consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         # outputs
         flows = {}
 
-        im1_pyr = self.feature_pyramid_extractor(im1_rgb)
-        im2_pyr = self.feature_pyramid_extractor(im2_rgb)
+        im1_pyr = self.feature_pyramid_extractor(l_img)
+        im2_pyr = self.feature_pyramid_extractor(l_seq)
 
         flows['flow'] = self.aux_forward(im1_pyr, im2_pyr)
         if consistency:

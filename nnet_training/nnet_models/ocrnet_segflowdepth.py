@@ -1,6 +1,6 @@
 
 from collections import OrderedDict
-from typing import List
+from typing import List, Dict
 
 import torch
 import torch.nn as nn
@@ -31,14 +31,13 @@ class DepthHeadV1(nn.Module):
 
         self.net = nn.Sequential(mod_list)
 
-
     def __str__(self):
         return "_DpthV1"
 
     def forward(self, x):
         out = self.net(x)
-        out = nn.functional.interpolate(out, size=tuple(x.size()[2:]),
-                                        mode="bilinear", align_corners=True)
+        out = nn.functional.interpolate(
+            out, size=tuple(x.size()[2:]), mode="bilinear", align_corners=True)
         return out
 
 
@@ -142,12 +141,16 @@ class OCRNetSFD(nn.Module):
 
         return flows[::-1]
 
-    def forward(self, im1_rgb: torch.Tensor, im2_rgb: torch.Tensor, consistency=True):
+    def forward(self, l_img: torch.Tensor, l_seq: torch.Tensor,
+                consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
+        """
+        Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs
+        """
         forward = {}
 
         # Backbone Forward pass on image 1 and 2
-        high_level_features, im1_pyr = self.backbone(im1_rgb)
-        _, im2_pyr = self.backbone(im2_rgb)
+        high_level_features, im1_pyr = self.backbone(l_img)
+        _, im2_pyr = self.backbone(l_seq)
 
         # Segmentation pass with image 1
         forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
@@ -156,15 +159,15 @@ class OCRNetSFD(nn.Module):
         forward['depth'] = self.depth_head(high_level_features)
 
         # Flow pass with image 1
-        scale_factor = im1_rgb.size()[-1] // forward['seg'].size()[-1]
+        scale_factor = l_img.size()[-1] // forward['seg'].size()[-1]
         forward['flow'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)
 
         if consistency:
             # Flow pass with image 2
             forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
-        forward['seg'] = scale_as(forward['seg'], im1_rgb)
-        forward['seg_aux'] = scale_as(forward['seg_aux'], im1_rgb)
-        forward['depth'] = scale_as(forward['depth'], im1_rgb)
+        forward['seg'] = scale_as(forward['seg'], l_img)
+        forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
+        forward['depth'] = scale_as(forward['depth'], l_img)
 
         return forward

@@ -91,7 +91,7 @@ def run_evaluation(model, dataloader, loggers):
 
         if all(key in data.keys() for key in ["flow", "flow_mask"]):
             flow_gt = {"flow": data['flow'].to(DEVICE),
-                        "flow_mask": data['flow_mask'].to(DEVICE)}
+                       "flow_mask": data['flow_mask'].to(DEVICE)}
         else:
             flow_gt = None
 
@@ -194,7 +194,7 @@ def display_output(model, dataloader):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
     LOGGERS = {
         'seg' : SegmentationMetric(19, base_dir=Path.cwd(), main_metric="IoU", savefile=''),
-        'flow': OpticFlowMetric(base_dir=Path.cwd(), main_metric="SAD", savefile=''),
+        'flow': OpticFlowMetric(base_dir=Path.cwd(), main_metric="EPE", savefile=''),
         'depth': DepthMetric(base_dir=Path.cwd(), main_metric="RMSE_Log", savefile='')
     }
 

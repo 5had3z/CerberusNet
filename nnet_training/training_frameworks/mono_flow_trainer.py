@@ -60,24 +60,25 @@ class MonoFlowTrainer(ModelTrainer):
                 param_group['lr'] = cur_lr
 
             # Put both image and target onto device
-            img     = data['l_img'].to(self._device)
-            img_seq = data['l_seq'].to(self._device)
+            cuda_s = torch.cuda.Stream()
+            with torch.cuda.stream(cuda_s):
+                img = data['l_img'].cuda(non_blocking=True)
+                img_seq = data['l_seq'].cuda(non_blocking=True)
 
-            # img_pyr     = self.build_pyramid(img)
-            # img_seq_pyr = self.build_pyramid(img_seq)
-
-            if all(key in data.keys() for key in ["flow", "flow_mask"]):
-                flow_gt = {"flow": data['flow'].to(self._device),
-                           "flow_mask": data['flow_mask'].to(self._device)}
-            else:
-                flow_gt = None
+                if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                    flow_gt = {"flow": data['flow'].cuda(non_blocking=True),
+                               "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
+                else:
+                    flow_gt = None
+            cuda_s.synchronize()
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            pred_flow = self._model(img, img_seq)
+            forward = self._model(im1_rgb=img, im2_rgb=img_seq)
+
             loss, _, _, _ = self._loss_function(
-                pred_flow_fw=pred_flow['flow'],
-                pred_flow_bw=pred_flow['flow_b'],
+                pred_flow_fw=forward['flow'],
+                pred_flow_bw=forward['flow_b'],
                 im1_origin=img, im2_origin=img_seq)
 
             self._optimizer.zero_grad()
@@ -87,7 +88,7 @@ class MonoFlowTrainer(ModelTrainer):
 
             with torch.no_grad():
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=loss.item()
                 )
 
@@ -110,22 +111,29 @@ class MonoFlowTrainer(ModelTrainer):
 
             for batch_idx, data in enumerate(self._validation_loader):
                 # Put both image and target onto device
-                img = data['l_img'].to(self._device)
-                img_seq = data['l_seq'].to(self._device)
 
-                if all(key in data.keys() for key in ["flow", "flow_mask"]):
-                    flow_gt = {"flow": data['flow'].to(self._device),
-                               "flow_mask": data['flow_mask'].to(self._device)}
-                else:
-                    flow_gt = None
+                cuda_s = torch.cuda.Stream()
+                with torch.cuda.stream(cuda_s):
+                    img = data['l_img'].cuda(non_blocking=True)
+                    img_seq = data['l_seq'].cuda(non_blocking=True)
 
-                pred_flow = self._model(img, img_seq)
+                    if all(key in data.keys() for key in ["flow", "flow_mask"]):
+                        flow_gt = {"flow": data['flow'].cuda(non_blocking=True),
+                                   "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
+                    else:
+                        flow_gt = None
+                cuda_s.synchronize()
+
+                forward = self._model(img, img_seq)
 
                 # Caculate the loss and accuracy for the predictions
-                loss, _, _, _ = self._loss_function(pred_flow, img, img_seq)
+                loss, _, _, _ = self._loss_function(
+                    pred_flow_fw=forward['flow'],
+                    pred_flow_bw=forward['flow_b'],
+                    im1_origin=img, im2_origin=img_seq)
 
                 self.metric_loggers['flow'].add_sample(
-                    img, img_seq, pred_flow['flow_fw'][0],
+                    img, img_seq, forward['flow'][0],
                     flow_gt, loss=loss.item()
                 )
 

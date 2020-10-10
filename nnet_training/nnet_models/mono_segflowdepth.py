@@ -170,15 +170,16 @@ class MonoSFDNet(nn.Module):
 
         return flows[::-1], depths[::-1]
 
-    def forward(self, im1_rgb, im2_rgb, seg_gt=None, consistency=True):
+    def forward(self, l_img: torch.Tensor, l_seq: torch.Tensor,
+                seg_gt=None, consistency=True, **kwargs):
         '''
         Forward method that returns the flow prediction and segmentation
         '''
         # outputs
         preds = {}
 
-        im1_pyr = self.feature_pyramid_extractor(im1_rgb)
-        im2_pyr = self.feature_pyramid_extractor(im2_rgb)
+        im1_pyr = self.feature_pyramid_extractor(l_img)
+        im2_pyr = self.feature_pyramid_extractor(l_seq)
 
         preds['seg'] = self.segmentation_network(im1_pyr)
         preds['seg_b'] = self.segmentation_network(im2_pyr)
