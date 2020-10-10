@@ -1,9 +1,9 @@
 from .fast_scnn import FastSCNN
-from .mono_segflowdepth import MonoSFDNet
+from .pwcnet_sfd import MonoSFDNet
 from .nnet_models import *
 from .pwcnet import PWCNet
 from .ocrnet import OCRNet, MscaleOCR
-from .ocrnet_segflowdepth import OCRNetSFD
+from .ocrnet_sfd import OCRNetSFD
 
 def get_model(model_args):
     """

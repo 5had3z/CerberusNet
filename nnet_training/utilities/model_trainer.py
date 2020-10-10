@@ -334,6 +334,9 @@ class ModelTrainer(object):
         for metric in self.metric_loggers.values():
             metric.plot_summary_data()
 
+        if 'seg' in self.metric_loggers.keys():
+            self.metric_loggers['seg'].plot_classwise_iou()
+
     def visualize_output(self):
         """
         Displays the outputs of the network

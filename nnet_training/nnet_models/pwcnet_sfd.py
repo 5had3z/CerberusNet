@@ -173,7 +173,6 @@ class MonoSFDNet(nn.Module):
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
                                      mode='bilinear', align_corners=True)
-                depth = F.interpolate(depth, scale_factor=2, mode='nearest')
                 im2_warp = flow_warp(im2, flow)
 
             # correlation
@@ -214,6 +213,9 @@ class MonoSFDNet(nn.Module):
             # concat and estimate depth
             seg_resized = F.interpolate(
                 seg.detach(), size=tuple(enc_feat.size()[2:]), mode='nearest')
+            depth = F.interpolate(
+                depth, size=tuple(enc_feat.size()[2:]), mode='nearest')
+
             depth = self.depth_estimator(
                 torch.cat([seg_resized, enc_1by1, depth], dim=1))
 
@@ -243,6 +245,8 @@ class MonoSFDNet(nn.Module):
         # each a magnitude that is typical of output
         if 'seg' not in kwargs or self.eval():
             seg_gt = preds['seg']
+        else:
+            seg_gt = kwargs['seg']
 
         preds['depth'] = self.depth_forward(im1_pyr, seg_gt)
 
