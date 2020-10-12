@@ -122,7 +122,7 @@ class FocalLoss2D(nn.Module):
     """
     Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=2, ignore_index=255, dynamic_weights=False,
+    def __init__(self, gamma=2.0, ignore_index=255, dynamic_weights=False,
                  scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 
@@ -131,18 +131,22 @@ class FocalLoss2D(nn.Module):
         self.dynamic_weights = dynamic_weights
         self.scale_factor = scale_factor
 
-    def forward(self, seg_pred: torch.Tensor, seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, seg_pred: Dict[str, torch.Tensor],
+                seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         '''
         Forward implementation that returns focal loss between prediciton and target
         '''
-        weights = torch.ones(seg_pred.shape[1]).to(seg_pred.get_device())
+        assert 'seg' in seg_pred.keys()
+
+        weights = torch.ones(seg_pred['seg'].shape[1]).to(seg_pred['seg'].get_device())
         if self.dynamic_weights:
             class_ids, counts = seg_gt.unique(return_counts=True)
             weights[class_ids] = self.scale_factor / \
                     (self.scale_factor + counts/float(seg_gt.nelement()))
 
         # compute the negative likelyhood
-        ce_loss = F.cross_entropy(seg_pred, seg_gt, ignore_index=self.ignore_index, weight=weights)
+        ce_loss = F.cross_entropy(
+            seg_pred['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)
 
         # compute the loss
         focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
