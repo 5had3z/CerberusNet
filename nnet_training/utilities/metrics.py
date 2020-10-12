@@ -439,11 +439,13 @@ class SegmentationMetric(MetricBaseClass):
 
     @overload
     @staticmethod
-    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor: ...
+    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor:
+        ...
 
     @overload
     @staticmethod
-    def _confmat_cls_iou(conf_mat: np.ndarray) -> np.ndarray: ...
+    def _confmat_cls_iou(conf_mat: np.ndarray) -> np.ndarray:
+        ...
 
     @staticmethod
     def _confmat_cls_iou(conf_mat):
@@ -590,8 +592,11 @@ class SegmentationMetric(MetricBaseClass):
             test_iou[idx] = self._confmat_cls_iou(testing_data[idx, :, :])
             train_iou[idx] = self._confmat_cls_iou(training_data[idx, :, :])
 
-            test_precision[idx], test_recall[idx] = self._confmat_cls_pr_rc(testing_data[idx, :, :])
-            train_precision[idx], train_recall[idx] = self._confmat_cls_pr_rc(training_data[idx, :, :])
+            test_precision[idx], test_recall[idx] = \
+                self._confmat_cls_pr_rc(testing_data[idx, :, :])
+
+            train_precision[idx], train_recall[idx] = \
+                self._confmat_cls_pr_rc(training_data[idx, :, :])
 
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' IoU')

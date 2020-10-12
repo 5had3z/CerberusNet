@@ -14,28 +14,32 @@ __all__ = ['DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
            'DepthReconstructionLossV1']
 
 class DepthAwareLoss(nn.Module):
-    def __init__(self, size_average=True, ignore_index=-1, **kwargs):
+    def __init__(self, weight=1.0, size_average=True, **kwargs):
         super(DepthAwareLoss, self).__init__()
         self.size_average = size_average
-        self._ignore_index = ignore_index
+        self.weight = weight
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         disp_pred[disp_pred == 0] += 0.1 # prevent nans during log
+        mask = disp_gt > 0
 
-        l_disp_pred = torch.log(disp_pred[disp_gt != 0])
-        l_disp_gt = torch.log(disp_gt[disp_gt != 0])
+        msk_disp_pred = disp_pred[mask]
+        msk_disp_gt = disp_gt[mask]
+        l_disp_pred = torch.log(msk_disp_pred)
+        l_disp_gt = torch.log(msk_disp_gt)
         regularization = 1 - torch.min(l_disp_pred, l_disp_gt) / torch.max(l_disp_pred, l_disp_gt)
 
-        l_loss = F.smooth_l1_loss(disp_pred, disp_gt, size_average=self.size_average)
-        depth_aware_attention = disp_gt / torch.max(disp_gt)
+        l_loss = F.smooth_l1_loss(msk_disp_pred, msk_disp_gt, size_average=self.size_average)
+        depth_aware_attention = msk_disp_gt / torch.max(msk_disp_gt)
 
-        return ((depth_aware_attention + regularization) * l_loss).mean()
+        return self.weight * ((depth_aware_attention + regularization) * l_loss).mean()
 
 class ScaleInvariantError(nn.Module):
-    def __init__(self, lmda=1, **kwargs):
+    def __init__(self, weight=1.0, lmda=1, **kwargs):
         super(ScaleInvariantError, self).__init__()
         self.lmda = lmda
+        self.weight = weight
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
@@ -44,13 +48,13 @@ class ScaleInvariantError(nn.Module):
         #   Number of pixels per image
         n_pixels = disp_gt.shape[1]*disp_gt.shape[2]
         #   Number of valid pixels in target image
-        n_valid = (disp_gt != 0).view(-1, n_pixels).float().sum(dim=1)
+        n_valid = (disp_gt > 0).view(-1, n_pixels).float().sum(dim=1)
 
-        log_diff = (torch.log(disp_pred[disp_gt != 0]) - torch.log(disp_gt[disp_gt != 0])).view(-1, n_pixels)
+        log_diff = (torch.log(disp_pred[disp_gt > 0]) - torch.log(disp_gt[disp_gt > 0])).view(-1, n_pixels)
 
         element_wise = torch.pow(log_diff, 2).sum(dim=1) / n_valid
         scaled_error = self.lmda * (torch.pow(log_diff.sum(dim=1), 2) / (n_valid**2))
-        return (element_wise - scaled_error).mean()
+        return self.weight * (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
     """
