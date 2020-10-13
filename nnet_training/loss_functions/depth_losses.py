@@ -1,6 +1,6 @@
 """Various Depth losses."""
 
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 
@@ -21,7 +21,7 @@ class DepthAwareLoss(nn.Module):
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
-        disp_pred[disp_pred == 0] += 0.1 # prevent nans during log
+        disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
         mask = disp_gt > 0
 
         msk_disp_pred = disp_pred[mask]
@@ -30,7 +30,7 @@ class DepthAwareLoss(nn.Module):
         l_disp_gt = torch.log(msk_disp_gt)
         regularization = 1 - torch.min(l_disp_pred, l_disp_gt) / torch.max(l_disp_pred, l_disp_gt)
 
-        l_loss = F.smooth_l1_loss(msk_disp_pred, msk_disp_gt, size_average=self.size_average)
+        l_loss = F.smooth_l1_loss(msk_disp_pred, msk_disp_gt, reduction='mean')
         depth_aware_attention = msk_disp_gt / torch.max(msk_disp_gt)
 
         return self.weight * ((depth_aware_attention + regularization) * l_loss).mean()
@@ -43,22 +43,18 @@ class ScaleInvariantError(nn.Module):
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
-        disp_pred[disp_pred == 0] += 0.1 # prevent nans during log
+        disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
+        mask = disp_gt > 0
 
-        #   Number of pixels per image
-        n_pixels = disp_gt.shape[1]*disp_gt.shape[2]
-        #   Number of valid pixels in target image
-        n_valid = (disp_gt > 0).view(-1, n_pixels).float().sum(dim=1)
+        log_diff = torch.log(disp_pred[mask]) - torch.log(disp_gt[mask])
 
-        log_diff = (torch.log(disp_pred[disp_gt > 0]) - torch.log(disp_gt[disp_gt > 0])).view(-1, n_pixels)
-
-        element_wise = torch.pow(log_diff, 2).sum(dim=1) / n_valid
-        scaled_error = self.lmda * (torch.pow(log_diff.sum(dim=1), 2) / (n_valid**2))
+        element_wise = torch.pow(log_diff, 2).mean()
+        scaled_error = self.lmda * (log_diff.sum()**2) / (log_diff.shape[0]**2)
         return self.weight * (element_wise - scaled_error).mean()
 
 class InvHuberLoss(nn.Module):
     """
-    Inverse Huber Loss for Depth/Disparity Training
+    Inverse Huber (berHu) Loss for Depth/Disparity Training
     """
     def __init__(self, weight=1.0, **kwargs):
         super(InvHuberLoss, self).__init__()
