@@ -7,6 +7,16 @@
 
 #include <NvInfer.h>
 
+namespace GridSampler {
+
+  enum class Interpolation {Bilinear, Nearest};
+  enum class Padding {Zeros, Border, Reflection};
+
+}  // namespace detail
+
+using GridSampler::Interpolation;
+using GridSampler::Padding;
+
 class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 {
     public:
@@ -67,6 +77,9 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
         void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
 
         bool m_align_corners;
+        int m_input_h;
+        int m_input_w;
+        int m_input_c;
         int64_t m_interpolation_mode;
         int64_t m_padding_mode;
         const char* mPluginNamespace;

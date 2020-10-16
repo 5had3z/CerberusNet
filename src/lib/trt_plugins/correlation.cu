@@ -1,4 +1,5 @@
 #include "correlation.cuh"
+#include "trt_utils.hpp"
 
 #include <cassert>
 
@@ -37,6 +38,13 @@ size_t CorrelationPlugin::getSerializationSize() const
 
 int CorrelationPlugin::initialize()
 {
+	const int paddedInputHeight = m_inputH + 2 * pad_size;
+    const int paddedInputWidth  = m_inputW + 2 * pad_size;
+    const int tensor_volume = m_max_batch_size * paddedInputHeight * paddedInputWidth * m_inputC
+
+    NV_CUDA_CHECK(cudaMalloc(&m_rInput1, tensor_volume * sizeof(float)));
+    NV_CUDA_CHECK(cudaMalloc(&m_rInput2, tensor_volume * sizeof(float)));
+
     return 0;
 }
 
@@ -124,37 +132,48 @@ __global__ void channels_first(const TensorAcc4R input, TensorAcc4R rinput,
 	const int y = blockIdx.y;
 	const int x = blockIdx.z;
 
-	const int ch_off = threadIdx.x;
+    const int ch_off = threadIdx.x;
+    
+    const int dimcyx = channels * height * width;
+	const int dimyx = height * width;
+
+	const int p_dimx = (width + 2 * pad_size);
+	const int p_dimy = (height + 2 * pad_size);
+	const int p_dimyxc = channels * p_dimy * p_dimx;
+	const int p_dimxc = p_dimx * channels;
 
 	for (int c = ch_off; c < channels; c += THREADS_PER_BLOCK) {
-		rinput[n][y+pad_size][x+pad_size][c] = input[n][c][y][x];
+        rinput[n * p_dimyxc + (y + pad_size) * p_dimxc + (x + pad_size) * channels + c] =
+            input[n * dimcyx + c * dimyx + y * width + x];
 	}
 }
 
 template <typename scalar_t>
-__global__ void correlation_forward(TensorAcc4R output, const int nOutputChannels, const int outputHeight, const int outputWidth,
-	const TensorAcc4R rInput1, const int nInputChannels, const int inputHeight, const int inputWidth, const TensorAcc4R rInput2,
-	const int pad_size, const int kernel_size, const int max_displacement, const int stride1, const int stride2)
+__global__ void correlation_forward(
+    scalar_t* output, const int outputChannels, const int outputHeight, const int outputWidth,
+    const scalar_t* __restrict__ rInput1, const int inputChannels, const int inputHeight, const int inputWidth,
+    const scalar_t* __restrict__ rInput2,
+	const int kernel_size, const int max_displacement, const int stride1, const int stride2)
 {
-	// n (batch size), c (num of channels), y (height), x (width)
+    // n (batch size), c (num of channels), y (height), x (width)
 	const int n = blockIdx.x;
 	const int y1 = blockIdx.y * stride1 + max_displacement;
 	const int x1 = blockIdx.z * stride1 + max_displacement;
-	const int c = threadIdx.x;
+    const int c = threadIdx.x;
+    
+    const int pdimyxc = inputHeight * inputWidth * inputChannels;
+	const int pdimxc = inputWidth * inputChannels;
+	const int pdimc = inputChannels;
+
+	const int tdimcyx = nOutputChannels * outputHeight * outputWidth;
+	const int tdimyx = outputHeight * outputWidth;
+    const int tdimx = outputWidth;
 
 	__shared__ scalar_t prod_sum[THREADS_PER_BLOCK];
-
-	// no significant speed-up in using chip memory for input1 sub-data, 
-	// not enough chip memory size to accomodate memory per block for input2 sub-data
-	// instead i've used device memory for both
 
 	const int kernel_rad = (kernel_size - 1) / 2;
 	const int displacement_rad = max_displacement / stride2;
 	const int displacement_size = 2 * displacement_rad + 1;
-
-	// Variables used for debugging boundary checks
-	// const int pInputWidth = inputWidth + 2 * pad_size;
-	// const int pInputHeight = inputHeight + 2 * pad_size;
 
 	// element-wise product along channel axis
 	for (int tj = -displacement_rad; tj <= displacement_rad; ++tj) {
@@ -165,16 +184,11 @@ __global__ void correlation_forward(TensorAcc4R output, const int nOutputChannel
 
 			for (int j = -kernel_rad; j <= kernel_rad; ++j) {
 				for (int i = -kernel_rad; i <= kernel_rad; ++i) {
-					for (int ch = c; ch < nInputChannels; ch += THREADS_PER_BLOCK) {
-						// if (y1+j > pInputHeight || y2+j > pInputHeight || y1+j < 0 || y2+j < 0) {
-						// 	printf("Height exceeded! 0 > ( %d | %d ) > %d\n", y1+j, y2+j, pInputHeight);
-						// 	// continue;
-						// }
-						// if (x1+i > pInputWidth || x2+i > pInputWidth || x2+i < 0 || x1+i < 0) {
-						// 	printf("Width exceeded! 0 > ( %d | %d ) > %d\n", x1+i, x2+i, pInputHeight);
-						// 	// continue;
-						// }
-						prod_sum[c] += rInput1[n][y1+j][x1+i][ch] * rInput2[n][y2+j][x2+i][ch];
+					for (int ch = c; ch < inputChannels; ch += THREADS_PER_BLOCK) {
+                        const int indx1 = n * pdimyxc + (y1 + j) * pdimxc + (x1 + i) * pdimc + ch;
+                        const int indx2 = n * pdimyxc + (y2 + j) * pdimxc + (x2 + i) * pdimc + ch;
+                        
+						prod_sum[c] += rInput1[indx1] * rInput2[indx2];
 					}
 				}
 			}
@@ -186,14 +200,11 @@ __global__ void correlation_forward(TensorAcc4R output, const int nOutputChannel
 				for (int index = 0; index < THREADS_PER_BLOCK; ++index) {
 					reduce_sum += prod_sum[index];
 				}
-				const int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
-				const scalar_t nelems = kernel_size * kernel_size * nInputChannels;
-				// if (tc > nOutputChannels) {
-				// 	// This has not tripped any warnings yet
-				// 	printf("Output Channels exceeded! 0 > %d > %d\n", tc, nOutputChannels);
-				// 	continue;
-				// }
-				output[n][tc][blockIdx.y][blockIdx.z] = reduce_sum / nelems;
+                const int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
+                const int tindx = n * tdimcyx + tc * tdimyx + blockIdx.y * tdimx + blockIdx.z;
+				const scalar_t nelems = kernel_size * kernel_size * inputChannels;
+
+				output[tindx] = reduce_sum / nelems;
 			}
 		}
 	}
@@ -201,79 +212,28 @@ __global__ void correlation_forward(TensorAcc4R output, const int nOutputChannel
 
 int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
 {
-	const int nOutputChannels = output.size(1);
-	const int outputHeight = output.size(2);
-	const int outputWidth = output.size(3);
-
-	const int nInputChannels = input1.size(1);
-	const int inputHeight = input1.size(2);
-	const int inputWidth = input1.size(3);
-
-	cudaError_t err;
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
-	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
+	const dim3 reshape_grid(batchSize, m_inputH, m_inputW);
 
-	const int paddedInputHeight = inputHeight + 2 * pad_size;
-    const int paddedInputWidth  = inputWidth + 2 * pad_size;
+    NV_CUDA_CHECK(channels_first<scalar_t> <<<reshape_grid, threadsPerBlock, 0, stream>>>(
+        reinterpret_cast<const float*>(inputs[0]), reinterpret_cast<const float*>(m_rInput1),
+        m_inputC, m_inputH, m_inputW, m_pad_size));
 
-	auto rInput1 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input1.options());
-    auto rInput2 = torch::zeros({batchSize, paddedInputHeight, paddedInputWidth, nInputChannels}, input2.options());
+    NV_CUDA_CHECK(channels_first<scalar_t> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
+        reinterpret_cast<const float*>(inputs[1]), reinterpret_cast<const float*>(m_rInput2),
+        m_inputC, m_inputH, m_inputW, m_pad_size));
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "channels_first_fwd_1",
-		([&] {
-			TensorAcc4R input1_acc  = input1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
+    const dim3 corr_grid(batchSize, m_outputH, m_outputW);
+    
+    const int pInputWidth = inputWidth + 2 * m_pad_size;
+    const int pInputHeight = inputHeight + 2 * m_pad_size;
 
-			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>>(
-				input1_acc, rInput1_acc, nInputChannels, inputHeight, inputWidth, pad_size);
-		})
-	);
-	// check for errors
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		printf("error in input1 channels_first: %s\n", cudaGetErrorString(err));
-		return err;
-	}
+    NV_CUDA_CHECK(correlation_forward<scalar_t> <<<corr_grid, threadsPerBlock, 0, stream>>> (
+        reinterpret_cast<const float*>(outputs[0]), m_outputC, m_outputH, m_outputW,
+        m_rInput1, m_inputC, pInputHeight, pInputWidth, m_rInput2,
+        m_kernel_size, m_max_displacement, m_stride1, m_stride2));
 
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2",
-		([&] {
-			TensorAcc4R input2_acc  = input2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-
-			channels_first<scalar_t> <<<blocks_grid, threadsPerBlock, 0, stream >>> (
-				input2_acc, rInput2_acc, nInputChannels, inputHeight, inputWidth, pad_size);
-		})
-	);
-	// check for errors
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		printf("error in input2 channels_first: %s\n", cudaGetErrorString(err));
-		return err;
-	}
-
-	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
-
-	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input1.scalar_type(), "correlation_forward",
-		([&] {
-			TensorAcc4R output_acc  = output.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-			TensorAcc4R rInput1_acc = rInput1.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-			TensorAcc4R rInput2_acc = rInput2.packed_accessor32<scalar_t,4,torch::RestrictPtrTraits>();
-
-			correlation_forward<scalar_t> <<<totalBlocksCorr, threadsPerBlock, 0, stream >>> (
-				output_acc, nOutputChannels, outputHeight, outputWidth,
-				rInput1_acc, nInputChannels, inputHeight, inputWidth,
-				rInput2_acc,
-				pad_size, kernel_size, max_displacement, stride1, stride2);
-		})
-	);
-	// check for errors
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		printf("error in correlation_forward_cuda_kernel: %s\n", cudaGetErrorString(err));
-		return err;
-	}
-
-    return err;
+    return cudaGetLastError();
 }
 
 CorrelationPlugin::CorrelationPlugin()

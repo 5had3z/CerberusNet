@@ -1,4 +1,5 @@
 #include "grid_sampler.cuh"
+#include "trt_utils.hpp"
 
 #include <cassert>
 
@@ -205,8 +206,10 @@ scalar_t grid_sampler_compute_source_index(scalar_t coord, int size,
 
 template <typename scalar_t, typename index_t>
 __global__ void grid_sampler_2d_kernel(const index_t nthreads,
-    TensorInfo<scalar_t, index_t> input, TensorInfo<scalar_t, index_t> grid, TensorInfo<scalar_t, index_t> output,
-    const GridSamplerInterpolation interpolation_mode, const GridSamplerPadding padding_mode, bool align_corners)
+    TensorInfo<scalar_t, index_t> input,
+    TensorInfo<scalar_t, index_t> grid,
+    TensorInfo<scalar_t, index_t> output,
+    const Interpolation interpolation_mode, const Padding padding_mode, bool align_corners)
 {
     index_t C = input.sizes[1];
     index_t inp_H = input.sizes[2];
@@ -239,7 +242,7 @@ __global__ void grid_sampler_2d_kernel(const index_t nthreads,
         ix = grid_sampler_compute_source_index(ix, inp_W, padding_mode, align_corners);
         iy = grid_sampler_compute_source_index(iy, inp_H, padding_mode, align_corners);
   
-        if (interpolation_mode == GridSamplerInterpolation::Bilinear) {
+        if (interpolation_mode == Interpolation::Bilinear) {
             // get NE, NW, SE, SW pixel values from (x, y)
             index_t ix_nw = static_cast<index_t>(::floor(ix));
             index_t iy_nw = static_cast<index_t>(::floor(iy));
@@ -275,7 +278,7 @@ __global__ void grid_sampler_2d_kernel(const index_t nthreads,
                 }
             }
         } 
-        else if (interpolation_mode == GridSamplerInterpolation::Nearest) {
+        else if (interpolation_mode == Interpolation::Nearest) {
             index_t ix_nearest = static_cast<index_t>(::round(ix));
             index_t iy_nearest = static_cast<index_t>(::round(iy));
     
@@ -296,11 +299,11 @@ __global__ void grid_sampler_2d_kernel(const index_t nthreads,
 int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs,
     void** outputs, void* workspace, cudaStream_t stream)
 {
-    auto target = inputs;
-    auto grid = inputs + m_stride;
+    int64_t count = batchSize * m_input_h * m_input_w;
 
-    grid_sampler_2d_kernel<scalar_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(
-        count, inputs, grid, outputs, m_interpolation_mode, m_padding_mode, m_align_corners);
+    grid_sampler_2d_kernel<scalar_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+        reinterpret_cast<const float*>(inputs[0]), reinterpret_cast<const float*>(inputs[1]),
+        reinterpret_cast<float*>(outputs[0]), m_interpolation_mode, m_padding_mode, m_align_corners);
 
     return cudaGetLastError();
 }
