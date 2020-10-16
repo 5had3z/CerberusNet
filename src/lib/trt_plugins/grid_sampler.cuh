@@ -10,6 +10,8 @@
 class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 {
     public:
+        GridSamplerPlugin();
+
         GridSamplerPlugin(const void* data, size_t length);
 
         ~GridSamplerPlugin() override = default;
@@ -64,6 +66,9 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
     private:
         void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
 
+        bool m_align_corners;
+        int64_t m_interpolation_mode;
+        int64_t m_padding_mode;
         const char* mPluginNamespace;
 };
 

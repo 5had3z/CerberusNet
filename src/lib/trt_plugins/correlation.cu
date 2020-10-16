@@ -1,10 +1,119 @@
 #include "correlation.cuh"
 
+#include <cassert>
+
 #define CUDA_NUM_THREADS 1024
 #define THREADS_PER_BLOCK 32
 
-// using at::Half;
-#define TensorAcc4R torch::PackedTensorAccessor32<scalar_t,4,torch::RestrictPtrTraits>
+namespace
+{
+    const char* CORRELATION_PLUGIN_VERSION{"1"};
+    const char* CORRELATION_PLUGIN_NAME{"Correlation_TRT"};
+} // namespace
+
+nvinfer1::PluginFieldCollection CorrelationPlugin::mFC{};
+std::vector<nvinfer1::PluginField> CorrelationPlugin::mPluginAttributes;
+
+CorrelationPlugin::CorrelationPlugin()
+{
+}
+
+CorrelationPlugin::CorrelationPlugin(const void* data, size_t length)
+{
+    const char *d = reinterpret_cast<const char *>(data), *a = d;
+    assert(d == a + length);
+}
+
+void CorrelationPlugin::serialize(void* buffer) const
+{
+    char* d = static_cast<char*>(buffer), *a = d;
+    assert(d == a + getSerializationSize());
+}
+
+size_t CorrelationPlugin::getSerializationSize() const
+{
+    return 0;
+}
+
+int CorrelationPlugin::initialize()
+{
+    return 0;
+}
+
+void CorrelationPlugin::terminate()
+{
+}
+
+nvinfer1::Dims CorrelationPlugin::getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims)
+{
+    //output the result to channel
+    return {0, 0, 0};
+}
+
+void CorrelationPlugin::setPluginNamespace(const char* pluginNamespace)
+{
+    mPluginNamespace = pluginNamespace;
+}
+
+const char* CorrelationPlugin::getPluginNamespace() const
+{
+    return mPluginNamespace;
+}
+
+// Return the DataType of the plugin output at the requested index
+nvinfer1::DataType CorrelationPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+{
+    return nvinfer1::DataType::kFLOAT;
+}
+
+// Return true if output tensor is broadcast across a batch.
+bool CorrelationPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+{
+    return false;
+}
+
+// Return true if plugin can use input that is broadcast across batch without replication.
+bool CorrelationPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+{
+    return false;
+}
+
+void CorrelationPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput)
+{
+}
+
+// Attach the plugin object to an execution context and grant the plugin the access to some context resource.
+void CorrelationPlugin::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator)
+{
+}
+
+// Detach the plugin object from its execution context.
+void CorrelationPlugin::detachFromContext()
+{
+}
+
+const char* CorrelationPlugin::getPluginType() const
+{
+    return CORRELATION_PLUGIN_NAME;
+}
+
+const char* CorrelationPlugin::getPluginVersion() const
+{
+    return CORRELATION_PLUGIN_VERSION;
+}
+
+void CorrelationPlugin::destroy()
+{
+    delete this;
+}
+
+// Clone the plugin
+nvinfer1::IPluginV2IOExt* CorrelationPlugin::clone() const
+{
+    CorrelationPlugin *p = new CorrelationPlugin();
+    p->setPluginNamespace(mPluginNamespace);
+    return p;
+}
 
 template <typename scalar_t>
 __global__ void channels_first(const TensorAcc4R input, TensorAcc4R rinput,
@@ -90,12 +199,8 @@ __global__ void correlation_forward(TensorAcc4R output, const int nOutputChannel
 	}
 }
 
-int correlation_forward_cuda_kernel(torch::Tensor& output,
-	const torch::Tensor& input1, const torch::Tensor& input2,
-	const int pad_size, const int kernel_size, const int max_displacement, const int stride1,
-	const int stride2, const int corr_type_multiply)
+int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
 {
-	const int batchSize = output.size(0);
 	const int nOutputChannels = output.size(1);
 	const int outputHeight = output.size(2);
 	const int outputWidth = output.size(3);
@@ -105,7 +210,6 @@ int correlation_forward_cuda_kernel(torch::Tensor& output,
 	const int inputWidth = input1.size(3);
 
 	cudaError_t err;
-	cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
 	dim3 blocks_grid(batchSize, inputHeight, inputWidth);
 
@@ -128,7 +232,7 @@ int correlation_forward_cuda_kernel(torch::Tensor& output,
 	err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		printf("error in input1 channels_first: %s\n", cudaGetErrorString(err));
-		return 0;
+		return err;
 	}
 
 	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input2.scalar_type(), "channels_first_fwd_2",
@@ -144,7 +248,7 @@ int correlation_forward_cuda_kernel(torch::Tensor& output,
 	err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		printf("error in input2 channels_first: %s\n", cudaGetErrorString(err));
-		return 0;
+		return err;
 	}
 
 	dim3 totalBlocksCorr(batchSize, outputHeight, outputWidth);
@@ -166,39 +270,53 @@ int correlation_forward_cuda_kernel(torch::Tensor& output,
 	err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		printf("error in correlation_forward_cuda_kernel: %s\n", cudaGetErrorString(err));
-		return 0;
+		return err;
 	}
 
-	return 1;
+    return err;
 }
 
-torch::Tensor correlation_forward_cuda(
-    const torch::Tensor& input1, const torch::Tensor& input2, int pad_size,
-    int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
+CorrelationPlugin::CorrelationPlugin()
 {
-    const int batchSize         = input1.size(0);
-    const int nInputChannels    = input1.size(1);
-    const int inputHeight       = input1.size(2);
-    const int inputWidth        = input1.size(3);
+    mPluginAttributes.clear();
 
-    const int kernel_radius = (kernel_size - 1) / 2;
-    const int border_radius = kernel_radius + max_displacement;
+    mFC.nbFields = mPluginAttributes.size();
+    mFC.fields = mPluginAttributes.data();
+}
 
-    const int paddedInputHeight = inputHeight + 2 * pad_size;
-    const int paddedInputWidth  = inputWidth + 2 * pad_size;
+const char* CorrelationPlugin::getPluginName() const
+{
+    return CORRELATION_PLUGIN_NAME;
+}
 
-    const int nOutputChannels   = ((max_displacement/stride2)*2 + 1) * ((max_displacement/stride2)*2 + 1);
-    const int outputHeight      = ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(stride1));
-    const int outputwidth       = ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(stride1));
+const char* CorrelationPlugin::getPluginVersion() const
+{
+    return CORRELATION_PLUGIN_VERSION;
+}
 
-    auto output = torch::zeros({batchSize, nOutputChannels, outputHeight, outputwidth}, input1.options());
+const nvinfer1::PluginFieldCollection* CorrelationPlugin::getFieldNames()
+{
+    return &mFC;
+}
 
-    const int success = correlation_forward_cuda_kernel(
-        output, input1, input2, pad_size, kernel_size,
-        max_displacement, stride1, stride2, corr_type_multiply);
+nvinfer1::IPluginV2IOExt* CorrelationPlugin::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
+{
+    assert(!strcmp(name, getPluginName()));
+    const nvinfer1::PluginField* fields = fc->fields;
 
-    //check for errors
-    if (!success) { AT_ERROR("CUDA correlation_forward_cuda_kernel failed"); }
+    for (int i = 0; i < fc->nbFields; ++i)
+    {
+        const char* attrName = fields[i].name;
+    }
 
-    return output;
+    CorrelationPlugin* obj = new CorrelationPlugin();
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
+}
+
+nvinfer1::IPluginV2IOExt* CorrelationPlugin::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+{
+    CorrelationPlugin* obj = new CorrelationPlugin(serialData, serialLength);
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
 }

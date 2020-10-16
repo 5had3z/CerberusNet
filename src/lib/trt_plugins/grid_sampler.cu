@@ -1,5 +1,208 @@
 #include "grid_sampler.cuh"
 
+#include <cassert>
+
+namespace
+{
+    const char* GRID_SAMPLER_PLUGIN_VERSION{"1"};
+    const char* GRID_SAMPLER_PLUGIN_NAME{"Grid_Sampler_TRT"};
+} // namespace
+
+nvinfer1::PluginFieldCollection GridSamplerPluginCreator::mFC{};
+std::vector<nvinfer1::PluginField> GridSamplerPluginCreator::mPluginAttributes;
+
+GridSamplerPlugin::GridSamplerPlugin()
+{
+}
+
+GridSamplerPlugin::GridSamplerPlugin(const void* data, size_t length)
+{
+    const char *d = reinterpret_cast<const char *>(data), *a = d;
+    assert(d == a + length);
+}
+
+void GridSamplerPlugin::serialize(void* buffer) const
+{
+    char* d = static_cast<char*>(buffer), *a = d;
+    assert(d == a + getSerializationSize());
+}
+
+size_t GridSamplerPlugin::getSerializationSize() const
+{
+    return 0;
+}
+
+int GridSamplerPlugin::initialize()
+{
+    return 0;
+}
+
+void GridSamplerPlugin::terminate()
+{
+}
+
+nvinfer1::Dims GridSamplerPlugin::getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims)
+{
+    //output the result to channel
+    return {0, 0, 0};
+}
+
+void GridSamplerPlugin::setPluginNamespace(const char* pluginNamespace)
+{
+    mPluginNamespace = pluginNamespace;
+}
+
+const char* GridSamplerPlugin::getPluginNamespace() const
+{
+    return mPluginNamespace;
+}
+
+// Return the DataType of the plugin output at the requested index
+nvinfer1::DataType GridSamplerPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+{
+    return nvinfer1::DataType::kFLOAT;
+}
+
+// Return true if output tensor is broadcast across a batch.
+bool GridSamplerPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+{
+    return false;
+}
+
+// Return true if plugin can use input that is broadcast across batch without replication.
+bool GridSamplerPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+{
+    return false;
+}
+
+void GridSamplerPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput)
+{
+}
+
+// Attach the plugin object to an execution context and grant the plugin the access to some context resource.
+void GridSamplerPlugin::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator)
+{
+}
+
+// Detach the plugin object from its execution context.
+void GridSamplerPlugin::detachFromContext()
+{
+}
+
+const char* GridSamplerPlugin::getPluginType() const
+{
+    return GRID_SAMPLER_PLUGIN_NAME;
+}
+
+const char* GridSamplerPlugin::getPluginVersion() const
+{
+    return GRID_SAMPLER_PLUGIN_VERSION;
+}
+
+void GridSamplerPlugin::destroy()
+{
+    delete this;
+}
+
+// Clone the plugin
+nvinfer1::IPluginV2IOExt* GridSamplerPlugin::clone() const
+{
+    GridSamplerPlugin *p = new GridSamplerPlugin();
+    p->setPluginNamespace(mPluginNamespace);
+    return p;
+}
+
+static inline bool within_bounds_2d(int64_t h, int64_t w, int64_t H, int64_t W) {
+    return h >= 0 && h < H && w >= 0 && w < W;
+}
+
+// Unnormalizes a coordinate from the -1 to +1 scale to its pixel index value,
+// where we view each pixel as an area between (idx - 0.5) and (idx + 0.5).
+// if align_corners: -1 and +1 get sent to the centers of the corner pixels
+//     -1 --> 0
+//     +1 --> (size - 1)
+//     scale_factor = (size - 1) / 2
+// if not align_corners: -1 and +1 get sent to the image edges
+//     -1 --> -0.5
+//     +1 --> (size - 1) + 0.5 == size - 0.5
+//     scale_factor = size / 2
+template <typename scalar_t>
+static __forceinline__ __device__
+scalar_t grid_sampler_unnormalize(scalar_t coord, int size, bool align_corners)
+{
+    if (align_corners) {
+        // unnormalize coord from [-1, 1] to [0, size - 1]
+        return ((coord + 1.f) / 2) * (size - 1);
+    } else {
+        // unnormalize coord from [-1, 1] to [-0.5, size - 0.5]
+        return ((coord + 1.f) * size - 1) / 2;
+    }
+}
+
+// Clips coordinates to between 0 and clip_limit - 1
+template <typename scalar_t>
+static __forceinline__ __device__
+scalar_t clip_coordinates(scalar_t in, int clip_limit) {
+    return ::min(static_cast<scalar_t>(clip_limit - 1), ::max(in, static_cast<scalar_t>(0)));
+}
+
+// Reflects coordinates until they fall between low and high (inclusive).
+// The bounds are passed as twice their value so that half-integer values
+// can be represented as ints.
+template <typename scalar_t>
+static __forceinline__ __device__
+scalar_t reflect_coordinates(scalar_t in, int twice_low, int twice_high)
+{
+    if (twice_low == twice_high) { return static_cast<scalar_t>(0); }
+
+    scalar_t min = static_cast<scalar_t>(twice_low) / 2;
+    scalar_t span = static_cast<scalar_t>(twice_high - twice_low) / 2;
+    in = ::fabs(in - min);
+
+    // `fmod` returns same sign as `in`, which is positive after the `fabs` above.
+    scalar_t extra = ::fmod(in, span);
+    int flips = static_cast<int>(::floor(in / span));
+
+    return flips % 2 == 0 ? extra + min : span - extra + min;
+}
+
+template<typename scalar_t> 
+static __forceinline__ __device__ 
+scalar_t safe_downgrade_to_int_range(scalar_t x){
+    // -100.0 does not have special meaning. This is just to make sure 
+    // it's not within_bounds_2d or within_bounds_3d, and does not cause 
+    // undefined behavior. See #35506.  
+    if (x > INT_MAX-1 || x < INT_MIN || !::isfinite(static_cast<double>(x))) 
+        return static_cast<scalar_t>(-100.0); 
+    return x;
+}
+
+// Computes the pixel source index value for a grid coordinate
+template <typename scalar_t>
+static __forceinline__ __device__
+scalar_t grid_sampler_compute_source_index(scalar_t coord, int size,
+    GridSamplerPadding padding_mode, bool align_corners)
+{
+    coord = grid_sampler_unnormalize(coord, size, align_corners);
+    if (padding_mode == GridSamplerPadding::Border) {
+        // clip coordinates to image borders
+        coord = clip_coordinates(coord, size);
+    }
+    else if (padding_mode == GridSamplerPadding::Reflection) {
+        // reflect coordinates by image borders
+        if (align_corners) {
+        coord = reflect_coordinates(coord, 0, 2*(size - 1));
+        } else {
+        coord = reflect_coordinates(coord, -1, 2*size - 1);
+        }
+        // clip coordinates to image borders
+        coord = clip_coordinates(coord, size);
+    }
+
+    coord = safe_downgrade_to_int_range(coord); 
+    return coord;
+}
+
 template <typename scalar_t, typename index_t>
 __global__ void grid_sampler_2d_kernel(const index_t nthreads,
     TensorInfo<scalar_t, index_t> input, TensorInfo<scalar_t, index_t> grid, TensorInfo<scalar_t, index_t> output,
@@ -90,42 +293,59 @@ __global__ void grid_sampler_2d_kernel(const index_t nthreads,
     }
 }
 
-// No shape checking needed here. See # NOTE [ grid_sampler Native Functions ].
-Tensor grid_sampler_2d_cuda(const Tensor& input, const Tensor& grid,
-    int64_t interpolation_mode, int64_t padding_mode, bool align_corners)
+int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs,
+    void** outputs, void* workspace, cudaStream_t stream)
 {
-    auto N = input.size(0);
-    auto C = input.size(1);
-    auto H = grid.size(1);
-    auto W = grid.size(2);
-    auto output = at::empty({N, C, H, W}, input.options());
-    int64_t count = N * H * W;
+    auto target = inputs;
+    auto grid = inputs + m_stride;
 
-    if (count > 0) {
-        AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "grid_sampler_2d_cuda", [&] {
-            if (canUse32BitIndexMath(input) && canUse32BitIndexMath(grid) &&
-                    canUse32BitIndexMath(output)) {
-                grid_sampler_2d_kernel<scalar_t>
-                    <<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>>(
-                        static_cast<int>(count),
-                        getTensorInfo<scalar_t, int>(input),
-                        getTensorInfo<scalar_t, int>(grid),
-                        getTensorInfo<scalar_t, int>(output),
-                        static_cast<GridSamplerInterpolation>(interpolation_mode),
-                        static_cast<GridSamplerPadding>(padding_mode),
-                        align_corners);
-            } else {
-                grid_sampler_2d_kernel<scalar_t>
-                    <<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>>(
-                        count,
-                        getTensorInfo<scalar_t, int64_t>(input),
-                        getTensorInfo<scalar_t, int64_t>(grid),
-                        getTensorInfo<scalar_t, int64_t>(output),
-                        static_cast<GridSamplerInterpolation>(interpolation_mode),
-                        static_cast<GridSamplerPadding>(padding_mode),
-                        align_corners);
-            }
-        });
+    grid_sampler_2d_kernel<scalar_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(
+        count, inputs, grid, outputs, m_interpolation_mode, m_padding_mode, m_align_corners);
+
+    return cudaGetLastError();
+}
+
+GridSamplerPluginCreator::GridSamplerPluginCreator()
+{
+    mPluginAttributes.clear();
+
+    mFC.nbFields = mPluginAttributes.size();
+    mFC.fields = mPluginAttributes.data();
+}
+
+const char* GridSamplerPluginCreator::getPluginName() const
+{
+    return GRID_SAMPLER_PLUGIN_NAME;
+}
+
+const char* GridSamplerPluginCreator::getPluginVersion() const
+{
+    return GRID_SAMPLER_PLUGIN_VERSION;
+}
+
+const nvinfer1::PluginFieldCollection* GridSamplerPluginCreator::getFieldNames()
+{
+    return &mFC;
+}
+
+nvinfer1::IPluginV2IOExt* GridSamplerPluginCreator::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
+{
+    assert(!strcmp(name, getPluginName()));
+    const nvinfer1::PluginField* fields = fc->fields;
+
+    for (int i = 0; i < fc->nbFields; ++i)
+    {
+        const char* attrName = fields[i].name;
     }
-    return output;
+
+    GridSamplerPlugin* obj = new GridSamplerPlugin();
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
+}
+
+nvinfer1::IPluginV2IOExt* GridSamplerPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+{
+    GridSamplerPlugin* obj = new GridSamplerPlugin(serialData, serialLength);
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
 }
