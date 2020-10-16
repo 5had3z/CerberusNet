@@ -66,6 +66,8 @@ class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
     private:
         void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
 
+        nvinfer1::DataType m_datatype;
+
         int m_pad_size;
         int m_kernel_size;
         int m_max_displacement;
