@@ -80,9 +80,9 @@ scalar_t grid_sampler_compute_source_index(scalar_t coord, int size,
     else if (padding_mode == GridSampler::Padding::Reflection) {
         // reflect coordinates by image borders
         if (align_corners) {
-        coord = reflect_coordinates(coord, 0, 2*(size - 1));
+            coord = reflect_coordinates(coord, 0, 2*(size - 1));
         } else {
-        coord = reflect_coordinates(coord, -1, 2*size - 1);
+            coord = reflect_coordinates(coord, -1, 2*size - 1);
         }
         // clip coordinates to image borders
         coord = clip_coordinates(coord, size);
@@ -94,28 +94,29 @@ scalar_t grid_sampler_compute_source_index(scalar_t coord, int size,
 
 template <typename scalar_t, typename index_t>
 __global__ void grid_sampler_2d_kernel(const index_t nthreads,
-    TensorInfo<scalar_t, index_t> input,
-    TensorInfo<scalar_t, index_t> grid,
-    TensorInfo<scalar_t, index_t> output,
-    const Interpolation interpolation_mode, const Padding padding_mode, bool align_corners)
+    const scalar_t* __restrict__ input, index_t C, index_t inp_H, index_t inp_W
+    const scalar_t* __restrict__ grid,
+    scalar_t* output, index_t out_H, index_t out_W
+    const GridSampler::Interpolation interpolation_mode,
+    const GridSampler::Padding padding_mode, bool align_corners)
 {
-    index_t C = input.sizes[1];
-    index_t inp_H = input.sizes[2];
-    index_t inp_W = input.sizes[3];
-    index_t out_H = grid.sizes[1];
-    index_t out_W = grid.sizes[2];
-    index_t inp_sN = input.strides[0];
-    index_t inp_sC = input.strides[1];
-    index_t inp_sH = input.strides[2];
-    index_t inp_sW = input.strides[3];
-    index_t grid_sN = grid.strides[0];
-    index_t grid_sH = grid.strides[1];
-    index_t grid_sW = grid.strides[2];
-    index_t grid_sCoor = grid.strides[3];
-    index_t out_sN = output.strides[0];
-    index_t out_sC = output.strides[1];
-    index_t out_sH = output.strides[2];
-    index_t out_sW = output.strides[3];
+    // Input Strides
+    index_t inp_sN = C * inp_H * inp_W;
+    index_t inp_sC = inp_H * inp_W;
+    index_t inp_sH = inp_W;
+    index_t inp_sW = 1;
+
+    // Grid Strides
+    index_t grid_sN = inp_H * inp_W * 2;
+    index_t grid_sH = inp_W * 2;
+    index_t grid_sW = 2;
+    index_t grid_sCoor = 1;
+
+    // Output Strides
+    index_t out_sN = C * out_H * out_W;
+    index_t out_sC = out_H * out_W;
+    index_t out_sH = out_W;
+    index_t out_sW = 1;
   
     CUDA_KERNEL_LOOP_TYPE(index, nthreads, index_t) {
         const index_t w = index % out_W;
@@ -184,14 +185,26 @@ __global__ void grid_sampler_2d_kernel(const index_t nthreads,
     }
 }
 
-int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs,
-    void** outputs, void* workspace, cudaStream_t stream)
+int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
 {
-    int64_t count = batchSize * m_input_h * m_input_w;
+    const int64_t count = batchSize * m_input_dims.d[1] * m_input_dims.d[2];
 
-    grid_sampler_2d_kernel<scalar_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-        reinterpret_cast<const float*>(inputs[0]), reinterpret_cast<const float*>(inputs[1]),
-        reinterpret_cast<float*>(outputs[0]), m_interpolation_mode, m_padding_mode, m_align_corners);
+    if (m_datatype == nvinfer1::DataType::kFLOAT)
+    {
+        grid_sampler_2d_kernel<float, size_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+            reinterpret_cast<const float*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2]
+            reinterpret_cast<const float*>(inputs[1]),
+            reinterpret_cast<float*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2]
+            m_interpolation_mode, m_padding_mode, m_align_corners);
+    }
+    else if (m_datatype == nvinfer1::DataType::kHALF)
+    {
+        grid_sampler_2d_kernel<__half, size_t><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+            reinterpret_cast<const __half*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2]
+            reinterpret_cast<const __half*>(inputs[1]),
+            reinterpret_cast<__half*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2]
+            m_interpolation_mode, m_padding_mode, m_align_corners);
+    }
 
     return cudaGetLastError();
 }

@@ -158,13 +158,13 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
 // Return true if output tensor is broadcast across a batch.
 bool GridSamplerPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
 {
-    return false;
+    return true;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
 bool GridSamplerPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
 {
-    return false;
+    return true;
 }
 
 void GridSamplerPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput)
