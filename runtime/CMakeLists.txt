@@ -35,20 +35,23 @@ set(OpenCV_LIBS
     opencv_features2d)
 
 # If OpenCV CUDA Support Has been Compiled
-if (EXISTS ${OPENCV_CUDA})
-set(OpenCV_LIBS
-    ${OpenCV_LIBS}
-    opencv_cudev
-    opencv_cudawarping
-    opencv_cudaimgproc
-    opencv_cudaarithm)
-endif()
+get_directory_property( DirDefs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITIONS )
+foreach( d ${DirDefs} )
+    if(${d} MATCHES "OPENCV_CUDA")
+      set(OpenCV_LIBS
+        ${OpenCV_LIBS}
+        opencv_cudev
+        opencv_cudawarping
+        opencv_cudaimgproc
+        opencv_cudaarithm)
+    endif()
+endforeach()
 
 if(NOT EXISTS ${OPENCV_ROOT})
-  find_package(OpenCV REQUIRED COMPONENTS ${OpenCV_LIBS})
+    find_package(OpenCV REQUIRED COMPONENTS ${OpenCV_LIBS})
 else()
-  set(OpenCV_INCLUDE_DIR ${OPENCV_ROOT}/include)
-  set(OpenCV_LIBS_DIR ${OPENCV_ROOT}/lib)
+    set(OpenCV_INCLUDE_DIR ${OPENCV_ROOT}/include)
+    set(OpenCV_LIBS_DIR ${OPENCV_ROOT}/lib)
 endif()
 
 # TensorRT Management
@@ -62,10 +65,10 @@ find_library(TRT_LIBRARY_INFER_PARSER nvparsers HINTS ${TRT_SDK_ROOT} PATH_SUFFI
 find_library(TRT_LIBRARY_INFER_ONNX nvonnxparser HINTS ${TRT_SDK_ROOT} PATH_SUFFIXES lib lib64 lib/x64)
 find_library(TRT_LIBRARY_INFER_PLUGIN nvinfer_plugin HINTS ${TRT_SDK_ROOT} PATH_SUFFIXES lib lib64 lib/x64)
 if((${TRT_LIBRARY_INFER} MATCHES "TRT_LIBRARY_INFER-NOTFOUND") OR (${TRT_LIBRARY_INFER_PLUGIN} MATCHES "TRT_LIBRARY_INFER_PLUGIN-NOTFOUND"))
-  MESSAGE(FATAL_ERROR "-- Unable to find TensorRT libs. Please set path using -DTRT_SDK_ROOT")
+    MESSAGE(FATAL_ERROR "-- Unable to find TensorRT libs. Please set path using -DTRT_SDK_ROOT")
 else()
-  set(TRT_LIBRARY ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN} ${TRT_LIBRARY_INFER_PARSER} ${TRT_LIBRARY_INFER_ONNX})
-  MESSAGE(STATUS "Found TensorRT libs at ${TRT_LIBRARY}")
+    set(TRT_LIBRARY ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN} ${TRT_LIBRARY_INFER_PARSER} ${TRT_LIBRARY_INFER_ONNX})
+    MESSAGE(STATUS "Found TensorRT libs at ${TRT_LIBRARY}")
 endif()
 
 #   VisionWorks, VPI and NPP Management
@@ -85,25 +88,25 @@ if (NOT ${vpi_FOUND})
 endif()
 
 # Add sub libs as subdir
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/lib ${PROJECT_BINARY_DIR}/lib)
+add_subdirectory(${PROJECT_SOURCE_DIR}/nvx_demo ${PROJECT_BINARY_DIR}/lib)
 
 include_directories(
-  ${CUDA_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIR} 
-  ${TRT_INCLUDE_DIR}
-  ${VisionWorks_INCLUDE_DIRS}
-  ${PROJECT_SOURCE_DIR}/src/lib
+    ${CUDA_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIR} 
+    ${TRT_INCLUDE_DIR}
+    ${VisionWorks_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/src/lib
 )
 
 link_directories (
-  ${OpenCV_LIBS_DIR} 
-  ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+    ${OpenCV_LIBS_DIR} 
+    ${CUDA_TOOLKIT_ROOT_DIR}/lib64
 )
 
-add_executable (${PROJECT_NAME} src/main.cpp)
+add_executable (nvx_demo nvx_demo/main.cpp)
 
 target_link_libraries (
-  ${PROJECT_NAME}
-  nvx_demo_lib
-  ${OpenCV_LIBS}
+    nvx_demo
+    nvx_demo_lib
+    ${OpenCV_LIBS}
 )

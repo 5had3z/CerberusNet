@@ -1,4 +1,4 @@
-#include "lib/nvx_example/nvx_pipeline.hpp"
+#include "src/nvx_pipeline.hpp"
 
 #include <iostream>
 #include <opencv2/opencv.hpp>
