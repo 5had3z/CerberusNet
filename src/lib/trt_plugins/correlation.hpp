@@ -73,8 +73,8 @@ class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
         int m_stride2;
         int m_corr_type_multiply;
 
-        nvinfer1::DimsCHW m_input_dims;
-        nvinfer1::DimsCHW m_output_dims;
+        nvinfer1::Dims m_input_dims;
+        nvinfer1::Dims m_output_dims;
 
         void* m_rInput1;
         void* m_rInput2;

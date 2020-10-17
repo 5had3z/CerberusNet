@@ -36,9 +36,9 @@ size_t CorrelationPlugin::getSerializationSize() const
 
 int CorrelationPlugin::initialize()
 {
-	const int paddedInputHeight = m_input_dims.h() + 2 * m_pad_size;
-    const int paddedInputWidth  = m_input_dims.w() + 2 * m_pad_size;
-    const int tensor_volume = paddedInputHeight * paddedInputWidth * m_input_dims.c();
+	const int paddedInputHeight = m_input_dims.d[1] + 2 * m_pad_size;
+    const int paddedInputWidth  = m_input_dims.d[2] + 2 * m_pad_size;
+    const int tensor_volume = paddedInputHeight * paddedInputWidth * m_input_dims.d[0];
 
     size_t elem_size = 0;
     if (m_datatype == nvinfer1::DataType::kFLOAT) { elem_size = sizeof(float); }
@@ -60,9 +60,14 @@ bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
 {
     // Two inputs and one output
     assert(nbInputs == 2 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
-    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kNCHW;
+    // Should be a bog standard tensor
+    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    // Only kFLOAT and kHALF supported
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF);
+    // Input and output has same type
     condition &= inOut[pos].type == inOut[nbInputs].type;
+    // Both inputs have same dimensions
+    condition &= inOut[0].dims.d == inOut[1].dims.d;
     return condition;
 }
 
@@ -105,6 +110,13 @@ bool CorrelationPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
 
 void CorrelationPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput)
 {
+    assert(in && nbInput == 2);
+    assert(out && nbOutput == 1);
+    assert(in[0].type == in[1].type && in[0].type == out[0].type);
+
+    assert(in[0].dims.d == in[1].dims.d);
+
+    m_input_dims = in[0].dims;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
