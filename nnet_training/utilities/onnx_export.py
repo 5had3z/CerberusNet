@@ -19,7 +19,7 @@ def correlation_op(g, input1, input2, pad_size, kernel_size,
                 kernel_size, max_displacement, stride1, stride2, corr_multiply)
 
 def grid_sample_op(g, input1, input2, mode, padding_mode, align_corners):
-    return g.op("cerberus::grid_sample", input1, input2, mode, padding_mode, align_corners)
+    return g.op("torch::grid_sampler", input1, input2, mode, padding_mode, align_corners)
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -35,13 +35,12 @@ if __name__ == "__main__":
 
     print("Loading Model")
     model = get_model(cfg.model).to(device)
-    model.eval()
     modelweights = experiment_path / (str(model)+"_latest.pth")
     checkpoint = torch.load(modelweights, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
 
     torch.onnx.register_custom_op_symbolic('cerberus::correlation', correlation_op, 11)
-    # torch.onnx.register_custom_op_symbolic('torch::grid_sampler', grid_sample_op, 11)
+    torch.onnx.register_custom_op_symbolic('::grid_sampler', grid_sample_op, 11)
 
     dim_h = cfg.dataset.augmentations.output_size[0]
     dim_w = cfg.dataset.augmentations.output_size[1]

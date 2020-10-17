@@ -177,7 +177,7 @@ class OCRNetSFD(nn.Module):
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
                                      mode='bilinear', align_corners=True)
-                # im2_warp = flow_warp(im2, flow)
+                im2_warp = flow_warp(im2, flow)
 
             # correlation
             out_corr = self.corr(im1, im2_warp)
@@ -216,9 +216,11 @@ class OCRNetSFD(nn.Module):
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
 
-        if 'l_seq' in kwargs or isinstance(consistency, torch.Tensor):
-            kwargs['l_seq'] = consistency
+        if isinstance(consistency, torch.Tensor):
+            kwargs['l_seq'] = consistency.clone().detach()
             consistency = False
+
+        if 'l_seq' in kwargs:
             _, im2_pyr = self.backbone(kwargs['l_seq'])
 
             # Flow pass with image 1

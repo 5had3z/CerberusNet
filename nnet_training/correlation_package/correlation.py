@@ -68,10 +68,10 @@ class Correlation(torch.nn.Module):
         self.corr_multiply = corr_multiply
 
     def forward(self, input1, input2):
-        # if self.train():
-        #     return CorrelationFunction.apply(
-        #         input1, input2, self.pad_size, self.kernel_size,
-        #         self.max_displacement, self.stride1, self.stride2, self.corr_multiply)
+        if self.training:
+            return CorrelationFunction.apply(
+                input1, input2, self.pad_size, self.kernel_size,
+                self.max_displacement, self.stride1, self.stride2, self.corr_multiply)
 
         return torch.ops.cerberus.correlation(
             input1, input2, self.pad_size, self.kernel_size,
