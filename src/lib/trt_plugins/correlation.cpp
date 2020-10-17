@@ -26,12 +26,49 @@ CorrelationPlugin::CorrelationPlugin(const void* data, size_t length)
 void CorrelationPlugin::serialize(void* buffer) const
 {
     char* d = static_cast<char*>(buffer), *a = d;
+
+    write(d, m_input_dims.nbDims);
+    assert(m_input_dims.nbDims <= m_input_dims.MAX_DIMS);
+    for (int i = 0; i < m_input_dims.nbDims; ++i)
+    {
+        write(d, m_input_dims.d[i]);
+    }
+
+    write(d, m_output_dims.nbDims);
+    assert(m_output_dims.nbDims <= m_output_dims.MAX_DIMS);
+    for (int i = 0; i < m_output_dims.nbDims; ++i)
+    {
+        write(d, m_output_dims.d[i]);
+    }
+
+    write(d, static_cast<int>(m_datatype));
+    write(d, static_cast<int>(m_pad_size));
+    write(d, static_cast<int>(m_kernel_size));
+    write(d, static_cast<int>(m_max_displacement));
+    write(d, static_cast<int>(m_stride1));
+    write(d, static_cast<int>(m_stride2));
+    write(d, static_cast<int>(m_corr_type_multiply));
+
     assert(d == a + getSerializationSize());
 }
 
 size_t CorrelationPlugin::getSerializationSize() const
 {
-    return 0;
+    size_t serializationSize = 0;
+
+    serializationSize += sizeof(m_input_dims.nbDims);
+    serializationSize += sizeof(m_input_dims.d[0]) * m_input_dims.nbDims;
+    serializationSize += sizeof(m_output_dims.nbDims);
+    serializationSize += sizeof(m_output_dims.d[0]) * m_output_dims.nbDims;
+    serializationSize += sizeof(static_cast<int>(m_datatype));
+    serializationSize += sizeof(static_cast<int>(m_pad_size));
+    serializationSize += sizeof(static_cast<int>(m_kernel_size));
+    serializationSize += sizeof(static_cast<int>(m_max_displacement));
+    serializationSize += sizeof(static_cast<int>(m_stride1));
+    serializationSize += sizeof(static_cast<int>(m_stride2));
+    serializationSize += sizeof(static_cast<int>(m_corr_type_multiply));
+
+    return serializationSize;
 }
 
 int CorrelationPlugin::initialize()
@@ -116,7 +153,9 @@ void CorrelationPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, in
 
     assert(in[0].dims.d == in[1].dims.d);
 
+    m_datatype = in[0].type;
     m_input_dims = in[0].dims;
+    m_output_dims = out[0].dims;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
