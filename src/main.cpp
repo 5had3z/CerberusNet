@@ -1,6 +1,7 @@
+#include "lib/nvx_example/nvx_pipeline.hpp"
+
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include "lib/nvx_pipeline.hpp"
 #include <chrono>
 #include <thread>
 

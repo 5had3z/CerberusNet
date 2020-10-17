@@ -104,6 +104,6 @@ add_executable (${PROJECT_NAME} src/main.cpp)
 
 target_link_libraries (
   ${PROJECT_NAME}
-  ${PROJECT_NAME}_lib 
+  nvx_demo_lib
   ${OpenCV_LIBS}
 )

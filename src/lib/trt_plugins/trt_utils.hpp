@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <cassert>
+#include <limits>
 
 #include <cuda_runtime.h>
 
