@@ -56,6 +56,15 @@ void CorrelationPlugin::terminate()
 {
 }
 
+bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override
+{
+    assert(nbInputs == 2 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
+    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    condition &= inOut[pos].type != nvinfer1::DataType::kINT32;
+    condition &= inOut[pos].type == inOut[0].type;
+    return inOut[pos].format == nvinfer1::TensorFormat::kLINEAR && inOut[pos].type == nvinfer1::DataType::kFLOAT;
+}
+
 nvinfer1::Dims CorrelationPlugin::getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims)
 {
     //output the result to channel
@@ -261,7 +270,7 @@ int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** 
     return cudaGetLastError();
 }
 
-CorrelationPlugin::CorrelationPlugin()
+CorrelationPluginCreator::CorrelationPluginCreator()
 {
     mPluginAttributes.clear();
 
@@ -269,22 +278,22 @@ CorrelationPlugin::CorrelationPlugin()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* CorrelationPlugin::getPluginName() const
+const char* CorrelationPluginCreator::getPluginName() const
 {
     return CORRELATION_PLUGIN_NAME;
 }
 
-const char* CorrelationPlugin::getPluginVersion() const
+const char* CorrelationPluginCreator::getPluginVersion() const
 {
     return CORRELATION_PLUGIN_VERSION;
 }
 
-const nvinfer1::PluginFieldCollection* CorrelationPlugin::getFieldNames()
+const nvinfer1::PluginFieldCollection* CorrelationPluginCreator::getFieldNames()
 {
     return &mFC;
 }
 
-nvinfer1::IPluginV2IOExt* CorrelationPlugin::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
+nvinfer1::IPluginV2IOExt* CorrelationPluginCreator::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
 {
     assert(!strcmp(name, getPluginName()));
     const nvinfer1::PluginField* fields = fc->fields;
@@ -299,7 +308,7 @@ nvinfer1::IPluginV2IOExt* CorrelationPlugin::createPlugin(const char* name, cons
     return obj;
 }
 
-nvinfer1::IPluginV2IOExt* CorrelationPlugin::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+nvinfer1::IPluginV2IOExt* CorrelationPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
     CorrelationPlugin* obj = new CorrelationPlugin(serialData, serialLength);
     obj->setPluginNamespace(mNamespace.c_str());

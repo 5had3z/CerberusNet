@@ -35,9 +35,7 @@ class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
 
         virtual void serialize(void* buffer) const override;
 
-        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override {
-            return inOut[pos].format == nvinfer1::TensorFormat::kLINEAR && inOut[pos].type == nvinfer1::DataType::kFLOAT;
-        }
+        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override;
 
         const char* getPluginType() const override;
 
