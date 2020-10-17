@@ -1,5 +1,6 @@
 #include "correlation.cuh"
 #include "trt_utils.hpp"
+#include "cuda_fp16.h"
 
 #define CUDA_NUM_THREADS 1024
 #define THREADS_PER_BLOCK 32

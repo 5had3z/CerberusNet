@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
-project(stereo_image_processing LANGUAGES CXX VERSION 0.01)
+project(monash_fyp LANGUAGES CXX VERSION 0.01)
 
 # MANUALLY SET PATHS IF REQUIRED, example: "$ENV{HOME}/OpenCV-3.4.6"
 # set(OPENCV_ROOT "")
@@ -87,26 +87,6 @@ if (NOT ${vpi_FOUND})
     MESSAGE(FATAL_ERROR "-- Unable to find Vision Programming Interface (VPI). Make sure its been downloaded via nVIDIA SDK Manager")
 endif()
 
-# Add sub libs as subdir
-add_subdirectory(${PROJECT_SOURCE_DIR}/nvx_demo ${PROJECT_BINARY_DIR}/lib)
-
-include_directories(
-    ${CUDA_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIR} 
-    ${TRT_INCLUDE_DIR}
-    ${VisionWorks_INCLUDE_DIRS}
-    ${PROJECT_SOURCE_DIR}/src/lib
-)
-
-link_directories (
-    ${OpenCV_LIBS_DIR} 
-    ${CUDA_TOOLKIT_ROOT_DIR}/lib64
-)
-
-add_executable (nvx_demo nvx_demo/main.cpp)
-
-target_link_libraries (
-    nvx_demo
-    nvx_demo_lib
-    ${OpenCV_LIBS}
-)
+# Add sub libs as subdirs
+add_subdirectory(${PROJECT_SOURCE_DIR}/nvx_demo ${PROJECT_BINARY_DIR}/nvx_demo)
+add_subdirectory(${PROJECT_SOURCE_DIR}/cerberus_net ${PROJECT_BINARY_DIR}/cerberus_demo)

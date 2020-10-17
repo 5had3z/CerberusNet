@@ -26,3 +26,11 @@ target_link_libraries( nvx_demo_lib
     ${OpenCV_LIBS}
     ${VisionWorks_LIBRARIES}
 )
+
+add_executable (nvx_demo main.cpp)
+
+target_link_libraries (
+    nvx_demo
+    nvx_demo_lib
+    ${OpenCV_LIBS}
+)
