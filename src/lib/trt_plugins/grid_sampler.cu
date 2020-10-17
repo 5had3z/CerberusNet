@@ -70,14 +70,14 @@ scalar_t safe_downgrade_to_int_range(scalar_t x){
 template <typename scalar_t>
 static __forceinline__ __device__
 scalar_t grid_sampler_compute_source_index(scalar_t coord, int size,
-    GridSamplerPadding padding_mode, bool align_corners)
+    GridSampler::Padding padding_mode, bool align_corners)
 {
     coord = grid_sampler_unnormalize(coord, size, align_corners);
-    if (padding_mode == GridSamplerPadding::Border) {
+    if (padding_mode == GridSampler::Padding::Border) {
         // clip coordinates to image borders
         coord = clip_coordinates(coord, size);
     }
-    else if (padding_mode == GridSamplerPadding::Reflection) {
+    else if (padding_mode == GridSampler::Padding::Reflection) {
         // reflect coordinates by image borders
         if (align_corners) {
         coord = reflect_coordinates(coord, 0, 2*(size - 1));

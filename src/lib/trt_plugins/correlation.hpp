@@ -27,7 +27,7 @@ class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
 
         void terminate() override;
 
-        virtual size_t getWorkspaceSize(int maxBatchSize) const override { return 0;}
+        virtual size_t getWorkspaceSize(int maxBatchSize) const override { return 0; }
 
         virtual int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
 

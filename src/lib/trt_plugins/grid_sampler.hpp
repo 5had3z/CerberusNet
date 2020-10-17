@@ -20,7 +20,7 @@ using GridSampler::Padding;
 class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 {
     public:
-        GridSamplerPlugin();
+        GridSamplerPlugin(const nvinfer1::PluginFieldCollection& fc);
 
         GridSamplerPlugin(const void* data, size_t length);
 
@@ -45,9 +45,7 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 
         virtual void serialize(void* buffer) const override;
 
-        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override {
-            return inOut[pos].format == nvinfer1::TensorFormat::kLINEAR && inOut[pos].type == nvinfer1::DataType::kFLOAT;
-        }
+        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override;
 
         const char* getPluginType() const override;
 
@@ -74,14 +72,12 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
         void detachFromContext() override;
 
     private:
-        void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
-
         bool m_align_corners;
-        int m_input_h;
-        int m_input_w;
-        int m_input_c;
-        int64_t m_interpolation_mode;
-        int64_t m_padding_mode;
+        GridSampler::Interpolation m_interpolation_mode;
+        GridSampler::Padding m_padding_mode;
+        nvinfer1::Dims m_input_dims;
+        nvinfer1::Dims m_output_dims;
+        nvinfer1::DataType m_datatype;
         const char* mPluginNamespace;
 };
 
