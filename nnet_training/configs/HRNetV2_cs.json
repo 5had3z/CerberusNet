@@ -1,13 +1,13 @@
 {
-    "note" : "KITTI testing depth only performance",
+    "note" : "Cityscapes testing depth with Scale Invariant Loss, increased LR and lambda 0.5",
     "dataset" : {
-        "type" : "Kitti",
-        "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
+        "type" : "Cityscapes",
+        "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
         "batch_size" : 2,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "output_size" : [864, 256],
+            "output_size" : [512, 256],
             "rand_brightness" : 20,
             "rand_rotation" : 5,
             "disparity_out" : false,
@@ -15,14 +15,20 @@
                 "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
             }
         },
-        "train_ratio" : 0.8,
-        "objectives" : ["disparity"]
+        "train_subdirs" : {
+            "images" : "leftImg8bit/train",
+            "disparity" : "disparity/train"
+        },
+        "val_subdirs" : {
+            "images" : "leftImg8bit/val",
+            "disparity" : "disparity/val"
+        }
     },
     "loss_functions" : [
         {
             "type" :"depth",
-            "function" : "InvHuberLoss",
-            "args" : {"weight" : 0.5}
+            "function" : "ScaleInvariantError",
+            "args" : {"lmda" : 0.5}
         }
     ],
     "model" : {
@@ -68,12 +74,6 @@
                     "FUSE_METHOD" : "SUM"
                 }
             },
-            "depth_est_network" : {
-                "type" : "DepthEstimator1",
-                "args" : {
-                    "pre_out_ch" : 32
-                }
-            },
             "correlation_args" : {
                 "pad_size" : 4,
                 "max_displacement" : 4,
@@ -83,7 +83,7 @@
                 "corr_multiply" : 1
             },
             "flow_est_network" : {
-                "type" : "FlowEstimatorLite",
+                "type" : "FlowEstimatorDense",
                 "args" : {}
             },
             "context_network" : {
@@ -104,7 +104,7 @@
         }
     },
     "lr_scheduler" : {
-        "base_lr" : 1e-4, "mode" : "constant", "power" : 0.9
+        "base_lr" : 1e-3, "mode" : "constant", "power" : 0.9
     },
     "logger_cfg" : {
         "depth" : "Batch_RMSE_Linear"

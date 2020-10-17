@@ -91,17 +91,18 @@ def parse_expeiments(root_dir: Path):
 if __name__ == "__main__":
     ROOT_DIR = Path.cwd() / "torch_models"
     parse_expeiments(ROOT_DIR)
-    # PARSER = argparse.ArgumentParser()
-    # PARSER.add_argument('-e', '--experiments', nargs='+',
-    #                     default=['b81f8227a42faffbd2ba1c01726fd56f',
-    #                              '7dee07cd53414f690cd11a766898f4ec'])
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('-e', '--experiments', nargs='+',
+                        default=['ce183a2856d929402cecc0478a4dbbf2',
+                                 '4b81d3c0232c4a432a567203a60da796',
+                                 'c99dd1d1b1a513b2092906749d8857ef'])
 
-    # EXPER_LIST = []
-    # for exper in PARSER.parse_args().experiments:
-    #     EXPER_LIST.append({
-    #         "name" : exper,
-    #         "path" : ROOT_DIR / exper
-    #     })
+    EXPER_LIST = []
+    for exper in PARSER.parse_args().experiments:
+        EXPER_LIST.append({
+            "name" : exper,
+            "path" : ROOT_DIR / exper
+        })
 
-    # compare_experiments(EXPER_LIST)
+    compare_experiments(EXPER_LIST)
     # segmentation_analysis(EXPER_LIST)
