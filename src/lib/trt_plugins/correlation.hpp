@@ -10,7 +10,7 @@
 class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
 {
     public:
-        CorrelationPlugin();
+        CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc);
 
         CorrelationPlugin(const void* data, size_t length);
 
@@ -62,8 +62,6 @@ class CorrelationPlugin: public nvinfer1::IPluginV2IOExt
         void detachFromContext() override;
 
     private:
-        void forwardGpu(const float* const* inputs, float* output, cudaStream_t stream, int batchSize = 1);
-
         nvinfer1::DataType m_datatype;
 
         int m_pad_size;

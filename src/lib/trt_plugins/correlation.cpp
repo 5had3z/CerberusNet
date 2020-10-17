@@ -13,13 +13,70 @@ namespace
 nvinfer1::PluginFieldCollection CorrelationPluginCreator::mFC{};
 std::vector<nvinfer1::PluginField> CorrelationPluginCreator::mPluginAttributes;
 
-CorrelationPlugin::CorrelationPlugin()
+CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
 {
+    for (int i = 0; i < fc.nbFields; ++i)
+    {
+        const char* attrName = fc.fields[i].name;
+        if (!strcmp(attrName, "pad_size"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_pad_size = *(static_cast<const int*>(fc.fields[i].data));
+        }
+        else if (!strcmp(attrName, "kernel_size"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_kernel_size = *(static_cast<const int*>(fc.fields[i].data));
+        }
+        else if (!strcmp(attrName, "max_displacement"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_max_displacement = *(static_cast<const int*>(fc.fields[i].data));
+        }
+        else if (!strcmp(attrName, "stride1"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_stride1 = *(static_cast<const int*>(fc.fields[i].data));
+        }
+        else if (!strcmp(attrName, "stride2"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_stride2 = *(static_cast<const int*>(fc.fields[i].data));
+        }
+        else if (!strcmp(attrName, "corr_type_multiply"))
+        {
+            assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
+            m_corr_type_multiply = *(static_cast<const int*>(fc.fields[i].data));
+        }
+    }
 }
 
 CorrelationPlugin::CorrelationPlugin(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char *>(data), *a = d;
+
+    read(d, m_input_dims.nbDims);
+    assert(m_input_dims.nbDims <= m_input_dims.MAX_DIMS);
+    for (int i = 0; i < m_input_dims.nbDims; ++i)
+    {
+        read(d, m_input_dims.d[i]);
+    }
+
+    read(d, m_output_dims.nbDims);
+    assert(m_output_dims.nbDims <= m_output_dims.MAX_DIMS);
+    for (int i = 0; i < m_output_dims.nbDims; ++i)
+    {
+        read(d, m_output_dims.d[i]);
+    }
+
+    read(d, m_datatype);
+    read(d, m_pad_size);
+    read(d, m_kernel_size);
+    read(d, m_max_displacement);
+    read(d, m_stride1);
+    read(d, m_stride2);
+    read(d, m_corr_type_multiply);
+
     assert(d == a + length);
 }
 
@@ -186,7 +243,7 @@ void CorrelationPlugin::destroy()
 // Clone the plugin
 nvinfer1::IPluginV2IOExt* CorrelationPlugin::clone() const
 {
-    CorrelationPlugin *p = new CorrelationPlugin();
+    CorrelationPlugin *p = new CorrelationPlugin(*this);
     p->setPluginNamespace(mPluginNamespace);
     return p;
 }
@@ -217,15 +274,9 @@ const nvinfer1::PluginFieldCollection* CorrelationPluginCreator::getFieldNames()
 nvinfer1::IPluginV2IOExt* CorrelationPluginCreator::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
 {
     assert(!strcmp(name, getPluginName()));
-    const nvinfer1::PluginField* fields = fc->fields;
-
-    for (int i = 0; i < fc->nbFields; ++i)
-    {
-        const char* attrName = fields[i].name;
-    }
-
-    CorrelationPlugin* obj = new CorrelationPlugin();
+    CorrelationPlugin* obj = new CorrelationPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
+    mFC = *fc;
     return obj;
 }
 
