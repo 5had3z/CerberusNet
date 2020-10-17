@@ -97,22 +97,22 @@ int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** 
 	const dim3 reshape_grid(batchSize, m_inputH, m_inputW);
     const dim3 corr_grid(batchSize, m_outputH, m_outputW);
     
-    const int pInputWidth = inputWidth + 2 * m_pad_size;
-    const int pInputHeight = inputHeight + 2 * m_pad_size;
+    const int pInputWidth = m_input_dims.w() + 2 * m_pad_size;
+    const int pInputHeight = m_input_dims.h() + 2 * m_pad_size;
 
     if (m_datatype == nvinfer1::DataType::kFLOAT)
     {
         NV_CUDA_CHECK(channels_first<float> <<<reshape_grid, threadsPerBlock, 0, stream>>>(
             reinterpret_cast<const float*>(inputs[0]), reinterpret_cast<float*>(m_rInput1),
-            m_inputC, m_inputH, m_inputW, m_pad_size));
+            m_input_dims.c(), m_input_dims.h(), m_input_dims.w(), m_pad_size));
 
         NV_CUDA_CHECK(channels_first<float> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
             reinterpret_cast<const float*>(inputs[1]), reinterpret_cast<float*>(m_rInput2),
-            m_inputC, m_inputH, m_inputW, m_pad_size));
+            m_input_dims.c(), m_input_dims.h(), m_input_dims.w(), m_pad_size));
 
         NV_CUDA_CHECK(correlation_forward<float> <<<corr_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<float*>(outputs[0]), m_outputC, m_outputH, m_outputW,
-            reinterpret_cast<const float*>(m_rInput1), m_inputC, pInputHeight, pInputWidth,
+            reinterpret_cast<float*>(outputs[0]), m_output_dims.c(), m_output_dims.h(), m_output_dims.w(),
+            reinterpret_cast<const float*>(m_rInput1), m_input_dims.c(), pInputHeight, pInputWidth,
             reinterpret_cast<const float*>(m_rInput2),
             m_kernel_size, m_max_displacement, m_stride1, m_stride2));
     }
@@ -120,15 +120,15 @@ int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** 
     {
         NV_CUDA_CHECK(channels_first<__half> <<<reshape_grid, threadsPerBlock, 0, stream>>>(
             reinterpret_cast<const __half*>(inputs[0]), reinterpret_cast<__half*>(m_rInput1),
-            m_inputC, m_inputH, m_inputW, m_pad_size));
+            m_input_dims.c(), m_input_dims.h(), m_input_dims.w(), m_pad_size));
 
         NV_CUDA_CHECK(channels_first<__half> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
             reinterpret_cast<const __half*>(inputs[1]), reinterpret_cast<__half*>(m_rInput2),
-            m_inputC, m_inputH, m_inputW, m_pad_size));
+            m_input_dims.c(), m_input_dims.h(), m_input_dims.w(), m_pad_size));
 
         NV_CUDA_CHECK(correlation_forward<__half> <<<corr_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<__half*>(outputs[0]), m_outputC, m_outputH, m_outputW,
-            reinterpret_cast<const __half*>(m_rInput1), m_inputC, pInputHeight, pInputWidth,
+            reinterpret_cast<__half*>(outputs[0]), m_output_dims.c(), m_output_dims.h(), m_output_dims.w(),
+            reinterpret_cast<const __half*>(m_rInput1), m_input_dims.c(), pInputHeight, pInputWidth,
             reinterpret_cast<const __half*>(m_rInput2),
             m_kernel_size, m_max_displacement, m_stride1, m_stride2));
     }

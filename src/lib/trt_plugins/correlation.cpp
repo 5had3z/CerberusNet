@@ -36,9 +36,9 @@ size_t CorrelationPlugin::getSerializationSize() const
 
 int CorrelationPlugin::initialize()
 {
-	const int paddedInputHeight = m_inputH + 2 * m_pad_size;
-    const int paddedInputWidth  = m_inputW + 2 * m_pad_size;
-    const int tensor_volume = paddedInputHeight * paddedInputWidth * m_inputC;
+	const int paddedInputHeight = m_input_dims.h() + 2 * m_pad_size;
+    const int paddedInputWidth  = m_input_dims.w() + 2 * m_pad_size;
+    const int tensor_volume = paddedInputHeight * paddedInputWidth * m_input_dims.c();
 
     size_t elem_size = 0;
     if (m_datatype == nvinfer1::DataType::kFLOAT) { elem_size = sizeof(float); }
@@ -52,22 +52,25 @@ int CorrelationPlugin::initialize()
 
 void CorrelationPlugin::terminate()
 {
+    NV_CUDA_CHECK(cudaFree(&m_rInput1));
+    NV_CUDA_CHECK(cudaFree(&m_rInput2));
 }
 
 bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const
 {
+    // Two inputs and one output
     assert(nbInputs == 2 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
-    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
-    condition &= inOut[pos].type != nvinfer1::DataType::kINT32;
-    condition &= inOut[pos].type == inOut[0].type;
-    return inOut[pos].format == nvinfer1::TensorFormat::kLINEAR && inOut[pos].type == nvinfer1::DataType::kFLOAT;
+    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kNCHW;
+    condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF);
+    condition &= inOut[pos].type == inOut[nbInputs].type;
+    return condition;
 }
 
 nvinfer1::Dims CorrelationPlugin::getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims)
 {
-    //output the result to channel
+    // Only one output and there are two inputs
     assert(index == 0 && nbInputDims == 2 && inputs[0].nbDims == 3 && inputs[1].nbDims == 3);
-    return nvinfer1::Dims3(m_outputC, m_outputH, m_outputW);
+    return m_output_dims;
 }
 
 void CorrelationPlugin::setPluginNamespace(const char* pluginNamespace)
@@ -83,6 +86,8 @@ const char* CorrelationPlugin::getPluginNamespace() const
 // Return the DataType of the plugin output at the requested index
 nvinfer1::DataType CorrelationPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
 {
+    // Only one output and there are two inputs, all of which should have the same datatype
+    assert(index == 0 && nbInputs == 2 && inputTypes[0] == m_datatype && inputTypes[1] == m_datatype);
     return m_datatype;
 }
 
