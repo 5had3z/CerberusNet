@@ -201,9 +201,9 @@ class OCRNetSFD(nn.Module):
 
     def forward(self, l_img: torch.Tensor, consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         """
-        Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs.\n
-        During onnx export, consistency becomes the sequential image argument because onnx export is not
-        compatible with keyword aruments.
+        Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs.
+        \nDuring onnx export, consistency becomes the sequential image argument because onnx
+        export is not compatible with keyword aruments.
         """
         forward = {}
 
@@ -216,9 +216,11 @@ class OCRNetSFD(nn.Module):
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
 
+        onnx_exp = False
         if isinstance(consistency, torch.Tensor):
             kwargs['l_seq'] = consistency.clone().detach()
             consistency = False
+            onnx_exp = True
 
         if 'l_seq' in kwargs:
             _, im2_pyr = self.backbone(kwargs['l_seq'])
@@ -234,5 +236,9 @@ class OCRNetSFD(nn.Module):
         forward['seg'] = scale_as(forward['seg'], l_img)
         forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
         forward['depth'] = scale_as(forward['depth'], l_img)
+
+        if onnx_exp:
+            del forward['seg_aux']
+            forward['flow'] = forward['flow'][0]
 
         return forward
