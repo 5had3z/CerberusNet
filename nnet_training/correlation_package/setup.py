@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import os
-import torch
+"""
+Change the NVCC args to the correct SM you have and install with the command
+> python3 setup.py install
+"""
 
-from setuptools import setup, find_packages
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-cxx_args = ['-std=c++14']
+CXX_ARGS = ['-std=c++14', '-Ofast']
 
-nvcc_args = [
+NVCC_ARGS = [
     '-gencode', 'arch=compute_61,code=sm_61',
     '-ccbin', '/usr/bin/gcc'
 ]
@@ -19,8 +21,7 @@ setup(
             'correlation_pkg',
             ['correlation_cuda.cpp', 'correlation_cuda_kernel.cu'],
             extra_compile_args={
-                'cxx': cxx_args,
-                'nvcc': nvcc_args,
+                'cxx': CXX_ARGS, 'nvcc': NVCC_ARGS,
                 'cuda-path': ['/usr/local/cuda-10.2']
                 }
         )
