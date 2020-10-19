@@ -3,6 +3,7 @@
 #include "cuda_fp16.h"
 
 #include <limits>
+#include <cassert>
 
 // CUDA: grid stride looping
 //
@@ -226,14 +227,14 @@ int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs, void** 
             reinterpret_cast<float*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2],
             m_interpolation_mode, m_padding_mode, m_align_corners);
     }
-    else if (m_datatype == nvinfer1::DataType::kHALF)
-    {
-        grid_sampler_kernel<__half><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-            reinterpret_cast<const __half*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2],
-            reinterpret_cast<const __half*>(inputs[1]),
-            reinterpret_cast<__half*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2],
-            m_interpolation_mode, m_padding_mode, m_align_corners);
-    }
+    // else if (m_datatype == nvinfer1::DataType::kHALF)
+    // {
+    //     grid_sampler_kernel<__half><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+    //         reinterpret_cast<const __half*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2],
+    //         reinterpret_cast<const __half*>(inputs[1]),
+    //         reinterpret_cast<__half*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2],
+    //         m_interpolation_mode, m_padding_mode, m_align_corners);
+    // }
 
     return cudaGetLastError();
 }

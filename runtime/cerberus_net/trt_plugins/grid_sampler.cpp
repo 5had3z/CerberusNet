@@ -137,7 +137,7 @@ nvinfer1::DataType GridSamplerPlugin::getOutputDataType(int index, const nvinfer
     assert(index == 0 && nbInputs == 2);
     for (int i = 0; i < nbInputs; ++i)
     {
-        assert(inputTypes[i] == nvinfer1::DataType::kFLOAT || inputTypes[i] == nvinfer1::DataType::kHALF);
+        assert(inputTypes[i] == nvinfer1::DataType::kFLOAT); // || inputTypes[i] == nvinfer1::DataType::kHALF);
     }
     return inputTypes[index];
 }
@@ -149,7 +149,7 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     // Should be a bog standard tensor
     bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
-    condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF);
+    condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT); // || (inOut[pos].type == nvinfer1::DataType::kHALF);
     // Input and output has same type
     condition &= inOut[pos].type == inOut[nbInputs].type;
     return condition;
