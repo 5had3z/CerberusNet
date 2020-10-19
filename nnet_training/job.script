@@ -11,5 +11,5 @@ module load pytorch/1.5-cuda10
 
 export PYTHONPATH=$PYTHONPATH:$HOME/sh99/bpfer2/stereo-to-all/
 
-python ./correlation_package/setup.py
+python ./correlation_package/setup.py install
 python ./training_frameworks/stereo_seg_depth_trainer.py
