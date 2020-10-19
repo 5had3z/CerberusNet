@@ -13,7 +13,7 @@ class Logger : public nvinfer1::ILogger
 {
 public:
     //  Change this to kWARNING if you don't want to see all garbage when building the engine
-    Logger(Severity severity = Severity::kWARNING)
+    Logger(Severity severity = Severity::kVERBOSE)
         : reportableSeverity(severity)
     {
     }

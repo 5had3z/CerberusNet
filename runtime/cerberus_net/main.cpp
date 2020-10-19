@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     assert(!image1.empty());
     assert(!image2.empty());
 
-    cv::Size net_input {nnet.getInputH(), nnet.getInputW()};
+    cv::Size net_input { nnet.getInputH(), nnet.getInputW() };
     cv::resize(image1, image1, net_input);
 
     cv::imshow("Sample Input", image1);

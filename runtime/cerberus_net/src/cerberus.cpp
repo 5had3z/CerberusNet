@@ -10,7 +10,7 @@
 #include <NvOnnxParser.h>
 
 static Logger gLogger;
-#define MAX_WORKSPACE (1 << 30)
+#define MAX_WORKSPACE (1 << 31)
 
 CERBERUS::CERBERUS() :
     m_Network(nullptr),
@@ -100,7 +100,7 @@ CERBERUS::~CERBERUS()
 void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
 {
     m_Builder = nvinfer1::createInferBuilder(gLogger);
-    const auto netflags = 1 << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    const auto netflags = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     m_Network = m_Builder->createNetworkV2(netflags);
     
     auto parser = nvonnxparser::createParser(*m_Network, gLogger);

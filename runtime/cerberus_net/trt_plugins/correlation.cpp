@@ -1,6 +1,7 @@
 #include "correlation.hpp"
 #include "trt_utils.hpp"
 
+#include <cmath>
 #include <cassert>
 #include <cstring>
 
@@ -18,6 +19,7 @@ CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
     for (int i = 0; i < fc.nbFields; ++i)
     {
         const char* attrName = fc.fields[i].name;
+        std::cout << attrName << std::endl;
         if (!strcmp(attrName, "pad_size"))
         {
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
@@ -144,13 +146,30 @@ int CorrelationPlugin::initialize()
     return 0;
 }
 
+size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs,
+    int nbInputs, const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
+{
+    assert(inputs[0].dims.d == inputs[1].dims.d);
+
+    // Input descriptors [batch, channels, height, width]
+    const int paddedInputHeight = m_input_dims.d[2] + 2 * m_pad_size;
+    const int paddedInputWidth  = m_input_dims.d[3] + 2 * m_pad_size;
+    const int tensor_volume = inputs[0].dims.d[0] * inputs[0].dims.d[1] * paddedInputHeight * paddedInputWidth;
+
+    size_t elem_size = 0;
+    if (inputs[0].format == nvinfer1::TensorFormat::kCHW32) { elem_size = sizeof(float); }
+    else if (inputs[0].format == nvinfer1::TensorFormat::kCHW16) { elem_size = sizeof(float) / 2; }
+    
+    return  tensor_volume * elem_size;
+}
+
 void CorrelationPlugin::terminate()
 {
     NV_CUDA_CHECK(cudaFree(&m_rInput1));
     NV_CUDA_CHECK(cudaFree(&m_rInput2));
 }
 
-bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const
+bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
 {
     // Two inputs and one output
     assert(nbInputs == 2 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
@@ -165,11 +184,53 @@ bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     return condition;
 }
 
-nvinfer1::Dims CorrelationPlugin::getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims)
+nvinfer1::DimsExprs CorrelationPlugin::getOutputDimensions(int outputIndex,
+    const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
 {
-    // Only one output and there are two inputs
-    assert(index == 0 && nbInputDims == 2 && inputs[0].nbDims == 3 && inputs[1].nbDims == 3);
-    return m_output_dims;
+    // Only one output and there are eight inputs (two dimensions and six args)
+    assert(nbInputs == 2 && outputIndex == 0);
+    
+    // Should be NCHW
+    assert(inputs[0].nbDims == 4 && inputs[1].nbDims == 4);
+
+    if (inputs[0].d[1]->isConstant() && inputs[0].d[2]->isConstant() && inputs[0].d[3]->isConstant())
+    {
+        for (int i = 1; i < inputs[0].nbDims; ++i)
+        {
+            m_input_dims.d[i] = inputs[0].d[i]->getConstantValue();
+        }
+    }
+
+    const int kernel_radius = (1 - 1) / 2;
+    const int border_radius = kernel_radius + 4;
+
+    const int paddedInputHeight = m_input_dims.d[2] + 2 * 4;
+    const int paddedInputWidth  = m_input_dims.d[3] + 2 * 4;
+
+    const int nOutputChannels = ((4/1)*2+1) * ((4/1)*2+1);
+    const int outputHeight = std::ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(1));
+    const int outputwidth = std::ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(1));
+
+    nvinfer1::DimsExprs outdims;
+    outdims.nbDims = 4;
+    outdims.d[0] = inputs[0].d[0];
+    outdims.d[1] = exprBuilder.constant(nOutputChannels);
+    outdims.d[2] = exprBuilder.constant(outputHeight);
+    outdims.d[3] = exprBuilder.constant(outputwidth);
+
+    return outdims;
+}
+
+void CorrelationPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+    const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
+{
+    // Only one output and there are eight inputs (two dimensions and six args)
+    assert(nbInputs == 2 && nbOutputs == 1);
+
+    for (int i = 0; i < in[0].desc.dims.nbDims; ++i)
+    {
+        m_input_dims.d[i] = in[0].desc.dims.d[i];
+    }
 }
 
 void CorrelationPlugin::setPluginNamespace(const char* pluginNamespace)
@@ -186,33 +247,8 @@ const char* CorrelationPlugin::getPluginNamespace() const
 nvinfer1::DataType CorrelationPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
 {
     // Only one output and there are two inputs, all of which should have the same datatype
-    assert(index == 0 && nbInputs == 2 && inputTypes[0] == m_datatype && inputTypes[1] == m_datatype);
-    return m_datatype;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool CorrelationPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool CorrelationPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
-{
-    return false;
-}
-
-void CorrelationPlugin::configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput)
-{
-    assert(in && nbInput == 2);
-    assert(out && nbOutput == 1);
-    assert(in[0].type == in[1].type && in[0].type == out[0].type);
-
-    assert(in[0].dims.d == in[1].dims.d);
-
-    m_datatype = in[0].type;
-    m_input_dims = in[0].dims;
-    m_output_dims = out[0].dims;
+    assert(index == 0 && inputTypes[0] == inputTypes[1]);
+    return inputTypes[0];
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
@@ -241,7 +277,7 @@ void CorrelationPlugin::destroy()
 }
 
 // Clone the plugin
-nvinfer1::IPluginV2IOExt* CorrelationPlugin::clone() const
+nvinfer1::IPluginV2DynamicExt* CorrelationPlugin::clone() const
 {
     CorrelationPlugin *p = new CorrelationPlugin(*this);
     p->setPluginNamespace(mPluginNamespace);
@@ -271,16 +307,18 @@ const nvinfer1::PluginFieldCollection* CorrelationPluginCreator::getFieldNames()
     return &mFC;
 }
 
-nvinfer1::IPluginV2IOExt* CorrelationPluginCreator::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
+nvinfer1::IPluginV2DynamicExt* CorrelationPluginCreator::createPlugin(
+    const char* name, const nvinfer1::PluginFieldCollection* fc)
 {
-    assert(!strcmp(name, getPluginName()));
     CorrelationPlugin* obj = new CorrelationPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
+    mPluginName = name;
     mFC = *fc;
     return obj;
 }
 
-nvinfer1::IPluginV2IOExt* CorrelationPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+nvinfer1::IPluginV2DynamicExt* CorrelationPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength)
 {
     CorrelationPlugin* obj = new CorrelationPlugin(serialData, serialLength);
     obj->setPluginNamespace(mNamespace.c_str());

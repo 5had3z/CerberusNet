@@ -37,13 +37,13 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 
         void terminate() override;
 
-        virtual size_t getWorkspaceSize(int maxBatchSize) const override { return 0;}
+        size_t getWorkspaceSize(int maxBatchSize) const override { return 0;}
 
-        virtual int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
+        int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
 
-        virtual size_t getSerializationSize() const override;
+        size_t getSerializationSize() const override;
 
-        virtual void serialize(void* buffer) const override;
+        void serialize(void* buffer) const override;
 
         bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override;
 
@@ -112,6 +112,7 @@ class GridSamplerPluginCreator : public nvinfer1::IPluginCreator
         static nvinfer1::PluginFieldCollection mFC;
         static std::vector<nvinfer1::PluginField> mPluginAttributes;
         std::string mNamespace;
+        std::string mPluginName;
 };
 
 REGISTER_TENSORRT_PLUGIN(GridSamplerPluginCreator);

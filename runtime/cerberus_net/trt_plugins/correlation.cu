@@ -92,11 +92,12 @@ __global__ void correlation_forward(
 	}
 }
 
-int CorrelationPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+	const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
-	const dim3 reshape_grid(batchSize, m_input_dims.d[1], m_input_dims.d[2]);
-    const dim3 corr_grid(batchSize, m_output_dims.d[1], m_output_dims.d[2]);
+	const dim3 reshape_grid(1, m_input_dims.d[1], m_input_dims.d[2]);
+    const dim3 corr_grid(1, m_output_dims.d[1], m_output_dims.d[2]);
     
     const int pInputWidth = m_input_dims.d[2] + 2 * m_pad_size;
     const int pInputHeight = m_input_dims.d[1] + 2 * m_pad_size;

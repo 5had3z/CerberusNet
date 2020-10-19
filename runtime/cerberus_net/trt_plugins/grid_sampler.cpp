@@ -238,9 +238,9 @@ const nvinfer1::PluginFieldCollection* GridSamplerPluginCreator::getFieldNames()
 
 nvinfer1::IPluginV2IOExt* GridSamplerPluginCreator::createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc)
 {
-    assert(!strcmp(name, getPluginName()));
     GridSamplerPlugin* obj = new GridSamplerPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
+    mPluginName = name;
     mFC = *fc;
     return obj;
 }
