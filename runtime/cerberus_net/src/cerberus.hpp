@@ -1,9 +1,26 @@
 #pragma once
 
+#include <string_view>
+
 #include <opencv2/core/cuda.hpp>
 
 #include <NvInfer.h>
 #include <cuda_runtime_api.h>
+
+// Logger for TensorRT info/warning/errors
+class Logger : public nvinfer1::ILogger
+{
+public:
+    //  Change this to kWARNING if you don't want to see all garbage when building the engine
+    Logger(Severity severity = Severity::kWARNING)
+        : reportableSeverity(severity)
+    {
+    }
+
+    void log(Severity severity, const char* msg) override;
+
+    Severity reportableSeverity;
+};
 
 struct TensorInfo
 {
@@ -42,12 +59,14 @@ private:
     nvinfer1::IHostMemory* m_ModelStream;
     nvinfer1::ICudaEngine* m_Engine;
     nvinfer1::IExecutionContext* m_Context;
+    cudaStream_t m_CudaStream;
 
+    std::vector<TensorInfo> m_InputTensors;
     TensorInfo m_FlowTensor;
     TensorInfo m_SegmentationTensor;
     TensorInfo m_DepthTensor;
 
-    void buildEngineFromONNX();
+    void buildEngineFromONNX(const std::string_view onnx_path);
     void writeSerializedEngine();
     void loadSerializedEngine();
     void allocateBuffers();
