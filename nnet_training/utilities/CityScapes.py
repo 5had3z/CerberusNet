@@ -306,7 +306,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
-        disparity[disparity > 0] = (disparity[disparity > 0] - 1) / 256.0
+        disparity[disparity > 0] = self.scale_factor * (disparity[disparity > 0] - 1) / 256.0
         if not self.disparity_out:
             disparity[disparity > 0] = (0.209313 * 2262.52) / disparity[disparity > 0]
 

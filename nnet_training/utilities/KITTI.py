@@ -290,7 +290,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
                     epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
 
     def _depth_transform(self, disparity):
-        disparity = np.array(disparity).astype('float32') / 256.0
+        disparity = self.scale_factor * np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
             focal = self.width_to_focal[self.std_kitti_dims[0]]
             disparity[disparity > 0] = focal * 0.54 / disparity[disparity > 0]

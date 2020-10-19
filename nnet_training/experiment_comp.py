@@ -93,9 +93,9 @@ if __name__ == "__main__":
     parse_expeiments(ROOT_DIR)
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['ce183a2856d929402cecc0478a4dbbf2',
-                                 '4b81d3c0232c4a432a567203a60da796',
-                                 'c99dd1d1b1a513b2092906749d8857ef'])
+                        default=['2c6adea0aa0fcf1efbd88b2bea79597e',
+                                 'ad491472e80220edc277d297ce95b063',
+                                 '62c31076a3cf8565cd29775b76f7abad'])
 
     EXPER_LIST = []
     for exper in PARSER.parse_args().experiments:
