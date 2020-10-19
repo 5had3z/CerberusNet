@@ -8,6 +8,7 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
+import sys
 import json
 import argparse
 import hashlib
@@ -64,6 +65,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
+    parser.add_argument('-e', '--epochs', default=0)
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -80,13 +82,17 @@ if __name__ == "__main__":
 
     TRAINER = initialise_training_network(cfg, training_path)
 
+    if args.epochs > 0:
+        TRAINER.train_model(args.epochs)
+        sys.exit()
+
     MAIN_MENU = {
         1 : lambda: TRAINER.train_model(int(input("Number of Training Epochs: "))),
         2 : TRAINER.plot_data,
         3 : TRAINER.visualize_output,
         4 : lambda: print("Current Base Learning Rate: " + str(TRAINER.get_learning_rate())),
         5 : lambda: TRAINER.set_learning_rate(float(input("New Learning Rate Value: "))),
-        6 : quit
+        6 : sys.exit
     }
 
     #   User Input Training loop
