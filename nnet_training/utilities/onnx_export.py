@@ -56,4 +56,4 @@ if __name__ == "__main__":
     torch.onnx.export(
         model, (dummy_input_1, dummy_input_2),
         "onnx_models/export_test.onnx",
-        opset_version=11, verbose=True)
+        opset_version=11)

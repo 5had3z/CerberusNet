@@ -212,15 +212,18 @@ class OCRNetSFD(nn.Module):
 
         # Segmentation pass with image 1
         forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
+        forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
 
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
 
-        onnx_exp = False
+        # We must be ONNX exporting
         if isinstance(consistency, torch.Tensor):
-            kwargs['l_seq'] = consistency.clone().detach()
-            consistency = False
-            onnx_exp = True
+            _, im2_pyr = self.backbone(consistency)
+            # Flow pass with image 1
+            scale_factor = l_img.size()[-1] // forward['seg'].size()[-1]
+            forward['flow'] = self.flow_forward(im1_pyr, im2_pyr, scale_factor)[0]
+            del forward['seg_aux']
 
         if 'l_seq' in kwargs:
             _, im2_pyr = self.backbone(kwargs['l_seq'])
@@ -234,11 +237,6 @@ class OCRNetSFD(nn.Module):
                 forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
         forward['seg'] = scale_as(forward['seg'], l_img)
-        forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
         forward['depth'] = scale_as(forward['depth'], l_img)
-
-        if onnx_exp:
-            del forward['seg_aux']
-            forward['flow'] = forward['flow'][0]
 
         return forward
