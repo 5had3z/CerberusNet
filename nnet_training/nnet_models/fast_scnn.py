@@ -5,7 +5,6 @@
 ###########################################################################
 
 """Fast Segmentation Convolutional Neural Network"""
-import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,20 +30,22 @@ class FastSCNN(nn.Module):
                 nn.Conv2d(32, num_classes, 1)
             )
 
-    def forward(self, x):
-        size = x.size()[2:]
-        higher_res_features = self.learning_to_downsample(x)
-        x = self.global_feature_extractor(higher_res_features)
-        x = self.feature_fusion(higher_res_features, x)
-        x = self.classifier(x)
-        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        return x
-        # outputs = [x]
-        # if self.aux:
-        #     auxout = self.auxlayer(higher_res_features)
-        #     auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-        #     outputs.append(auxout)
-        # return tuple(outputs)
+    def forward(self, l_img: torch.Tensor, **kwargs):
+        size = l_img.size()[2:]
+        # outputs
+        forward = {}
+
+        higher_res_features = self.learning_to_downsample(l_img)
+        temp = self.global_feature_extractor(higher_res_features)
+        temp = self.feature_fusion(higher_res_features, temp)
+        temp = self.classifier(temp)
+        forward['seg'] = F.interpolate(temp, size, mode='bilinear', align_corners=True)
+
+        if self.aux:
+            auxout = self.auxlayer(higher_res_features)
+            forward['seg_aux'] = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
+
+        return forward
 
 class Stereo_FastSCNN(nn.Module):
     def __init__(self, num_classes, aux=False, **kwargs):
@@ -63,15 +64,18 @@ class Stereo_FastSCNN(nn.Module):
                 nn.Conv2d(32, num_classes, 1)
             )
 
-    def forward(self, x):
-        size = x.size()[2:]
-        higher_res_features = self.learning_to_downsample(x)
-        x = self.global_feature_extractor(higher_res_features)
-        x = self.feature_fusion(higher_res_features, x)
-        x = self.classifier(x)
-        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        return x
+    def forward(self, l_img: torch.Tensor, r_img: torch.Tensor, **kwargs):
+        # outputs
+        forward = {}
+        size = l_img.size()[2:]
 
+        higher_res_features = self.learning_to_downsample(torch.cat((l_img, r_img)))
+        temp = self.global_feature_extractor(higher_res_features)
+        temp = self.feature_fusion(higher_res_features, temp)
+        temp = self.classifier(temp)
+
+        forward['seg'] = F.interpolate(temp, size, mode='bilinear', align_corners=True)
+        return forward
 
 
 class LearningToDownsample(nn.Module):

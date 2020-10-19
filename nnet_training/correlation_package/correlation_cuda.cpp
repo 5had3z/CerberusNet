@@ -1,12 +1,7 @@
 #include "correlation_cuda_kernel.cuh"
 
-#include <torch/extension.h>
-
-#include <iostream>
-
-torch::Tensor correlation_forward_cuda(
-    const torch::Tensor& input1, const torch::Tensor& input2, int pad_size,
-    int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
+torch::Tensor correlation_forward_cuda(const torch::Tensor& input1, const torch::Tensor& input2, int64_t pad_size,
+    int64_t kernel_size, int64_t max_displacement, int64_t stride1, int64_t stride2, int64_t corr_type_multiply)
 {
     const int batchSize         = input1.size(0);
     const int nInputChannels    = input1.size(1);
@@ -35,9 +30,9 @@ torch::Tensor correlation_forward_cuda(
     return output;
 }
 
-std::vector<torch::Tensor> correlation_backward_cuda(
-    const torch::Tensor& input1, const torch::Tensor& input2, const torch::Tensor& gradOutput,
-    int pad_size, int kernel_size, int max_displacement, int stride1, int stride2, int corr_type_multiply)
+std::vector<torch::Tensor> correlation_backward_cuda(const torch::Tensor& input1, const torch::Tensor& input2,
+    const torch::Tensor& gradOutput, int64_t pad_size, int64_t kernel_size, int64_t max_displacement,
+    int64_t stride1, int64_t stride2, int64_t corr_type_multiply)
 {
     auto gradInput1 = torch::zeros_like(input1);
     auto gradInput2 = torch::zeros_like(input2);
@@ -52,7 +47,7 @@ std::vector<torch::Tensor> correlation_backward_cuda(
     return {gradInput1, gradInput2};
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("forward", &correlation_forward_cuda, "Correlation forward (CUDA)");
-    m.def("backward", &correlation_backward_cuda, "Correlation backward (CUDA)");
+TORCH_LIBRARY(cerberus, m) {
+    m.def("correlation", correlation_forward_cuda);
+    m.def("correlation_backward", correlation_backward_cuda);
 }

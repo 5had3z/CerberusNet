@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from nnet_training.utilities.UnFlowLoss import flow_warp
+from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
 __all__ = ['pwc_conv', 'FeatureExtractor', 'FlowEstimatorDense', 'FlowEstimatorLite',
@@ -37,9 +37,6 @@ class FeatureExtractor(nn.Module):
             )
             self.convs.append(layer)
 
-    def __str__(self):
-        return "_FlwExt1"
-
     def forward(self, x):
         feature_pyramid = []
         for conv in self.convs:
@@ -59,9 +56,6 @@ class FlowEstimatorDense(nn.Module):
         self.conv5 = pwc_conv(ch_in + 416, 32)
         self.feat_dim = ch_in + 448
         self.conv_last = pwc_conv(ch_in + 448, 2, isReLU=False)
-
-    def __str__(self):
-        return "_FlwEst1"
 
     def forward(self, x):
         x1 = torch.cat([self.conv1(x), x], dim=1)
@@ -83,9 +77,6 @@ class FlowEstimatorLite(nn.Module):
         self.conv5 = pwc_conv(96 + 64, 32)
         self.feat_dim = 32
         self.predict_flow = pwc_conv(64 + 32, 2, isReLU=False)
-
-    def __str__(self):
-        return "_FlwEst2"
 
     def forward(self, x):
         x1 = self.conv1(x)
@@ -110,9 +101,6 @@ class ContextNetwork(nn.Module):
             pwc_conv(64, 32, 3, 1, 1),
             pwc_conv(32, 2, isReLU=False)
         )
-
-    def __str__(self):
-        return "_CtxNet1"
 
     def forward(self, x):
         return self.convs(x)

@@ -32,7 +32,7 @@
 *.app
 
 # Build
-/build/*
+runtime/build/*
 
 # Misc
 /.vscode/*
@@ -45,3 +45,4 @@ nnet_training/correlation_package/dist/*
 
 # Models, Configs and statistics
 nnet_training/torch_models/*
+nnet_training/onnx_models/*

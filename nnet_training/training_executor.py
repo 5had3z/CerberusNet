@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 
+"""
+Main File for executing training loop
+"""
+
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
-import json, os, argparse, hashlib
+import os
+import json
+import argparse
+import hashlib
 from pathlib import Path
 from shutil import copy
 from easydict import EasyDict
@@ -11,9 +18,10 @@ from easydict import EasyDict
 import torch
 from nnet_training.nnet_models import get_model
 
-from nnet_training.utilities.dataset import get_cityscapse_dataset
-from nnet_training.utilities.loss_functions import get_loss_function
-from nnet_training.training_frameworks.trainer_base_class import get_trainer, ModelTrainer
+from nnet_training.utilities.KITTI import get_kitti_dataset
+from nnet_training.utilities.CityScapes import get_cityscapse_dataset
+from nnet_training.loss_functions import get_loss_function
+from nnet_training.utilities.model_trainer import ModelTrainer
 
 def initialise_training_network(config_json: EasyDict, train_path: Path) -> ModelTrainer:
     """
@@ -21,7 +29,13 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     Returns initialised training framework class
     """
 
-    datasets = get_cityscapse_dataset(config_json.dataset)
+    if config_json.dataset.type == "Kitti":
+        datasets = get_kitti_dataset(config_json.dataset)
+    elif config_json.dataset.type == "Cityscapes":
+        datasets = get_cityscapse_dataset(config_json.dataset)
+    else:
+        raise NotImplementedError(config_json.dataset.type)
+
     model = get_model(config_json.model)
 
     loss_fns = get_loss_function(config_json.loss_functions)
@@ -39,16 +53,17 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     else:
         raise NotImplementedError(config_json.optimiser.type)
 
-    trainer = get_trainer(config_json.trainer)(
-        model=model, optim=optimiser, loss_fn=loss_fns,
-        dataldr=datasets, lr_cfg=config_json.lr_scheduler,
-        modelpath=train_path)
+    trainer = ModelTrainer(
+        model=model, optimizer=optimiser, loss_fn=loss_fns,
+        dataloaders=datasets, lr_cfg=config_json.lr_scheduler,
+        basepath=train_path, logger_cfg=config_json.logger_cfg,
+        amp_cfg=config_json.amp_cfg)
 
     return trainer
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/MonoSF_gauss.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -58,6 +73,8 @@ if __name__ == "__main__":
     training_path = Path.cwd() / "torch_models" / str(encoding.hexdigest())
     if not os.path.isdir(training_path):
         os.makedirs(training_path)
+
+    print("Experiment # ", encoding.hexdigest())
 
     copy(args.config, training_path / os.path.basename(args.config))
 

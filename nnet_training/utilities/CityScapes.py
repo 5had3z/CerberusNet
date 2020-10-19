@@ -15,10 +15,12 @@ from typing import Dict
 
 import torch
 import torchvision
+from torch.utils.data import RandomSampler
 from PIL import Image
 
 import numpy as np
-import matplotlib.pyplot as plt
+
+from nnet_training.utilities.CustomSampler import BatchSamplerRandScale
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 
@@ -56,7 +58,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'right_images':
                 self.r_img = []
             elif key == 'disparity':
-                self.disp = []
+                self.l_disp = []
             elif key == 'left_seq':
                 self.l_seq = []
             elif key == 'right_seq':
@@ -66,7 +68,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == 'pose':
                 self.pose = []
 
-        if not hasattr(self, 'seg') and not hasattr(self, 'disp') and \
+        if not hasattr(self, 'seg') and not hasattr(self, 'l_disp') and \
                 not (hasattr(self, 'l_seq') or hasattr(self, 'r_seq')):
             print("Neither Segmentation, Disparity or Img Sequence Keys are defined")
 
@@ -95,7 +97,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)
 
-                    if hasattr(self, 'disp'):
+                    if hasattr(self, 'l_disp'):
                         disp_name = filename.replace('leftImg8bit', 'disparity')
                         disp_path = os.path.join(directories['disparity'], foldername, disp_name)
                         if not os.path.isfile(disp_path):
@@ -141,8 +143,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             self.r_img.append(r_imgpath)
                         if hasattr(self, 'seg'):
                             self.seg.append(seg_path)
-                        if hasattr(self, 'disp'):
-                            self.disp.append(disp_path)
+                        if hasattr(self, 'l_disp'):
+                            self.l_disp.append(disp_path)
                         if hasattr(self, 'l_seq'):
                             self.l_seq.append(left_seq_path)
                         if hasattr(self, 'r_seq'):
@@ -159,8 +161,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.r_img = [self.r_img[i] for i in kwargs['id_vector']]
             if hasattr(self, 'seg'):
                 self.seg = [self.seg[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'disp'):
-                self.disp = [self.disp[i] for i in kwargs['id_vector']]
+            if hasattr(self, 'l_disp'):
+                self.l_disp = [self.l_disp[i] for i in kwargs['id_vector']]
             if hasattr(self, 'l_seq'):
                 self.l_seq = [self.l_seq[i] for i in kwargs['id_vector']]
             if hasattr(self, 'r_seq'):
@@ -171,7 +173,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.pose = [self.pose[i] for i in kwargs['id_vector']]
 
         self.disparity_out = disparity_out
-        self.output_size = output_size
+        self.base_size = output_size
+        self.output_shape = output_size
+        self.scale_factor = 1
 
         if 'crop_fraction' in kwargs:
             self.crop_fraction = kwargs['crop_fraction']
@@ -179,15 +183,23 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self.rand_rot = kwargs['rand_rotation']
         if 'rand_brightness' in kwargs:
             self.brightness = kwargs['rand_brightness']
+        if 'rand_scale' in kwargs:
+            assert len(kwargs['rand_scale']) == 2
+            self.scale_range = kwargs['rand_scale']
+        if 'img_normalize' in kwargs:
+            # Typical normalisation parameters:
+            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+            self.img_normalize = torchvision.transforms.Normalize(
+                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
 
         # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
         #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
-        self._key = np.array([-1, -1, -1, -1, -1, -1,
-                              -1, -1, 0, 1, -1, -1,
-                              2, 3, 4, -1, -1, -1,
-                              5, -1, 6, 7, 8, 9,
+        self._key = np.array([255, 255, 255, 255, 255, 255,
+                              255, 255, 0, 1, 255, 255,
+                              2, 3, 4, 255, 255, 255,
+                              5, 255, 6, 7, 8, 9,
                               10, 11, 12, 13, 14, 15,
-                              -1, -1, 16, 17, 18])
+                              255, 255, 16, 17, 18])
         self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):
@@ -196,29 +208,26 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         '''
         Returns relevant training data as a dict
-        @output l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose
+        @output l_img, r_img, seg, l_disp, l_seq, r_seq, cam, pose
         '''
-        epoch_data = {}
+        if isinstance(idx, tuple):
+            idx, self.scale_factor = idx
+
         # Read image and labels
-        epoch_data["l_img"] = Image.open(self.l_img[idx]).convert('RGB')
+        epoch_data = {"l_img" : Image.open(self.l_img[idx]).convert('RGB')}
 
         if hasattr(self, 'r_img'):
             epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
         if hasattr(self, 'seg'):
             epoch_data["seg"] = Image.open(self.seg[idx])
-        if hasattr(self, 'disp'):
-            epoch_data["disparity"] = Image.open(self.disp[idx])
+        if hasattr(self, 'l_disp'):
+            epoch_data["l_disp"] = Image.open(self.l_disp[idx])
         if hasattr(self, 'l_seq'):
             epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
         if hasattr(self, 'r_seq'):
             epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
 
         self._sync_transform(epoch_data)
-
-        #   Transform images to tensors
-        for key in epoch_data.keys():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                epoch_data[key] = torchvision.transforms.functional.to_tensor(epoch_data[key])
 
         if hasattr(self, 'cam'):
             epoch_data["cam"] = self.json_to_intrinsics(self.cam[idx])
@@ -229,48 +238,54 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return epoch_data
 
     def _sync_transform(self, epoch_data):
+        scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
+        self.output_shape = [scale_func(x) for x in self.base_size]
+
         # random mirror
         if random.random() < 0.5:
-            for item in epoch_data.values():
-                item = item.transpose(Image.FLIP_LEFT_RIGHT)
-
-        if hasattr(self, 'crop_fraction'):
-            # random crop
-            crop_h = int(epoch_data["l_img"].size[0]/self.crop_fraction)
-            crop_w = int(epoch_data["l_img"].size[1]/self.crop_fraction)
-            crop_x = random.randint(0, epoch_data["l_img"].size[1] - crop_w)
-            crop_y = random.randint(0, epoch_data["l_img"].size[0] - crop_h)
-
-            for item in epoch_data.values():
-                item = item.crop((crop_y, crop_x, crop_y+crop_h, crop_x+crop_w))
-
-        if hasattr(self, 'rand_rot'):
-            angle = random.uniform(0, self.rand_rot)
-            for key in epoch_data.keys():
-                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                    item = torchvision.transforms.functional.rotate(
-                        epoch_data[key], angle, resample=Image.BILINEAR)
-                else:
-                    item = torchvision.transforms.functional.rotate(
-                        epoch_data[key], angle, resample=Image.NEAREST, fill=-1)
+            for key, data in epoch_data.items():
+                epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
-            for key in epoch_data.keys():
+            for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.adjust_brightness(
-                        epoch_data[key], brightness_scale)
+                        data, brightness_scale)
 
-        for key in epoch_data.keys():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:                  
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.BILINEAR)
-                epoch_data[key] = self._img_transform(epoch_data[key])
+        if hasattr(self, 'rand_rot'):
+            angle = random.uniform(0, self.rand_rot)
+            for key, data in epoch_data.items():
+                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.BILINEAR)
+                else:
+                    epoch_data[key] = torchvision.transforms.functional.rotate(
+                        data, angle, resample=Image.NEAREST, fill=-1)
+
+        for key, data in epoch_data.items():
+            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                data = data.resize(self.output_shape, Image.BILINEAR)
+                epoch_data[key] = self._img_transform(data)
             elif key == "seg":
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
-                epoch_data[key] = self._seg_transform(epoch_data[key])
-            elif key == "disparity":
-                epoch_data[key] = epoch_data[key].resize(self.output_size, Image.NEAREST)
-                epoch_data[key] = self._depth_transform(epoch_data[key])
+                data = data.resize(self.output_shape, Image.NEAREST)
+                epoch_data[key] = self._seg_transform(data)
+            elif key == "l_disp":
+                data = data.resize(self.output_shape, Image.NEAREST)
+                epoch_data[key] = self._depth_transform(data)
+
+        if hasattr(self, 'crop_fraction'):
+            # random crop
+            crop_h = int(epoch_data["l_img"].shape[1] / self.crop_fraction / 32.0) * 32
+            crop_w = int(epoch_data["l_img"].shape[2] / self.crop_fraction / 32.0) * 32
+            crop_x = random.randint(0, epoch_data["l_img"].shape[2] - crop_w)
+            crop_y = random.randint(0, epoch_data["l_img"].shape[1] - crop_h)
+
+            for key, data in epoch_data.items():
+                if key in ["seg", "l_disp", "r_disp"]:
+                    epoch_data[key] = data[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                else:
+                    epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
 
     def _class_to_index(self, seg):
         values = np.unique(seg)
@@ -280,24 +295,29 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return self._key[index].reshape(seg.shape)
 
     def _img_transform(self, img):
-        return np.array(img)
+        img = torchvision.transforms.functional.to_tensor(img)
+        if hasattr(self, 'img_normalize'):
+            img = self.img_normalize(img)
+        return img
 
     def _seg_transform(self, seg):
         target = self._class_to_index(np.array(seg).astype('int32'))
-        return torch.LongTensor(np.array(target).astype('int32'))
+        return torch.LongTensor(target.astype('int32'))
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
+        disparity[disparity > 0] = self.scale_factor * (disparity[disparity > 0] - 1) / 256.0
         if not self.disparity_out:
-            disparity[disparity > 1] = (0.209313 * 2262.52) / ((disparity[disparity > 1] - 1) / 256)
-            disparity[disparity < 2] = -1 # Ignore value for loss functions
+            disparity[disparity > 0] = (0.209313 * 2262.52) / disparity[disparity > 0]
+
             # Ignore sides and bottom of frame as these are patchy/glitchy
-            side_clip   = int(disparity.shape[1]/20)
-            bottom_clip = int(disparity.shape[0]/10)
-            disparity[-bottom_clip:-1, :] = -1    #bottom
-            disparity[:, :side_clip]      = -1    #lhs
-            disparity[:, -side_clip:-1]   = -1    #rhs
-        return  torch.FloatTensor(disparity.astype('float32'))
+            side_clip = int(disparity.shape[1] / 20)
+            bottom_clip = int(disparity.shape[0] / 10)
+            disparity[-bottom_clip:-1, :] = 0.  #bottom
+            disparity[:, :side_clip] = 0.       #lhs
+            disparity[:, -side_clip:-1] = 0.    #rhs
+
+        return torch.FloatTensor(disparity)
 
     def json_to_intrinsics(self, json_path):
         with open(json_path) as json_file:
@@ -318,26 +338,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def json_to_pose(self, json_path):
         raise NotImplementedError
 
-def id_vec_generator(train_ratio, val_ratio, test_ratio, directory):
-    num_images = 0
-    for file in os.listdir(directory):
-        num_images += file.endswith(IMG_EXT)
-
-    print("Number of Images:\t", num_images)
-    image_ids = list(range(num_images))
-    random.shuffle(image_ids)
-
-    ratio_sum = train_ratio + val_ratio + test_ratio
-    n_train = int(num_images*train_ratio/ratio_sum)
-    n_val = int(num_images*val_ratio/ratio_sum)
-    # n_test = int(num_images*test_ratio/ratio_sum) #This is implicit anyway
-
-    train_ids = image_ids[0:n_train]
-    val_ids = image_ids[n_train+1:n_train+n_val]
-    test_ids = image_ids[n_train+n_val:-1]
-
-    return train_ids, val_ids, test_ids
-
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     """
     Returns a cityscapes dataset given a config
@@ -357,27 +357,47 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
         validation_dirs[str(subset)] = dataset_config.rootdir +\
                                         dataset_config.val_subdirs[str(subset)]
 
+    aux_aug = {}
+    if 'img_normalize' in dataset_config.augmentations:
+        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
+    if 'disparity_out' in dataset_config.augmentations:
+        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
+
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
-        'Validation' : CityScapesDataset(validation_dirs, **dataset_config.augmentations)
+        'Validation' : CityScapesDataset(
+            validation_dirs, output_size=dataset_config.augmentations.output_size, **aux_aug)
     }
 
     dataloaders = {
-        'Training'   : torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last
-        ),
         'Validation' : torch.utils.data.DataLoader(
             datasets["Validation"],
             batch_size=dataset_config.batch_size,
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
-            drop_last=dataset_config.drop_last
-        ),
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
+        )
     }
+
+    if hasattr(dataset_config.augmentations, 'rand_scale'):
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"], num_workers=n_workers, pin_memory=True,
+            batch_sampler=BatchSamplerRandScale(
+                sampler=RandomSampler(datasets["Training"]),
+                batch_size=dataset_config.batch_size,
+                drop_last=dataset_config.drop_last,
+                scale_range=dataset_config.augmentations.rand_scale)
+        )
+    else:
+        dataloaders['Training'] = torch.utils.data.DataLoader(
+            datasets["Training"],
+            batch_size=dataset_config.batch_size,
+            shuffle=dataset_config.shuffle,
+            num_workers=n_workers,
+            drop_last=dataset_config.drop_last,
+            pin_memory=True
+        )
 
     return dataloaders
 
@@ -429,6 +449,8 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
     print("success copying: ", subsets.keys())
 
 def some_test_idk():
+    import matplotlib.pyplot as plt
+
     print("Testing Folder Traversal and Image Extraction!")
 
     HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
@@ -450,21 +472,15 @@ def some_test_idk():
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
-    
+
     print(len(test_dset.l_img))
     print(len(test_dset.seg))
 
-    import multiprocessing
-    import matplotlib.pyplot as plt
-    from torch.utils.data import DataLoader
-
     batch_size = 2
-    testLoader = DataLoader(test_dset, batch_size=batch_size, shuffle=True, num_workers=0)
+    test_loader = torch.utils.data.DataLoader(
+        test_dset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    for idx, data in enumerate(testLoader):
-        print("yes")
-
-    data = next(iter(testLoader))
+    data = next(iter(test_loader))
 
     image = data["l_img"].numpy()
     seg = data["seg"].numpy()
@@ -479,6 +495,7 @@ def some_test_idk():
         plt.show()
 
     # classes = {}
+    # import matplotlib.pyplot as plt
     # for i in range(batch_size):
     #     # # Get class for each individual pixel
     #     # for j in range(seg.shape[1]):

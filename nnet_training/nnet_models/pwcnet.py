@@ -1,8 +1,10 @@
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from nnet_training.utilities.UnFlowLoss import flow_warp
+from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 from .pwcnet_modules import *
 
@@ -16,7 +18,6 @@ class PWCNet(nn.Module):
         super(PWCNet, self).__init__()
         self.upsample = upsample
         self.output_level = 4
-        self.scale_levels = [8, 4, 2, 1]
 
         num_chs = [3, 16, 32, 64, 96, 128, 192]
         self.feature_pyramid_extractor = FeatureExtractor(num_chs)
@@ -42,10 +43,6 @@ class PWCNet(nn.Module):
                                        pwc_conv(64, 32, kernel_size=1, stride=1, dilation=1),
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
-    def __str__(self):
-        return "PWCNet" + str(self.feature_pyramid_extractor)\
-            + str(self.flow_estimator) + str(self.context_networks)
-
     def num_parameters(self):
         return sum(
             [p.data.nelement() if p.requires_grad else 0 for p in self.parameters()])
@@ -62,24 +59,21 @@ class PWCNet(nn.Module):
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, 0)
 
-    def get_scales(self):
-        return self.scale_levels
-
     def aux_forward(self, im1_pyr, im2_pyr):
         # output
         flows = []
-        
+
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
         flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
 
-        for l, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
+        for lvl, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping
-            if l == 0:
+            if lvl == 0:
                 im2_warp = im2
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
-                                        mode='bilinear', align_corners=True)
+                                     mode='bilinear', align_corners=True)
                 im2_warp = flow_warp(im2, flow)
 
             # correlation
@@ -87,7 +81,7 @@ class PWCNet(nn.Module):
             nn.functional.leaky_relu(out_corr, 0.1, inplace=True)
 
             # concat and estimate flow
-            im1_1by1 = self.conv_1x1[l](im1)
+            im1_1by1 = self.conv_1x1[lvl](im1)
             im1_intm, flow_res = self.flow_estimator(
                 torch.cat([out_corr, im1_1by1, flow], dim=1))
             flow += flow_res
@@ -98,23 +92,24 @@ class PWCNet(nn.Module):
             flows.append(flow)
 
             # upsampling or post-processing
-            if l == self.output_level:
+            if lvl == self.output_level:
                 break
-        
+
         if self.upsample:
             flows = [F.interpolate(flow * 4, scale_factor=4,
                                    mode='bilinear', align_corners=True) for flow in flows]
         return flows[::-1]
 
-    def forward(self, im1_rgb, im2_rgb, consistency=True):
+    def forward(self, l_img: torch.Tensor, l_seq: torch.Tensor,
+                consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         # outputs
         flows = {}
 
-        im1_pyr = self.feature_pyramid_extractor(im1_rgb)
-        im2_pyr = self.feature_pyramid_extractor(im2_rgb)
+        im1_pyr = self.feature_pyramid_extractor(l_img)
+        im2_pyr = self.feature_pyramid_extractor(l_seq)
 
-        flows['flow_fw'] = self.aux_forward(im1_pyr, im2_pyr)
+        flows['flow'] = self.aux_forward(im1_pyr, im2_pyr)
         if consistency:
-            flows['flow_bw'] = self.aux_forward(im2_pyr, im1_pyr)
+            flows['flow_b'] = self.aux_forward(im2_pyr, im1_pyr)
 
         return flows

@@ -3,7 +3,7 @@
 
 #include <NVX/nvx.h>
 #include <string>
-#include <opencv2/core/core.hpp>
+#include <opencv2/core/mat.hpp>
 
 class PROCESSOR_NVX
 {

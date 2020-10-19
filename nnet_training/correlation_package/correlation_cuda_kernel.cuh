@@ -1,6 +1,6 @@
 #pragma once
 
-#include <torch/extension.h>
+#include <torch/script.h>
 
 int correlation_forward_cuda_kernel(torch::Tensor& output,
     const torch::Tensor& input1, const torch::Tensor& input2,

@@ -128,7 +128,7 @@ class UpsampleSegmentation(nn.Module):
 
 class UpsampleFlowOutput(nn.Module):
     """Fusion of each downsampled stereo images with ReLu Output"""
-    def __init__(self, in_channels, scale_factor=4,**kwargs):
+    def __init__(self, in_channels, scale_factor=4, **kwargs):
         super(UpsampleFlowOutput, self).__init__()
         self.scale_factor = scale_factor
         self.conv_fuse = nn.Conv2d(in_channels, 2, 1)

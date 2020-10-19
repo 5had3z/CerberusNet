@@ -23,9 +23,6 @@ class StereoDepthSeparatedReLu(nn.Module):
         self.global_fusion  = GlobalFusionModule(48, 128, 48)
         self.upsample       = UpsampleDepthOutputReLu(48)
 
-    def __str__(self):
-        return "ReLuModel"
-
     def forward(self, left, right):
         left            = self.left_ds(left)
         right           = self.right_ds(right)
@@ -42,9 +39,6 @@ class StereoDepthSeparatedExp(nn.Module):
         self.ds_fusion      = DownsampleFusionModule(48)
         self.global_fusion  = GlobalFusionModule(48, 128, 48)
         self.upsample       = UpsampleDepthOutputReLu(48)
-
-    def __str__(self):
-        return "ExpModel"
     
     def forward(self, left, right):
         left            = self.left_ds(left)
@@ -62,9 +56,6 @@ class StereoSegmentaionSeparated(nn.Module):
         self.ds_fusion      = DownsampleFusionModule(48)
         self.global_fusion  = GlobalFusionModule(48, 128, 48)
         self.upsample       = UpsampleSegmentation(48, classes=classes)
-
-    def __str__(self):
-        return "StereoSeg1.1"
 
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
@@ -86,9 +77,6 @@ class StereoDepthSegSeparated(nn.Module):
 
         self.depth          = UpsampleDepthOutputReLu(48)
         self.segmentation   = UpsampleSegmentation(48, classes=classes)
-
-    def __str__(self):
-        return "StereoSegDepth1"
 
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
@@ -119,9 +107,6 @@ class StereoDepthSegSeparated2(nn.Module):
         self.depth          = UpsampleDepthOutputReLu(32)
         self.segmentation   = UpsampleSegmentation(32, classes=classes)
 
-    def __str__(self):
-        return "StereoSD1.1"
-
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
         out_size = left.size()[2:]
@@ -151,9 +136,6 @@ class StereoDepthSegSeparated3(nn.Module):
         self.depth          = UpsampleDepthOutputReLu(32)
         self.segmentation   = UpsampleSegmentation(32, classes=classes)
 
-    def __str__(self):
-        return "StereoSD1.2"
-
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
         out_size = left.size()[2:]
@@ -181,9 +163,6 @@ class MonoFlow1(nn.Module):
         self.global_fusion  = GlobalFusionModule(32, 96, 32, scale_factor=4)
 
         self.flow_out          = UpsampleFlowOutput(32)
-
-    def __str__(self):
-        return "MonoFlow1"
 
     def forward(self, left, right):
         assert left.size() == right.size(), 'left and right shape mismatch'
