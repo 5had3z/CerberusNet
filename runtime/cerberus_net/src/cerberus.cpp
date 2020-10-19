@@ -1,5 +1,6 @@
 #include "cerberus.hpp"
 #include "utils.hpp"
+#include "../trt_plugins/trt_utils.hpp"
 
 #include <numeric>
 #include <iostream>
@@ -85,6 +86,13 @@ CERBERUS::CERBERUS() :
 
 CERBERUS::~CERBERUS()
 {
+    for (auto& tensor : m_InputTensors)
+    {
+        NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(tensor.bindingIndex)));
+    }
+    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex)));
+    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex)));
+    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex)));
 }
 
 void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
@@ -127,10 +135,36 @@ void CERBERUS::loadSerializedEngine()
 
 void CERBERUS::allocateBuffers()
 {
+    // Allocating GPU memory for input and output tensors
+    m_DeviceBuffers.resize(m_Engine->getNbBindings(), nullptr);
+
+    for (auto& tensor : m_InputTensors)
+    {
+        NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(tensor.bindingIndex),
+            m_maxBatchSize * 3U * m_InputW * m_InputH * sizeof(float)));
+    }
+    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
+            m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
+
+    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex),
+            m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
+
+    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
+            m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
 }
 
 void CERBERUS::doInference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq)
 {
+    cudaMemcpy(img.data, m_DeviceBuffers[0], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(img_seq.data, m_DeviceBuffers[1], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
+    m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
+}
+
+void CERBERUS::doInference(const cv::Mat &img, const cv::Mat &img_seq)
+{
+    cudaMemcpy(img.data, m_DeviceBuffers[0], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(img_seq.data, m_DeviceBuffers[1], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
+    m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
 }
 
 void Logger::log(Severity severity, const char* msg)

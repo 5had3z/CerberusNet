@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/core/mat.hpp>
 
 #include <NvInfer.h>
 #include <cuda_runtime_api.h>
@@ -37,6 +38,7 @@ public:
     virtual ~CERBERUS();
 
     void doInference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq);
+    void doInference(const cv::Mat &img, const cv::Mat &img_seq);
 
     [[nodiscard]] std::string getClassName(const int& classID) const noexcept { return m_class_names[classID]; }
     [[nodiscard]] std::size_t getNumClasses(const int& classID) const noexcept { return m_class_names.size(); }
@@ -65,6 +67,7 @@ private:
     TensorInfo m_FlowTensor;
     TensorInfo m_SegmentationTensor;
     TensorInfo m_DepthTensor;
+    std::vector<void*> m_DeviceBuffers;
 
     void buildEngineFromONNX(const std::string_view onnx_path);
     void writeSerializedEngine();
