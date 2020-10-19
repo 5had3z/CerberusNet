@@ -10,16 +10,21 @@ from pathlib import Path
 from easydict import EasyDict
 
 import torch
+from torch.onnx.symbolic_helper import parse_args
 
 from nnet_training.nnet_models import get_model
 
+@parse_args('v', 'v', 'i', 'i', 'i', 'i', 'i', 'i')
 def correlation_op(g, input1, input2, pad_size, kernel_size,
                    max_displacement, stride1, stride2, corr_multiply):
-    return g.op("cerberus::correlation", input1, input2, pad_size,
-                kernel_size, max_displacement, stride1, stride2, corr_multiply)
+    return g.op("cerberus::correlation", input1, input2, pad_size_i=pad_size,
+                kernel_size_i=kernel_size, max_displacement_i=max_displacement,
+                stride1_i=stride1, stride2_i=stride2, corr_multiply_i=corr_multiply)
 
+@parse_args('v', 'v', 's', 's', 'b')
 def grid_sample_op(g, input1, input2, mode, padding_mode, align_corners):
-    return g.op("torch::grid_sampler", input1, input2, mode, padding_mode, align_corners)
+    return g.op("torch::grid_sampler", input1, input2, mode_s=mode,
+                padding_mode_s=padding_mode, align_corners_i=align_corners)
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
