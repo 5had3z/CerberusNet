@@ -102,6 +102,8 @@ class OCRNetSFD(nn.Module):
     """
     def __init__(self, **kwargs):
         super(OCRNetSFD, self).__init__()
+        self.modelname = "OCRNetSFD"
+
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
         self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs['ocr_config'])
 

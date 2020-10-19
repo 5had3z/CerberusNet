@@ -64,8 +64,8 @@ class ModelTrainer(object):
         self._basepath = basepath
 
         if self._checkpoints:
-            self.load_checkpoint(self._basepath / (str(self._model)+"_latest.pth"))
-        elif os.path.isfile(self._basepath / (str(self._model)+"_latest.pth")):
+            self.load_checkpoint(self._basepath / (self._model.modelname+"_latest.pth"))
+        elif os.path.isfile(self._basepath / (self._model.modelname+"_latest.pth")):
             sys.stdout.write("\nWarning: Previous Checkpoint Exists and Checkpoints arent enabled!")
         else:
             sys.stdout.write("\nStarting From Scratch without Checkpoints!")
@@ -121,7 +121,7 @@ class ModelTrainer(object):
         Writes a brief summary of the current state of an experiment in a text file
         """
         with open(self._basepath / "Summary.txt", "w") as txt_file:
-            txt_file.write(f"{str(self._model)} Summary, # Epochs: {self.epoch}\n")
+            txt_file.write(f"{self._model.modelname} Summary, # Epochs: {self.epoch}\n")
             for key, metric in self.metric_loggers.items():
                 name, value = metric.max_accuracy(main_metric=True)
                 txt_file.write(f"Objective: {key}\tMetric: {name}\tValue: {value[1]:.3f}\n")
@@ -165,11 +165,11 @@ class ModelTrainer(object):
                                                             loss_metric=False)
                     _, prev_best = logger.max_accuracy(main_metric=True)
                     if prev_best[0](epoch_acc[0], prev_best[1]):
-                        filename = f"{str(self._model)}_{key}.pth"
+                        filename = f"{self._model.modelname}_{key}.pth"
                         self.save_checkpoint(self._basepath / filename, metrics=False)
 
                 self.save_checkpoint(
-                    self._basepath / f"{str(self._model)}_latest.pth", metrics=True)
+                    self._basepath / f"{self._model.modelname}_latest.pth", metrics=True)
 
                 self.write_summary()
 

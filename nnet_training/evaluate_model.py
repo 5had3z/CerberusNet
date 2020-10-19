@@ -86,7 +86,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
 
     model = get_model(config_json.model).to(DEVICE)
 
-    modelweights = experiment_path / (str(model)+"_latest.pth")
+    modelweights = experiment_path / (model.modelname+"_latest.pth")
     checkpoint = torch.load(modelweights, map_location=torch.device(DEVICE))
     model.load_state_dict(checkpoint['model_state_dict'])
 
