@@ -89,9 +89,6 @@ class DepthHeadV1(nn.Module):
 
         self.net = nn.Sequential(mod_list)
 
-    def __str__(self):
-        return "_DpthV1"
-
     def forward(self, x):
         out = self.net(x)
         out = nn.functional.interpolate(
@@ -153,10 +150,6 @@ class OCRNetSFD(nn.Module):
                 raise NotImplementedError(kwargs['depth_network']['type'])
         else:
             self.depth_head = DepthHeadV1(self.backbone.high_level_ch, 32)
-
-    def __str__(self):
-        return "OCRNet"+str(self.backbone)+str(self.flow_estimator)+\
-            str(self.context_networks)+str(self.depth_head)
 
     def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor],
                      final_scale: float):

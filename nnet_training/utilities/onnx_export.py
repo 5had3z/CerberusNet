@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     print("Loading Model")
     model = get_model(cfg.model).to(device)
-    modelweights = experiment_path / (str(model)+"_latest.pth")
+    modelweights = experiment_path / "OCRNet_HRNetV2_FlwEst2_CtxNet1_DpthV1_latest.pth"
     checkpoint = torch.load(modelweights, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
 

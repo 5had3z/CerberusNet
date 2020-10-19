@@ -43,10 +43,6 @@ class PWCNet(nn.Module):
                                        pwc_conv(64, 32, kernel_size=1, stride=1, dilation=1),
                                        pwc_conv(32, 32, kernel_size=1, stride=1, dilation=1)])
 
-    def __str__(self):
-        return "PWCNet" + str(self.feature_pyramid_extractor)\
-            + str(self.flow_estimator) + str(self.context_networks)
-
     def num_parameters(self):
         return sum(
             [p.data.nelement() if p.requires_grad else 0 for p in self.parameters()])

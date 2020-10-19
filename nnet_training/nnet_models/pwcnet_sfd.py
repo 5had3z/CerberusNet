@@ -80,9 +80,6 @@ class SegmentationNet1(nn.Module):
 
         self.scale_factor = 2 * stride
 
-    def __str__(self):
-        return "_SegNet1"
-
     def forward(self, img_pyr: List[torch.Tensor]) -> torch.Tensor:
         interm = self.feature_fusion[0](img_pyr[0])
         interm = nn.functional.interpolate(interm, scale_factor=self.scale_factor)
@@ -106,9 +103,6 @@ class DepthEstimator1(nn.Module):
             nn.Conv2d(pre_out_ch, 1, 1),
             nn.ReLU(inplace=True)
         )
-
-    def __str__(self):
-        return "_DepthEst1"
 
     def forward(self, x: torch.Tensor):
         out = self.network(x)
@@ -190,10 +184,6 @@ class MonoSFDNet(nn.Module):
                 raise NotImplementedError(kwargs['context_network']['type'])
         else:
             self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
-
-    def __str__(self):
-        return "MonoSF" + str(self.feature_pyramid_extractor) + str(self.segmentation_network)\
-            + str(self.flow_estimator) + str(self.context_networks)
 
     def flow_forward(self, im1_pyr, im2_pyr):
         '''
