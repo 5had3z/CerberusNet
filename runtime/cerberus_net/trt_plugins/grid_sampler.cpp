@@ -7,7 +7,7 @@
 namespace
 {
     const char* GRID_SAMPLER_PLUGIN_VERSION{"1"};
-    const char* GRID_SAMPLER_PLUGIN_NAME{"Grid_Sampler_TRT"};
+    const char* GRID_SAMPLER_PLUGIN_NAME{"grid_sampler"};
 } // namespace
 
 nvinfer1::PluginFieldCollection GridSamplerPluginCreator::mFC{};

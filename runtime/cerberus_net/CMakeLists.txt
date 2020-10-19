@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
 include_directories(
+    ${CUDA_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS} 
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/trt_plugins
+)
+
+link_directories(
+    ${OpenCV_LIBS_DIR}
+    ${CUDA_TOOLKIT_ROOT_DIR}/lib64
 )
 
 file(GLOB TRT_PLUGINS_SRCS trt_plugins/*.cpp)
@@ -27,11 +33,20 @@ add_library( cerberus_lib STATIC
     ${CERB_NET_SRCS}
 )
 
+target_link_libraries( cerberus_lib
+    trt_plugins_lib
+    cudart
+    stdc++fs
+    ${TRT_LIBRARY_INFER}
+    ${TRT_LIBRARY_INFER_PLUGIN}
+    ${TRT_LIBRARY_INFER_PARSER}
+    ${TRT_LIBRARY_INFER_ONNX}
+)
+
 add_executable (cerberus_run main.cpp)
 
 target_link_libraries (
     cerberus_run
-    trt_plugins_lib
     cerberus_lib
     ${OpenCV_LIBS}
 )

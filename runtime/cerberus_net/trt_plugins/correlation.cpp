@@ -7,7 +7,7 @@
 namespace
 {
     const char* CORRELATION_PLUGIN_VERSION{"1"};
-    const char* CORRELATION_PLUGIN_NAME{"Correlation_TRT"};
+    const char* CORRELATION_PLUGIN_NAME{"correlation"};
 } // namespace
 
 nvinfer1::PluginFieldCollection CorrelationPluginCreator::mFC{};

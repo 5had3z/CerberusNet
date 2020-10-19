@@ -1,6 +1,8 @@
 #include "cerberus.hpp"
 #include "utils.hpp"
 #include "../trt_plugins/trt_utils.hpp"
+#include "../trt_plugins/correlation.hpp"
+#include "../trt_plugins/grid_sampler.hpp"
 
 #include <numeric>
 #include <iostream>
@@ -18,12 +20,12 @@ CERBERUS::CERBERUS() :
     m_Context(nullptr),
     m_CudaStream(nullptr)
 {
-    constexpr std::string_view labels_path { "/config/cone3_labels.txt" };
-    constexpr std::string_view ONNX_path { "/engine/peleenet_cropped.onnx" };
+    constexpr std::string_view labels_path { "/home/bryce/cs_labels.txt" };
+    constexpr std::string_view ONNX_path { "/home/bryce/export_test.onnx" };
 
     m_class_names = loadListFromTextFile(std::string{labels_path});
 
-     //Engine Loading Things here 
+    //Engine Loading Things here 
     if (m_EnginePath.empty()){
         m_EnginePath = ONNX_path.substr(0, ONNX_path.size()-5);
         m_EnginePath += "_"+m_Precision+".trt";
@@ -111,15 +113,15 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
     }
     std::cout << "Parsing done" << std::endl;
 
-    // ----------------------------------
-    /* we create the engine */
+    nvinfer1::IBuilderConfig* netcfg = m_Builder->createBuilderConfig();
+    netcfg->setMaxWorkspaceSize(MAX_WORKSPACE);
     m_Builder->setMaxBatchSize(m_maxBatchSize);
-    m_Builder->setMaxWorkspaceSize(MAX_WORKSPACE);
 
-    m_Engine = m_Builder->buildCudaEngine(*m_Network);
+    m_Engine = m_Builder->buildEngineWithConfig(*m_Network, *netcfg);
     assert(m_Engine);    
 
     /* we can clean up our mess */
+    netcfg->destroy();
     parser->destroy();
     m_Network->destroy();
     m_Builder->destroy();
