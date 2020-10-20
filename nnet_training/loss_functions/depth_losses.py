@@ -73,22 +73,23 @@ class InvHuberLoss(nn.Module):
         cost = (err*mask_err.float() + err2*mask_err2.float()).mean()
         return self.weight * cost
 
-class InvHuberLossPyr(InvHuberLoss):
-    def __init__(self, lvl_weights: List[int], **kwargs):
+class InvHuberLossPyr(nn.Module):
+    def __init__(self, lvl_weights: List[int], weight=1.0, **kwargs):
+        super(InvHuberLossPyr, self).__init__()
         self.lvl_weights = lvl_weights
-        super(InvHuberLossPyr, self).__init__(**kwargs)
+        self.weight = weight
+        self.inv_huber = InvHuberLoss()
 
-    def forward(self, disp_pred_pyr: List[torch.Tensor],
+    def forward(self, disp_pred: List[torch.Tensor],
                 disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
         loss = 0
-
-        for lvl, disp_pred in enumerate(disp_pred_pyr):
-            disp_gt_scaled = F.interpolate(disp_gt.unsqueeze(1), tuple(disp_pred.size()[2:]),
-                                           mode='nearest')
-            lvl_loss = super(InvHuberLossPyr, self).forward(disp_pred, disp_gt_scaled)
+        for lvl, pred in enumerate(disp_pred):
+            disp_gt_scaled = F.interpolate(
+                disp_gt.unsqueeze(1), tuple(pred.size()[2:]), mode='nearest')
+            lvl_loss = self.inv_huber.forward(pred, disp_gt_scaled)
             loss += (lvl_loss * self.lvl_weights[lvl])
 
-        return loss
+        return self.weight * loss
 
 class BackprojectDepth(nn.Module):
     """Layer to transform a depth image into a point cloud

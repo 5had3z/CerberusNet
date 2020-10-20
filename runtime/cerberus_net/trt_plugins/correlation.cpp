@@ -45,10 +45,10 @@ CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
             m_stride2 = *(static_cast<const int*>(fc.fields[i].data));
         }
-        else if (!strcmp(attrName, "corr_type_multiply"))
+        else if (!strcmp(attrName, "corr_multiply"))
         {
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
-            m_corr_type_multiply = *(static_cast<const int*>(fc.fields[i].data));
+            m_corr_multiply = *(static_cast<const int*>(fc.fields[i].data));
         }
     }
 }
@@ -77,7 +77,7 @@ CorrelationPlugin::CorrelationPlugin(const void* data, size_t length)
     read(d, m_max_displacement);
     read(d, m_stride1);
     read(d, m_stride2);
-    read(d, m_corr_type_multiply);
+    read(d, m_corr_multiply);
 
     assert(d == a + length);
 }
@@ -106,7 +106,7 @@ void CorrelationPlugin::serialize(void* buffer) const
     write(d, static_cast<int>(m_max_displacement));
     write(d, static_cast<int>(m_stride1));
     write(d, static_cast<int>(m_stride2));
-    write(d, static_cast<int>(m_corr_type_multiply));
+    write(d, static_cast<int>(m_corr_multiply));
 
     assert(d == a + getSerializationSize());
 }
@@ -125,7 +125,7 @@ size_t CorrelationPlugin::getSerializationSize() const
     serializationSize += sizeof(static_cast<int>(m_max_displacement));
     serializationSize += sizeof(static_cast<int>(m_stride1));
     serializationSize += sizeof(static_cast<int>(m_stride2));
-    serializationSize += sizeof(static_cast<int>(m_corr_type_multiply));
+    serializationSize += sizeof(static_cast<int>(m_corr_multiply));
 
     return serializationSize;
 }

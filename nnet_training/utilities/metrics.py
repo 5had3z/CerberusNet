@@ -661,6 +661,8 @@ class DepthMetric(MetricBaseClass):
 
     def add_sample(self, pred_depth: torch.Tensor, gt_depth: torch.Tensor, loss=None):
         self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
+        if isinstance(pred_depth, List):
+            pred_depth = pred_depth[0]
 
         pred_depth = pred_depth.squeeze(dim=1)[gt_depth > 0]
         pred_depth[pred_depth == 0] += 1e-7

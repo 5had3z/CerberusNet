@@ -66,7 +66,7 @@ class CorrelationPlugin: public nvinfer1::IPluginV2DynamicExt
         int m_max_displacement;
         int m_stride1;
         int m_stride2;
-        int m_corr_type_multiply;
+        int m_corr_multiply;
 
         nvinfer1::Dims m_input_dims;
         nvinfer1::Dims m_output_dims;

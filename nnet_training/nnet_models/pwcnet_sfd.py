@@ -289,6 +289,6 @@ class MonoSFDNet(nn.Module):
             preds['flow'] = self.flow_forward(im1_pyr, im2_pyr)
 
             if consistency:
-                preds['flow_b'], preds['depth_b'] = self.flow_forward(im2_pyr, im1_pyr)
+                preds['flow_b'] = self.flow_forward(im2_pyr, im1_pyr)
 
         return preds

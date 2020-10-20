@@ -53,8 +53,8 @@
         },
         {
             "type" :"depth",
-            "function" : "InvHuberLoss",
-            "args" : {"weight" : 0.5}
+            "function" : "InvHuberLossPyr",
+            "args" : {"weight" : 0.5, "lvl_weights" : [1.0, 1.0, 1.0, 1.0, 0.0]}
         }
     ],
     "model" : {
