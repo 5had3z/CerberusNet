@@ -117,6 +117,7 @@ class MonoSFDNet(nn.Module):
         super(MonoSFDNet, self).__init__()
         self.upsample = upsample
         self.output_level = 4
+        self.modelname = "MonoSFDNet"
 
         if 'feature_pyramid_extractor' in kwargs:
             feat_pyr_cfg = kwargs['feature_pyramid_extractor']
