@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=SegDepthTraining
+#SBATCH --job-name=SegDepthFlowTraining
 #SBATCH --time=12:00:00
 #SBATCH --ntasks=8
 #SBATCH --partition=gpu
@@ -11,5 +11,4 @@ module load pytorch/1.5-cuda10
 
 export PYTHONPATH=$PYTHONPATH:$HOME/sh99/bpfer2/stereo-to-all/
 
-python ./correlation_package/setup.py install
-python ./training_frameworks/stereo_seg_depth_trainer.py
+python ./training_executor.py -e 50 -c configs/HRNetV2_sfd_cs.json
