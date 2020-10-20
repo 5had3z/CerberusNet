@@ -186,7 +186,8 @@ class MonoSFDNet(nn.Module):
         else:
             self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
 
-    def flow_forward(self, im1_pyr, im2_pyr):
+    def flow_forward(self, im1_pyr: List[torch.Tensor],
+                     im2_pyr: List[torch.Tensor]) -> List[torch.Tensor]:
         '''
         Auxillary forward method that does the flow prediction
         '''
@@ -195,7 +196,7 @@ class MonoSFDNet(nn.Module):
 
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
-        flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
+        flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1))
 
         for level, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping
@@ -204,7 +205,7 @@ class MonoSFDNet(nn.Module):
             else:
                 flow = F.interpolate(flow * 2, scale_factor=2,
                                      mode='bilinear', align_corners=True)
-                im2_warp = flow_warp(im2, flow)
+                im2_warp = flow_warp(im2, flow).type(im1.dtype)
 
             # correlation
             out_corr = self.corr(im1, im2_warp)
@@ -242,10 +243,9 @@ class MonoSFDNet(nn.Module):
             enc_1by1 = self.conv_1x1[level](enc_feat)
 
             # concat and estimate depth
-            seg_resized = F.interpolate(
-                seg.detach(), size=tuple(enc_feat.size()[2:]), mode='nearest')
-            depth = F.interpolate(
-                depth, size=tuple(enc_feat.size()[2:]), mode='nearest')
+            new_size = tuple(enc_feat.size()[2:])
+            seg_resized = F.interpolate(seg, size=new_size, mode='nearest')
+            depth = F.interpolate(depth, size=new_size, mode='nearest')
 
             depth = self.depth_estimator(
                 torch.cat([seg_resized, enc_1by1, depth], dim=1))
@@ -274,12 +274,12 @@ class MonoSFDNet(nn.Module):
         # I'll revisit using GT, will have to make a
         # new tensor and cat for each class and give them
         # each a magnitude that is typical of output
-        if 'seg' not in kwargs or self.eval():
-            seg_gt = preds['seg']
-        else:
-            seg_gt = kwargs['seg']
+        # if 'seg' not in kwargs or not self.training:
+        #     seg_gt = preds['seg']
+        # else:
+        #     seg_gt = kwargs['seg']
 
-        preds['depth'] = self.depth_forward(im1_pyr, seg_gt)
+        preds['depth'] = self.depth_forward(im1_pyr, preds['seg'])
 
         if 'l_seq' in kwargs:
             im2_pyr = self.feature_pyramid_extractor(kwargs['l_seq'])

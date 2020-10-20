@@ -163,7 +163,7 @@ class OCRNetSFD(nn.Module):
 
         # init
         b_size, _, h_x1, w_x1, = im1_pyr[0].size()
-        flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1)).float()
+        flow = im1_pyr[0].new_zeros((b_size, 2, h_x1, w_x1))
 
         for level, (im1, im2) in enumerate(zip(im1_pyr, im2_pyr)):
             # warping

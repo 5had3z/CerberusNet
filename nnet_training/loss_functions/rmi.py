@@ -245,9 +245,11 @@ class RMILossAux(nn.Module):
         self.weight = weight
 
     def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
-        assert 'seg' and 'seg_aux' in seg_pred.keys()
+        assert 'seg' in seg_pred.keys()
 
-        aux_loss = self.rmi(seg_pred['seg'], seg_gt)
-        seg_loss = self.rmi(seg_pred['seg_aux'], seg_gt)
+        seg_loss = self.rmi(seg_pred['seg'], seg_gt)
 
-        return self.weight * (self.aux_weight * aux_loss + seg_loss)
+        if 'seg_aux' in seg_pred.keys():
+            seg_loss += self.aux_weight * self.rmi(seg_pred['seg_aux'], seg_gt)
+
+        return self.weight * seg_loss

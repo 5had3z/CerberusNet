@@ -47,12 +47,10 @@ class ModelTrainer(object):
 
         self.metric_loggers = get_loggers(logger_cfg, basepath)
 
-        self._model = model.cuda()
-        self._optimizer = optimizer
         self._loss_fn = loss_fn
 
         self._model, self._optimizer = amp.initialize(
-            self._model, self._optimizer, opt_level=amp_cfg)
+            model.cuda(), optimizer, opt_level=amp_cfg)
 
         self._lr_manager = LRScheduler(**lr_cfg)
 
