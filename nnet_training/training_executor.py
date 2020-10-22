@@ -57,8 +57,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     trainer = ModelTrainer(
         model=model, optimizer=optimiser, loss_fn=loss_fns,
         dataloaders=datasets, lr_cfg=config_json.lr_scheduler,
-        basepath=train_path, logger_cfg=config_json.logger_cfg,
-        amp_cfg=config_json.amp_cfg)
+        basepath=train_path, logger_cfg=config_json.logger_cfg)
 
     return trainer
 

@@ -10,7 +10,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 CXX_ARGS = ['-std=c++14', '-Ofast']
 
 NVCC_ARGS = [
-    '-gencode', 'arch=compute_61,code=sm_61',
+    '-gencode', 'arch=compute_86,code=sm_86',
     '-ccbin', '/usr/bin/gcc'
 ]
 
@@ -22,7 +22,7 @@ setup(
             ['correlation_cuda.cpp', 'correlation_cuda_kernel.cu'],
             extra_compile_args={
                 'cxx': CXX_ARGS, 'nvcc': NVCC_ARGS,
-                'cuda-path': ['/usr/local/cuda-10.2']
+                'cuda-path': ['/usr/local/cuda-11.1']
                 }
         )
     ],

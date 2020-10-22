@@ -7,12 +7,11 @@ import os
 import time
 import sys
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, List
 
 import numpy as np
 import torch
 import torchvision
-import apex.amp as amp
 
 import matplotlib.pyplot as plt
 
@@ -33,7 +32,7 @@ class ModelTrainer(object):
                  loss_fn: Dict[str, torch.nn.Module],
                  dataloaders: Dict[str, torch.utils.data.DataLoader],
                  lr_cfg: Dict[str, Union[str, float]], basepath: Path,
-                 logger_cfg: Dict[str, str], amp_cfg="O0", checkpoints=True):
+                 logger_cfg: Dict[str, str], checkpoints=True):
         '''
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
@@ -48,9 +47,9 @@ class ModelTrainer(object):
         self.metric_loggers = get_loggers(logger_cfg, basepath)
 
         self._loss_fn = loss_fn
+        self._scaler = torch.cuda.amp.GradScaler()
 
-        self._model, self._optimizer = amp.initialize(
-            model.cuda(), optimizer, opt_level=amp_cfg)
+        self._model, self._optimizer = model.cuda(), optimizer
 
         self._lr_manager = LRScheduler(**lr_cfg)
 
@@ -90,8 +89,6 @@ class ModelTrainer(object):
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epochs']
-            if "amp" in checkpoint:
-                amp.load_state_dict(checkpoint["amp"])
             sys.stdout.write(f"\nCheckpoint loaded from {str(path)} "
                              f"starting from epoch: {self.epoch}\n")
         else:
@@ -110,7 +107,6 @@ class ModelTrainer(object):
         torch.save({
             'model_state_dict'    : self._model.state_dict(),
             'optimizer_state_dict': self._optimizer.state_dict(),
-            'amp'                 : amp.state_dict(),
             'epochs'              : self.epoch
         }, path)
 
@@ -191,19 +187,20 @@ class ModelTrainer(object):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            forward = self._model(**batch_data)
-
-            losses = self.calculate_losses(forward, batch_data)
+            with torch.cuda.amp.autocast():
+                forward = self._model(**batch_data)
+                losses = self.calculate_losses(forward, batch_data)
 
             # Accumulate losses
             loss = 0
             for key in losses:
-                loss += losses[key]
+                self._scaler.scale(losses[key]).backward()
+                loss += losses[key].detach()
 
             self._optimizer.zero_grad()
-            with amp.scale_loss(loss, self._optimizer) as scaled_loss:
-                scaled_loss.backward()
-            self._optimizer.step()
+
+            self._scaler.step(self._optimizer)
+            self._scaler.update()
 
             self.log_output_performance(forward, batch_data, losses)
 
@@ -230,9 +227,9 @@ class ModelTrainer(object):
             self._data_to_gpu(batch_data)
 
             # Caculate the loss and accuracy for the predictions
-            forward = self._model(**batch_data)
-
-            losses = self.calculate_losses(forward, batch_data)
+            with torch.cuda.amp.autocast():
+                forward = self._model(**batch_data)
+                losses = self.calculate_losses(forward, batch_data)
 
             self.log_output_performance(forward, batch_data, losses)
 
@@ -276,7 +273,9 @@ class ModelTrainer(object):
         cuda_s.synchronize()
 
     @torch.no_grad()
-    def log_output_performance(self, nnet_outputs, batch_data, losses):
+    def log_output_performance(self, nnet_outputs: Dict[str, torch.Tensor],
+                               batch_data: Dict[str, torch.Tensor],
+                               losses: Dict[str, torch.Tensor]):
         """
         Calculates different metrics for each of the output types
         """
@@ -298,7 +297,8 @@ class ModelTrainer(object):
                 loss=losses['depth'].item()
             )
 
-    def calculate_losses(self, nnet_outputs, batch_data):
+    def calculate_losses(self, nnet_outputs: Dict[str, torch.Tensor],
+                         batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Calculates losses for different outputs and loss functions
         """
@@ -343,10 +343,13 @@ class ModelTrainer(object):
         self._data_to_gpu(batch_data)
 
         start_time = time.time()
-        forward = self._model(**batch_data)
+        with torch.cuda.amp.autocast():
+            forward = self._model(**batch_data)
         propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
         if 'depth' in forward and 'l_disp' in batch_data:
+            if isinstance(forward['depth'], List):
+                forward['depth'] = forward['depth'][0]
             depth_pred_cpu = forward['depth'].detach().cpu().numpy()
             depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
 

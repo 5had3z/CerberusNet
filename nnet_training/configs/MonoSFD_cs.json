@@ -3,7 +3,7 @@
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
-        "batch_size" : 4,
+        "batch_size" : 16,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
@@ -44,11 +44,10 @@
         }, 
         {
             "type" :"segmentation",
-            "function" : "RMILossAux",
+            "function" : "FocalLoss2D",
             "args" : {
-                "weight" : 0.5, "num_classes":19, "aux_weight" : 0.4, "rmi_radius":3,
-                "rmi_pool_way":1, "rmi_pool_size":4, "rmi_pool_stride":4,
-                "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":255
+                "gamma": 2, "ignore_index" : -1,
+                "dynamic_weights" : true, "scale_factor" : 0.125
             }
         },
         {
@@ -112,6 +111,5 @@
     },
     "logger_cfg" : {
         "depth" : "Batch_RMSE_Linear", "seg" : "Batch_IoU", "flow" : "Batch_SAD"
-    },
-    "amp_cfg": "O1"
+    }
 }

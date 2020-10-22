@@ -72,21 +72,21 @@ else()
 endif()
 
 #   VisionWorks, VPI and NPP Management
-find_package(VisionWorks REQUIRED)
-if (NOT ${VisionWorks_FOUND})
-    MESSAGE(FATAL_ERROR "-- Unable to find VisionWorks. Make sure its been downloaded via nVIDIA SDK Manager and compiled")
-endif()
+# find_package(VisionWorks REQUIRED)
+# if (NOT ${VisionWorks_FOUND})
+#     MESSAGE(FATAL_ERROR "-- Unable to find VisionWorks. Make sure its been downloaded via nVIDIA SDK Manager and compiled")
+# endif()
 
 find_package(CUDAToolkit REQUIRED nppc nppicc nppig)
 if (NOT ${CUDAToolkit_FOUND})
     MESSAGE(FATAL_ERROR "-- Unable to find CUDAToolkit. Make sure you have CUDA installed")
 endif()
 
-find_package(vpi REQUIRED)
-if (NOT ${vpi_FOUND})
-    MESSAGE(FATAL_ERROR "-- Unable to find Vision Programming Interface (VPI). Make sure its been downloaded via nVIDIA SDK Manager")
-endif()
+# find_package(vpi REQUIRED)
+# if (NOT ${vpi_FOUND})
+#     MESSAGE(FATAL_ERROR "-- Unable to find Vision Programming Interface (VPI). Make sure its been downloaded via nVIDIA SDK Manager")
+# endif()
 
 # Add sub libs as subdirs
-add_subdirectory(${PROJECT_SOURCE_DIR}/nvx_demo ${PROJECT_BINARY_DIR}/nvx_demo)
+# add_subdirectory(${PROJECT_SOURCE_DIR}/nvx_demo ${PROJECT_BINARY_DIR}/nvx_demo)
 add_subdirectory(${PROJECT_SOURCE_DIR}/cerberus_net ${PROJECT_BINARY_DIR}/cerberus_demo)

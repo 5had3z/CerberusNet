@@ -279,7 +279,7 @@ class MonoSFDNet(nn.Module):
         # else:
         #     seg_gt = kwargs['seg']
 
-        preds['depth'] = self.depth_forward(im1_pyr, preds['seg'])
+        preds['depth'] = self.depth_forward(im1_pyr, preds['seg'].clone().detach())
 
         if 'l_seq' in kwargs:
             im2_pyr = self.feature_pyramid_extractor(kwargs['l_seq'])
