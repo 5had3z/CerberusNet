@@ -24,6 +24,8 @@ from nnet_training.utilities.CityScapes import get_cityscapse_dataset
 from nnet_training.loss_functions import get_loss_function
 from nnet_training.utilities.model_trainer import ModelTrainer
 
+torch.backends.cudnn.benchmark = True
+
 def initialise_training_network(config_json: EasyDict, train_path: Path) -> ModelTrainer:
     """
     Sets up the network and training configurations

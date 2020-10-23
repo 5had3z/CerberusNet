@@ -1,5 +1,5 @@
 {
-    "note" : "Cityscapes, no random scaling",
+    "note" : "Testing Cityscapes with image normalisation 3090",
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
@@ -53,7 +53,7 @@
         },
         {
             "type" :"depth",
-            "function" : "DepthAwareLoss",
+            "function" : "InvHuberLoss",
             "args" : {"weight" : 0.5}
         }
     ],
@@ -134,6 +134,5 @@
     },
     "logger_cfg" : {
         "depth" : "Batch_RMSE_Linear", "seg" : "Batch_IoU", "flow" : "Batch_SAD"
-    },
-    "amp_cfg": "O1"
+    }
 }

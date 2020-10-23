@@ -187,25 +187,17 @@ class ModelTrainer(object):
 
             # Computer loss, use the optimizer object to zero all of the gradients
             # Then backpropagate and step the optimizer
-            with torch.cuda.amp.autocast():
-                forward = self._model(**batch_data)
-                losses = self.calculate_losses(forward, batch_data)
+            forward = self._model(**batch_data)
+            losses = self.calculate_losses(forward, batch_data)
 
             # Accumulate losses
             loss = 0
-            counter = 0
             for key in losses:
-                counter += 1
-                if counter == len(losses.keys()):
-                    self._scaler.scale(losses[key]).backward()
-                else:
-                    self._scaler.scale(losses[key]).backward(retain_graph=True)
-                loss += losses[key].detach()
+                loss += losses[key]
 
             self._optimizer.zero_grad()
-
-            self._scaler.step(self._optimizer)
-            self._scaler.update()
+            loss.backward()
+            self._optimizer.step()
 
             self.log_output_performance(forward, batch_data, losses)
 
@@ -232,9 +224,8 @@ class ModelTrainer(object):
             self._data_to_gpu(batch_data)
 
             # Caculate the loss and accuracy for the predictions
-            with torch.cuda.amp.autocast():
-                forward = self._model(**batch_data)
-                losses = self.calculate_losses(forward, batch_data)
+            forward = self._model(**batch_data)
+            losses = self.calculate_losses(forward, batch_data)
 
             self.log_output_performance(forward, batch_data, losses)
 
@@ -348,21 +339,20 @@ class ModelTrainer(object):
         self._data_to_gpu(batch_data)
 
         start_time = time.time()
-        with torch.cuda.amp.autocast():
-            forward = self._model(**batch_data)
+        forward = self._model(**batch_data)
         propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
         if 'depth' in forward and 'l_disp' in batch_data:
             if isinstance(forward['depth'], List):
                 forward['depth'] = forward['depth'][0]
-            depth_pred_cpu = forward['depth'].detach().cpu().numpy()
+            depth_pred_cpu = forward['depth'].type(torch.float32).detach().cpu().numpy()
             depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
 
         if 'seg' in forward:
             seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
 
         if 'flow' in forward:
-            np_flow_12 = forward['flow'][0].detach().cpu().numpy()
+            np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
 
         if hasattr(self._validation_loader.dataset, 'img_normalize'):
             img_mean = self._validation_loader.dataset.img_normalize.mean

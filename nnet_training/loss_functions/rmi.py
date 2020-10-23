@@ -60,13 +60,13 @@ class RMILoss(nn.Module):
         # ignore class
         self.ignore_index = ignore_index
 
-    def forward(self, logits_4D, labels_4D, do_rmi=True):
+    def forward(self, logits_4D: torch.FloatTensor, labels_4D: torch.LongTensor,
+                do_rmi=True) -> torch.Tensor:
         # explicitly disable fp16 mode because torch.cholesky and
         # torch.inverse aren't supported by half
-        logits_4D.float()
-        labels_4D.float()
         with torch.cuda.amp.autocast(enabled=False):
-            loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
+            loss = self.forward_sigmoid(
+                logits_4D.float(), labels_4D.float(), do_rmi=do_rmi)
         return loss
 
     def forward_sigmoid(self, logits_4D, labels_4D, do_rmi=False):
@@ -248,6 +248,6 @@ class RMILossAux(nn.Module):
         seg_loss = self.rmi(seg_pred['seg'], seg_gt)
 
         if 'seg_aux' in seg_pred.keys():
-            seg_loss += self.aux_weight * self.rmi(seg_pred['seg_aux'], seg_gt)
+            seg_loss += (self.aux_weight * self.rmi(seg_pred['seg_aux'], seg_gt))
 
         return self.weight * seg_loss

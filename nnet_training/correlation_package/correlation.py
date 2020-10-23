@@ -27,6 +27,7 @@ class CorrelationFunction(torch.autograd.Function):
     """
 
     @staticmethod
+    @torch.cuda.amp.custom_fwd
     def forward(ctx, input1, input2, pad_size=3, kernel_size=3,
                 max_displacement=20, stride1=1, stride2=2, corr_multiply=1):
         ctx.save_for_backward(input1, input2)
@@ -45,6 +46,7 @@ class CorrelationFunction(torch.autograd.Function):
         return output
 
     @staticmethod
+    @torch.cuda.amp.custom_bwd
     def backward(ctx, grad_outputs):
         input1, input2 = ctx.saved_tensors
 
@@ -87,7 +89,7 @@ if __name__ == '__main__':
 
     T_SUM = 0.0
 
-    for i in range(10):
+    for iter_ in range(10):
         C = random.choice([128, 256])
         H = random.choice([128, 256])
         W = random.choice([64, 128])
@@ -104,7 +106,7 @@ if __name__ == '__main__':
 
         print(f'Forward: {t_f * 1000:.3f}ms, Backward: {t_b * 1000:.3f}ms')
 
-        if i < 3:
+        if iter_ < 3:
             continue
         T_SUM += t_b + t_f
 
