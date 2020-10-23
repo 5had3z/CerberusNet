@@ -14,9 +14,8 @@ __all__ = ['DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
            'DepthReconstructionLossV1']
 
 class DepthAwareLoss(nn.Module):
-    def __init__(self, weight=1.0, size_average=True, **kwargs):
+    def __init__(self, weight=1.0, **kwargs):
         super(DepthAwareLoss, self).__init__()
-        self.size_average = size_average
         self.weight = weight
 
     def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:

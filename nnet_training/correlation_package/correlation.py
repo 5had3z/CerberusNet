@@ -1,5 +1,5 @@
 import torch
-torch.ops.load_library("correlation_package/build/lib.linux-x86_64-3.6/correlation_pkg.cpython-36m-x86_64-linux-gnu.so")
+torch.ops.load_library("correlation_package/build/lib.linux-x86_64-3.8/correlation_pkg.cpython-38-x86_64-linux-gnu.so")
 
 class CorrelationTorch(torch.nn.Module):
     def __init__(self, max_displacement=4, *args, **kwargs):

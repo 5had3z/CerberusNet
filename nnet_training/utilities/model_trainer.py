@@ -193,8 +193,13 @@ class ModelTrainer(object):
 
             # Accumulate losses
             loss = 0
+            counter = 0
             for key in losses:
-                self._scaler.scale(losses[key]).backward()
+                counter += 1
+                if counter == len(losses.keys()):
+                    self._scaler.scale(losses[key]).backward()
+                else:
+                    self._scaler.scale(losses[key]).backward(retain_graph=True)
                 loss += losses[key].detach()
 
             self._optimizer.zero_grad()

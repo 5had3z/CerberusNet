@@ -43,7 +43,8 @@ def scale_as(x, y):
     '''
     y_size = y.size(2), y.size(3)
     x_scaled = nn.functional.interpolate(x, size=y_size, mode='bilinear',
-                                         align_corners=True, recompute_scale_factor=True)
+                                         align_corners=True)
+
     return x_scaled
 
 def init_attn(m):
