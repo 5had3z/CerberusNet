@@ -27,14 +27,14 @@ _POS_ALPHA = 5e-4		# add this factor to ensure the AA^T is positive definite
 _IS_SUM = 1			# sum the loss per channel
 
 
-__all__ = ['RMILoss']
+__all__ = ['RMILoss', 'RMILossAux']
 
 
 class RMILoss(nn.Module):
     """
     region mutual information
     I(A, B) = H(A) + H(B) - H(A, B)
-    This version need a lot of memory if do not dwonsample.
+    This version need a lot of memory if do not downsample.
     """
     def __init__(self, num_classes=21, rmi_radius=3, rmi_pool_way=1, rmi_pool_size=4,
                  rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=255):

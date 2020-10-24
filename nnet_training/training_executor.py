@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 
 """
 Main File for executing training loop
@@ -65,7 +65,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
+    parser.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
     # parser.add_argument('-c', '--config', default='configs/MonoSFD_cs.json')
     parser.add_argument('-e', '--epochs', default=0)
     args = parser.parse_args()

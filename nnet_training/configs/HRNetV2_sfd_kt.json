@@ -1,13 +1,13 @@
 {
-    "note" : "KITTI testing new IoU Calculation method no cropping",
+    "note" : "KITTI testing very low resolution with even higher batch and lower seg weighting",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
-        "batch_size" : 2,
+        "batch_size" : 20,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "output_size" : [864, 256],
+            "output_size" : [448, 128],
             "rand_brightness" : 20,
             "rand_rotation" : 5,
             "disparity_out" : false,
@@ -36,7 +36,7 @@
             "type" :"segmentation",
             "function" : "RMILossAux",
             "args" : {
-                "weight" : 0.5, "num_classes":19, "aux_weight" : 0.4, "rmi_radius":3,
+                "weight" : 0.1, "num_classes":19, "aux_weight" : 0.4, "rmi_radius":3,
                 "rmi_pool_way":1, "rmi_pool_size":4, "rmi_pool_stride":4,
                 "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":255
             }
@@ -130,6 +130,5 @@
     },
     "logger_cfg" : {
         "flow" : "Batch_EPE", "seg" : "Batch_IoU", "depth": "Batch_RMSE_Linear"
-    },
-    "amp_cfg": "O1"
+    }
 }
