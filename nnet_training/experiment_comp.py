@@ -121,22 +121,18 @@ def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     # Parse all the files and add the objectives depending on the
     # performance tracking files that exist in the folder
     config['logger_cfg'] = {}
+    metric_map = {
+        'seg': lambda x: "Batch_IoU",
+        'depth': lambda x: "Batch_RMSE_Linear",
+        'flow': lambda x: "Batch_EPE" if x == 'Kitti' \
+                        else ("Batch_SAD" if x == 'Cityscapes' \
+                        else Warning(f"Invalid dataset {config.dataset.type}"))
+    }
     for filename in os.listdir(root_dir / original_hash):
         if filename.endswith(".hdf5"):
             logger_type = filename.replace("_data.hdf5", "")
-            if logger_type == 'seg':
-                config['logger_cfg'][logger_type] = "Batch_IoU"
-            elif logger_type == 'depth':
-                config['logger_cfg'][logger_type] = "Batch_RMSE_Linear"
-            elif logger_type == 'flow':
-                if config.dataset.type == "Kitti":
-                    config['logger_cfg'][logger_type] = "Batch_EPE"
-                elif config.dataset.type == "Cityscapes":
-                    config['logger_cfg'][logger_type] = "Batch_SAD"
-                else:
-                    Warning(f"Invalid dataset {config.dataset.type}")
-            else:
-                Warning(f"Invalid logger type detected {logger_type}")
+            assert logger_type in metric_map
+            config['logger_cfg'][logger_type] = metric_map[logger_type](config.dataset.type)
 
         if filename.endswith(".json"):
             o_filename = filename
@@ -156,7 +152,7 @@ def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     else:
         Warning(f"path already exists while converting to new config"
                 f"structure {original_hash} to {new_hash}")
-        return
+        return original_hash
 
     # Write new config to new location
     with open(root_dir / new_hash / o_filename, 'w', encoding='utf-8') as json_file:
