@@ -8,7 +8,7 @@ import json
 import hashlib
 from pathlib import Path
 import shutil
-from typing import List, Dict
+from typing import List, Dict, Union
 from easydict import EasyDict
 
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ from nnet_training.utilities.metrics import MetricBaseClass, SegmentationMetric,
 
 __all__ = ['compare_experiments']
 
-def compare_experiments(experiment_list: List[Dict[str, Path]]):
+def compare_experiments(experiment_list: Dict[str, Union[EasyDict, MetricBaseClass]]):
     """
     Given a list of experiments (Dictionary containing path), compares each of them to one another
     """
@@ -31,7 +31,7 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
     objectives = set()
     for experiment in experiment_list:
         for objective in experiment.keys():
-            if objective not in ["path", "name"]:
+            if objective not in ["root", "name", "logger_cfg"]:
                 objectives.add(objective)
 
     for objective in objectives:
@@ -60,7 +60,7 @@ def compare_experiments(experiment_list: List[Dict[str, Path]]):
 
     plt.show()
 
-def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
+def segmentation_analysis(experiment_list: Dict[str, Union[EasyDict, MetricBaseClass]]):
     """
     Tool for analysing segmentation data
     """
@@ -76,37 +76,55 @@ def segmentation_analysis(experiment_list: List[Dict[str, Path]]):
 
     plt.show()
 
-def parse_expeiments(root_dir: Path):
+def parse_expeiments(root_dir: Path, experiment_dict: Dict[str, Union[EasyDict, MetricBaseClass]]):
     """
     Parses each of the experiment subfolders and prints summaries.
     """
     for _, directories, _ in os.walk(root_dir):
         for directory in directories:
+            experiment_dict[directory] = {}
             for filename in os.listdir(root_dir / directory):
                 if filename.endswith(".json"):
                     with open(root_dir / directory / filename) as json_file:
-                        experiment_cfg = EasyDict(json.load(json_file))
+                        exper_config = EasyDict(json.load(json_file))
                         break
 
-            if 'note' in experiment_cfg:
-                print(f'{directory}: {experiment_cfg.note}')
-            else:
-                print(f'{directory}: no note available')
+            if 'logger_cfg' not in exper_config:
+                directory = fix_experiment_cfg(
+                    root_dir, directory, exper_config)
 
-            if 'logger_cfg' not in experiment_cfg:
-                directory = fix_experiment_cfg(root_dir, directory, experiment_cfg)
-
-            loggers = get_loggers(experiment_cfg.logger_cfg, root_dir / directory)
+            loggers = get_loggers(exper_config['logger_cfg'], root_dir / directory)
             for exp_type, data in loggers.items():
-                metric_name, max_data = data.max_accuracy(main_metric=True)
-                print(f'{exp_type} {metric_name}: {max_data[1]}')
+                experiment_dict[directory][exp_type] = data
 
+            experiment_dict[directory]['config'] = exper_config
+            experiment_dict[directory]['root'] = root_dir
+
+def print_experiment_notes(experiment_dict: Dict[str, Union[EasyDict, MetricBaseClass]]):
+    """
+    Prints the note for each of the experiments
+    """
+    for exper_hash, exper_data in experiment_dict.items():
+        if 'note' in exper_data["config"]:
+            print(f'{exper_hash}: {exper_data["config"]["note"]}')
+        else:
+            print(f'{exper_hash}: no note avaliable')
+
+def print_experiment_perf(experiment_dict: Dict[str, Union[EasyDict, MetricBaseClass]],
+                          exper_type: str):
+    """
+    Prints basic performance of each experiment
+    """
+    for exper_hash, exper_data in experiment_dict.items():
+        if exper_type in exper_data:
+            metric_name, max_data = exper_data[exper_type].max_accuracy(main_metric=True)
+            print(f'{exper_hash} {metric_name}: {max_data[1]}')
 
 def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     """
     Fixes to newer version of config file
     """
-    print("Fixing old config style")
+    print(f"Fixing old config style from {original_hash}")
 
     # Parse all the files and add the objectives depending on the
     # performance tracking files that exist in the folder
@@ -116,15 +134,17 @@ def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
             logger_type = filename.replace("_data.hdf5", "")
             if logger_type == 'seg':
                 config['logger_cfg'][logger_type] = "Batch_IoU"
-            if logger_type == 'depth':
+            elif logger_type == 'depth':
                 config['logger_cfg'][logger_type] = "Batch_RMSE_Linear"
-            if logger_type == 'flow':
+            elif logger_type == 'flow':
                 if config.dataset.type == "Kitti":
                     config['logger_cfg'][logger_type] = "Batch_EPE"
                 elif config.dataset.type == "Cityscapes":
                     config['logger_cfg'][logger_type] = "Batch_SAD"
                 else:
-                    Warning(f"Invalid dataset{config.dataset.type}")
+                    Warning(f"Invalid dataset {config.dataset.type}")
+            else:
+                Warning(f"Invalid logger type detected {logger_type}")
 
         if filename.endswith(".json"):
             o_filename = filename
@@ -158,15 +178,25 @@ def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     # Now can remove old config file and folder
     os.remove(root_dir / original_hash / o_filename)
     os.rmdir(root_dir / original_hash)
-    print("Moved contents from Complete!")
+    print(f"Moved contents from {original_hash} to {new_hash} complete!")
 
     return new_hash
 
 if __name__ == "__main__":
-    # ROOT_DIR = Path.cwd() / "torch_models"
-    ROOT_DIR = Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
-    # ROOT_DIR = Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/cfg_fix_test')
-    parse_expeiments(ROOT_DIR)
+    EXPER_DICTS = {}
+
+    ROOT_DIRS = [
+        Path.cwd() / "torch_models",
+        Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
+    ]
+
+    for root_dir in ROOT_DIRS:
+        parse_expeiments(root_dir, EXPER_DICTS)
+
+    # print_experiment_notes(EXPER_DICTS)
+    # print_experiment_perf(EXPER_DICTS, 'flow')
+    print_experiment_perf(EXPER_DICTS, 'seg')
+
     # PARSER = argparse.ArgumentParser()
     # PARSER.add_argument('-e', '--experiments', nargs='+',
     #                     default=['53b0d9580685d93958aa2468edb6c8d9',
@@ -179,7 +209,7 @@ if __name__ == "__main__":
     # for exper in PARSER.parse_args().experiments:
     #     EXPER_LIST.append({
     #         "name" : exper,
-    #         "path" : ROOT_DIR / exper
+    #         "path" : root
     #     })
 
     # compare_experiments(EXPER_LIST)
