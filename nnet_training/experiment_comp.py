@@ -102,46 +102,53 @@ def parse_expeiments(root_dir: Path):
                 print(f'{exp_type} {metric_name}: {max_data[1]}')
 
 
-def fix_experiment_cfg(root_dir: Path, original_hash: str, config_file: EasyDict):
+def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     """
     Fixes to newer version of config file
     """
     print("Fixing old config style")
-    config_file['logger_cfg'] = {}
+
+    # Parse all the files and add the objectives depending on the
+    # performance tracking files that exist in the folder
+    config['logger_cfg'] = {}
     for filename in os.listdir(root_dir / original_hash):
         if filename.endswith(".hdf5"):
             logger_type = filename.replace("_data.hdf5", "")
             if logger_type == 'seg':
-                config_file['logger_cfg'][logger_type] = "Batch_IoU"
+                config['logger_cfg'][logger_type] = "Batch_IoU"
             if logger_type == 'depth':
-                config_file['logger_cfg'][logger_type] = "Batch_RMSE_Linear"
+                config['logger_cfg'][logger_type] = "Batch_RMSE_Linear"
             if logger_type == 'flow':
-                if config_file.dataset.type == "Kitti":
-                    config_file['logger_cfg'][logger_type] = "Batch_EPE"
-                elif config_file.dataset.type == "Cityscapes":
-                    config_file['logger_cfg'][logger_type] = "Batch_SAD"
+                if config.dataset.type == "Kitti":
+                    config['logger_cfg'][logger_type] = "Batch_EPE"
+                elif config.dataset.type == "Cityscapes":
+                    config['logger_cfg'][logger_type] = "Batch_SAD"
                 else:
-                    Warning(f"Invalid dataset{config_file.dataset.type}")
+                    Warning(f"Invalid dataset{config.dataset.type}")
 
         if filename.endswith(".json"):
             o_filename = filename
 
-    if 'amp_cfg' in config_file:
-        del config_file['amp_cfg'], config_file.amp_cfg
+    # Delete any other depricated configs if they exist
+    if 'amp_cfg' in config:
+        del config['amp_cfg'], config.amp_cfg
 
-    if 'trainer' in config_file:
-        del config_file['trainer'], config_file.trainer
+    if 'trainer' in config:
+        del config['trainer'], config.trainer
 
-    new_hash = hashlib.md5(json.dumps(config_file).encode('utf-8')).hexdigest()
+    new_hash = hashlib.md5(json.dumps(config).encode('utf-8')).hexdigest()
 
+    # Create new folder if one doesn't already exist
     if not os.path.isdir(root_dir / new_hash):
         os.makedirs(root_dir / new_hash)
     else:
         Warning(f"path already exists while converting to new config"
                 f"structure {original_hash} to {new_hash}")
+        return
 
+    # Write new config to new location
     with open(root_dir / new_hash / o_filename, 'w', encoding='utf-8') as json_file:
-        json.dump(config_file, json_file, ensure_ascii=False, indent=4)
+        json.dump(config, json_file, ensure_ascii=False, indent=4)
 
     # Move all the weights, statistics and any other files to new folder
     for filename in os.listdir(root_dir / original_hash):
