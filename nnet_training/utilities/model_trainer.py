@@ -117,8 +117,9 @@ class ModelTrainer(object):
         with open(self._basepath / "Summary.txt", "w") as txt_file:
             txt_file.write(f"{self._model.modelname} Summary, # Epochs: {self.epoch}\n")
             for key, metric in self.metric_loggers.items():
-                name, value = metric.max_accuracy(main_metric=True)
-                txt_file.write(f"Objective: {key}\tMetric: {name}\tValue: {value[1]:.3f}\n")
+                value = metric.max_accuracy(main_metric=True)[1]
+                txt_file.write(f"Objective: {key}\tMetric: {metric.main_metric}"
+                               f"\tValue: {value:.3f}\n")
 
     def train_model(self, n_epochs):
         """
@@ -157,7 +158,7 @@ class ModelTrainer(object):
                 for key, logger in self.metric_loggers.items():
                     epoch_acc = logger.get_epoch_statistics(main_metric=True,
                                                             loss_metric=False)
-                    _, prev_best = logger.max_accuracy(main_metric=True)
+                    prev_best = logger.max_accuracy(main_metric=True)
                     if prev_best[0](epoch_acc[0], prev_best[1]):
                         filename = f"{self._model.modelname}_{key}.pth"
                         self.save_checkpoint(self._basepath / filename, metrics=False)

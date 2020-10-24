@@ -60,7 +60,7 @@ def segmentation_analysis(experiment_dict: Dict[str, Union[EasyDict, MetricBase]
     """
     for data in experiment_dict.values():
         if 'seg' in data.keys():
-            data['seg'].confusion_mat_summary()
+            data['seg'].plot_classwise_data()
 
     plt.show()
 
@@ -231,4 +231,4 @@ if __name__ == "__main__":
     print_experiment_notes(EXPER_DICTS)
 
     compare_experiments(EXPER_DICTS)
-    # segmentation_analysis(EXPER_LIST)
+    # segmentation_analysis(EXPER_DICTS)

@@ -300,8 +300,9 @@ class MetricBase(object):
         raise NotImplementedError
 
     @staticmethod
-    def _max_accuracy_lambda(criterion_dict: Dict[str, List[Union[Callable[[int, int], bool], float]]],
-                             path: Path, main_metric=None):
+    def _max_accuracy_lambda(
+            criterion_dict: Dict[str, List[Union[Callable[[float, float], bool], float]]],
+            path: Path, specific=None):
         """
         Lambda function used for grabbing the best metrics, give a dictionary with the name of
         the metric and a list that contains a callable function for the comparitor [min|max]
@@ -317,8 +318,8 @@ class MetricBase(object):
                     for idx, (key, data) in enumerate(sorted(criterion_dict.items(), key=srt_fnc)):
                         criterion_dict[key][1] = data[0](data[1], summary_data[idx])
 
-        if main_metric is not None:
-            return main_metric, criterion_dict[main_metric]
+        if specific is not None:
+            return criterion_dict[specific]
 
         ret_val = ()
         for key, value in criterion_dict.items():
@@ -420,9 +421,9 @@ class SegmentationMetric(MetricBase):
 
     def max_accuracy(self, main_metric=True):
         """
-        Returns highest mIoU and PixelWise Accuracy from per epoch summarised data.\n
-        @param  main_metric, if true only returns mIoU\n
-        @output PixelWise Accuracy, mIoU
+        Returns highest mIoU and Pixel-Wise Accuracy from per epoch summarised data.\n
+        @param  main_metric, if true only returns the main metric specified\n
+        @output Pixel-Wise Accuracy, mIoU
         """
         cost_func = {
             "Batch_IoU" : [max, 0.0],
@@ -564,12 +565,18 @@ class SegmentationMetric(MetricBase):
 
         plt.show(block=False)
 
-    def confusion_mat_summary(self):
-        with h5py.File(self._path, 'r') as hfile:
-            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape[1]
+    def conf_summary_data(self):
+        """
+        Generates summary data that can be infered from the confusion matrix.
+        """
+        test = {}
+        train = {}
 
-            training_data = np.zeros((len(list(hfile['training'])), n_classes, n_classes))
-            testing_data = np.zeros((len(list(hfile['validation'])), n_classes, n_classes))
+        with h5py.File(self._path, 'r') as hfile:
+            assert len(list(hfile['training'])) == len(list(hfile['validation']))
+            num_epochs = len(list(hfile['validation']))
+            training_data = np.zeros((num_epochs, self._n_classes, self._n_classes))
+            testing_data = np.zeros((num_epochs, self._n_classes, self._n_classes))
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
@@ -578,32 +585,62 @@ class SegmentationMetric(MetricBase):
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
                 testing_data[idx] = hfile['validation/'+epoch+'/Confusion_Mat'][:]
 
-        test_iou = np.zeros((training_data.shape[0], n_classes))
-        train_iou = np.zeros((training_data.shape[0], n_classes))
+        test['iou'] = np.zeros((num_epochs, self._n_classes))
+        train['iou'] = np.zeros((num_epochs, self._n_classes))
 
-        test_precision = np.zeros((training_data.shape[0], n_classes))
-        train_precision = np.zeros((training_data.shape[0], n_classes))
+        test['precision'] = np.zeros((num_epochs, self._n_classes))
+        train['precision'] = np.zeros((num_epochs, self._n_classes))
 
-        test_recall = np.zeros((training_data.shape[0], n_classes))
-        train_recall = np.zeros((training_data.shape[0], n_classes))
+        test['recall'] = np.zeros((num_epochs, self._n_classes))
+        train['recall'] = np.zeros((num_epochs, self._n_classes))
 
-        for idx in range(training_data.shape[0]):
-            test_iou[idx] = self._confmat_cls_iou(testing_data[idx, :, :])
-            train_iou[idx] = self._confmat_cls_iou(training_data[idx, :, :])
+        for idx in range(num_epochs):
+            test['iou'][idx] = self._confmat_cls_iou(testing_data[idx, :, :])
+            train['iou'][idx] = self._confmat_cls_iou(training_data[idx, :, :])
 
-            test_precision[idx], test_recall[idx] = \
+            test['precision'][idx], test['recall'][idx] = \
                 self._confmat_cls_pr_rc(testing_data[idx, :, :])
 
-            train_precision[idx], train_recall[idx] = \
+            train['precision'][idx], train['recall'][idx] = \
                 self._confmat_cls_pr_rc(training_data[idx, :, :])
 
+        return test, train
+
+    def display_conf_mat(self, index=-1, dataset='validation'):
+        """
+        Plots the confusion matrix of an epoch.\n
+        @param index: the index of the epoch you want to plot\n
+        @param dataset: either training or validation data.
+        """
+        assert dataset in ['validation', 'training']
+        with h5py.File(self._path, 'r') as hfile:
+            num_epochs = len(list(hfile[dataset]))
+            assert index < num_epochs
+            epoch_name = f'Epoch_{index}' if index > 0 else f'Epoch_{num_epochs}'
+            epoch_data = hfile[dataset][epoch_name+'/Confusion_Mat'][:]
+
+        plt.figure(figsize=(18, 5))
+
+        labels = [trainId2name[i] for i in range(19)]
+        normalised_data = epoch_data / np.sum(epoch_data, axis=1, keepdims=True)
+        conf_mat = pd.DataFrame(normalised_data, labels, labels)
+        sn.set(font_scale=1)
+        sn.heatmap(conf_mat, annot=True, annot_kws={"size":8})
+
+        plt.show(block=False)
+
+    def plot_classwise_data(self):
+        """
+        Plots the summary data from the confusion matrix.
+        """
+        test, train = self.conf_summary_data()
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' IoU')
 
-        for idx in range(n_classes):
-            plt.subplot(3, n_classes//3+1, idx+1)
-            plt.plot(train_iou[:, idx])
-            plt.plot(test_iou[:, idx])
+        for idx in range(self._n_classes):
+            plt.subplot(3, self._n_classes//3+1, idx+1)
+            plt.plot(train['iou'][:, idx])
+            plt.plot(test['iou'][:, idx])
             plt.legend(["Training", "Validation"])
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
@@ -613,10 +650,10 @@ class SegmentationMetric(MetricBase):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Precision')
 
-        for idx in range(n_classes):
-            plt.subplot(3, n_classes//3+1, idx+1)
-            plt.plot(train_precision[:, idx])
-            plt.plot(test_precision[:, idx])
+        for idx in range(self._n_classes):
+            plt.subplot(3, self._n_classes//3+1, idx+1)
+            plt.plot(train['precision'][:, idx])
+            plt.plot(test['precision'][:, idx])
             plt.legend(["Training", "Validation"])
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
@@ -626,24 +663,13 @@ class SegmentationMetric(MetricBase):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Recall')
 
-        for idx in range(n_classes):
-            plt.subplot(3, n_classes//3+1, idx+1)
-            plt.plot(train_recall[:, idx])
-            plt.plot(test_recall[:, idx])
+        for idx in range(self._n_classes):
+            plt.subplot(3, self._n_classes//3+1, idx+1)
+            plt.plot(train['recall'][:, idx])
+            plt.plot(test['recall'][:, idx])
             plt.legend(["Training", "Validation"])
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
-
-        plt.show(block=False)
-
-        plt.figure(figsize=(18, 5))
-
-        labels = [trainId2name[i] for i in range(19)]
-        normalised_data = testing_data[-1, :, :] / \
-            np.sum(testing_data[-1, :, :], axis=1, keepdims=True)
-        conf_mat = pd.DataFrame(normalised_data, labels, labels)
-        sn.set(font_scale=1)
-        sn.heatmap(conf_mat, annot=True, annot_kws={"size":8})
 
         plt.show(block=False)
 
