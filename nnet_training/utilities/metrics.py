@@ -321,10 +321,10 @@ class MetricBase(object):
         if specific is not None:
             return criterion_dict[specific]
 
-        ret_val = ()
+        ret_val = {}
         for key, value in criterion_dict.items():
             if key != "Batch_Loss":
-                ret_val += (value[1],)
+                ret_val[key] = value[1]
         return ret_val
 
     def get_last_batch(self, main_metric=True):
@@ -645,6 +645,7 @@ class SegmentationMetric(MetricBase):
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
 
+        plt.tight_layout()
         plt.show(block=False)
 
         plt.figure(figsize=(18, 5))
@@ -658,6 +659,7 @@ class SegmentationMetric(MetricBase):
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
 
+        plt.tight_layout()
         plt.show(block=False)
 
         plt.figure(figsize=(18, 5))
@@ -671,6 +673,7 @@ class SegmentationMetric(MetricBase):
             plt.title(f'{trainId2name[idx]}')
             plt.xlabel('Epoch #')
 
+        plt.tight_layout()
         plt.show(block=False)
 
 class DepthMetric(MetricBase):
