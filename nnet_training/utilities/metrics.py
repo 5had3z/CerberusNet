@@ -19,10 +19,10 @@ import torch
 from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 
-__all__ = ['MetricBaseClass', 'SegmentationMetric', 'DepthMetric',
+__all__ = ['MetricBase', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
 
-class MetricBaseClass(object):
+class MetricBase(object):
     """
     Provides basic functionality for statistics tracking classes
     """
@@ -348,7 +348,7 @@ class MetricBaseClass(object):
             mean_data = np.asarray(data).mean()
             print("%s: %.3f" %(stripped, mean_data))
 
-class SegmentationMetric(MetricBaseClass):
+class SegmentationMetric(MetricBase):
     """
     Accuracy and Loss Staticstics tracking for semantic segmentation networks.\n
     Tracks pixel wise accuracy (PixelAcc) and intersection over union (IoU).
@@ -565,7 +565,6 @@ class SegmentationMetric(MetricBaseClass):
         plt.show(block=False)
 
     def confusion_mat_summary(self):
-
         with h5py.File(self._path, 'r') as hfile:
             n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape[1]
 
@@ -648,7 +647,7 @@ class SegmentationMetric(MetricBaseClass):
 
         plt.show(block=False)
 
-class DepthMetric(MetricBaseClass):
+class DepthMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks.\n
     Tracks Invariant, RMSE Linear, RMSE Log, Squared Relative and Absolute Relative.
@@ -726,7 +725,7 @@ class DepthMetric(MetricBaseClass):
             Batch_Invariant=[]
         )
 
-class OpticFlowMetric(MetricBaseClass):
+class OpticFlowMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for depth based networks.\n
     Tracks Flow rnd point error (EPE) and sum absolute difference between
@@ -783,7 +782,7 @@ class OpticFlowMetric(MetricBaseClass):
             Batch_EPE=[]
         )
 
-class BoundaryBoxMetric(MetricBaseClass):
+class BoundaryBoxMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for nnets with boundary box output
     """
@@ -803,7 +802,7 @@ class BoundaryBoxMetric(MetricBaseClass):
     def _reset_metric(self):
         raise NotImplementedError
 
-class ClassificationMetric(MetricBaseClass):
+class ClassificationMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for classification problems
     """
@@ -822,7 +821,7 @@ class ClassificationMetric(MetricBaseClass):
     def _reset_metric(self):
         raise NotImplementedError
 
-def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricBaseClass]:
+def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricBase]:
     """
     Given a dictionary of [key, value] = [objective type, main metric] and
     basepath to save the file returns a dictionary that consists of performance
@@ -847,7 +846,7 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
 
 if __name__ == "__main__":
     FILENAME = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_seg"
-    TEST = MetricBaseClass(savefile=FILENAME, main_metric="Batch_EPE",
+    TEST = MetricBase(savefile=FILENAME, main_metric="Batch_EPE",
                            base_dir=Path.cwd()/"torch_models")
     TEST.plot_summary_data()
     input("Press enter to leave")
