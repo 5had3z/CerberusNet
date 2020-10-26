@@ -699,8 +699,8 @@ class DepthMetric(MetricBase):
         pred_depth = pred_depth.squeeze(dim=1)
         pred_depth[pred_depth == 0] += 1e-7
 
-        gt_mask = gt_depth < 80.0
-        gt_mask &= gt_depth > 0.0
+        gt_mask = gt_depth < 80.
+        gt_mask &= gt_depth > 0.
         gt_mask = gt_mask.float()
         n_valid = torch.sum(gt_mask, dim=(1, 2))
 
@@ -776,6 +776,18 @@ class OpticFlowMetric(MetricBase):
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
+    @staticmethod
+    def error_rate(epe_map, gt_flow, mask):
+        """
+        Calculates the outlier rate given a flow epe, ground truth and mask.
+        """
+        bad_pixels = torch.logical_and(
+            epe_map * mask > 3,
+            epe_map * mask / torch.maximum(
+                torch.sqrt(torch.sum(torch.square(gt_flow), dim=1)),
+                torch.tensor([1e-10], device=gt_flow.get_device())) > 0.05)
+        return torch.sum(bad_pixels, dim=(1, 2)) / torch.sum(mask, dim=(1, 2))
+
     def add_sample(self, orig_img, seq_img, flow_pred, flow_target=None, loss=None):
         """
         @input list of original, prediction and sequence images i.e. [left, right]
@@ -783,17 +795,25 @@ class OpticFlowMetric(MetricBase):
         self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
         if flow_target is not None:
+            flow_target["flow_mask"] = flow_target["flow_mask"].squeeze(1)
+            n_valid = torch.sum(flow_target["flow_mask"], dim=(1, 2))
+
             diff = flow_pred - flow_target["flow"]
-            norm_diff = ((diff[:, 0, :, :]**2 + diff[:, 1, :, :]**2)**0.5).unsqueeze(1)
-            masked_epe = (norm_diff * flow_target["flow_mask"]).sum()
-            n_valid = flow_target["flow_mask"].sum()
+            norm_diff = ((diff[:, 0, :, :]**2 + diff[:, 1, :, :]**2)**0.5)
+            masked_epe = torch.sum(norm_diff * flow_target["flow_mask"], dim=(1, 2))
+
             self.metric_data["Batch_EPE"].append(
-                (masked_epe / n_valid).cpu().data.numpy())
+                (masked_epe / n_valid).cpu().numpy())
+
+            self.metric_data["Batch_Fl_all"].append(
+                self.error_rate(norm_diff, flow_target["flow"],
+                                flow_target["flow_mask"]).cpu().numpy())
         else:
-            self.metric_data["Batch_EPE"].append(0)
+            self.metric_data["Batch_EPE"].append(np.zeros((flow_pred.shape[0], 1)))
+            self.metric_data["Batch_Fl_all"].append(np.zeros((flow_pred.shape[0], 1)))
 
         self.metric_data["Batch_SAD"].append(
-            (flow_warp(orig_img, flow_pred)-seq_img).abs().mean().cpu().data.numpy())
+            (orig_img-flow_warp(seq_img, flow_pred)).abs().mean(dim=(1, 2, 3)).cpu().numpy())
 
     def max_accuracy(self, main_metric=True):
         """
@@ -818,6 +838,7 @@ class OpticFlowMetric(MetricBase):
         self.metric_data = dict(
             Batch_Loss=[],
             Batch_SAD=[],
+            Batch_Fl_all=[],
             Batch_EPE=[]
         )
 
