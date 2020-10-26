@@ -371,14 +371,19 @@ class SegmentationMetric(MetricBase):
         labels = labels.type(torch.int32).cuda()
         preds = preds.type(torch.int32).squeeze(dim=1)
 
-        conf_mat = self._gen_confusion_mat(preds, labels)
+        batch_pix_acc = np.zeros((preds.shape[0], 1))
+        batch_iou = np.zeros((preds.shape[0], self._n_classes))
 
-        pix_acc = torch.true_divide(torch.diag(conf_mat).sum(), conf_mat.sum())
-        self.metric_data["Batch_PixelAcc"].append(pix_acc.cpu().data.numpy())
+        for idx in range(preds.shape[0]):
+            conf_mat = self._gen_confusion_mat(preds[idx], labels[idx])
+            self.metric_data["Confusion_Mat"] += conf_mat.cpu()
+            pix_acc = torch.true_divide(torch.diag(conf_mat).sum(), conf_mat.sum())
+            batch_pix_acc[idx, :] = pix_acc.cpu().data.numpy()
+            batch_iou[idx, :] = self._confmat_cls_iou(conf_mat)
 
-        self.metric_data["Batch_IoU"].append(self._confmat_cls_iou(conf_mat))
+        self.metric_data["Batch_PixelAcc"].append(batch_pix_acc)
 
-        self.metric_data["Confusion_Mat"] += conf_mat.cpu()
+        self.metric_data["Batch_IoU"].append(batch_iou)
 
     def print_epoch_statistics(self):
         """
@@ -440,7 +445,7 @@ class SegmentationMetric(MetricBase):
 
     @overload
     @staticmethod
-    def _confmat_cls_iou(conf_mat: torch.Tensor) -> torch.Tensor:
+    def _confmat_cls_iou(conf_mat: torch.Tensor) -> np.ndarray:
         ...
 
     @overload
@@ -453,11 +458,10 @@ class SegmentationMetric(MetricBase):
         if isinstance(conf_mat, torch.Tensor):
             divisor = conf_mat.sum(dim=1) + conf_mat.sum(dim=0) - torch.diag(conf_mat)
             return torch.true_divide(torch.diag(conf_mat), divisor).cpu().data.numpy()
-        elif isinstance(conf_mat, np.ndarray):
+        if isinstance(conf_mat, np.ndarray):
             divisor = conf_mat.sum(axis=1) + conf_mat.sum(axis=0) - np.diag(conf_mat)
             return np.true_divide(np.diag(conf_mat), divisor)
-        else:
-            raise NotImplementedError(type(conf_mat))
+        raise NotImplementedError(type(conf_mat))
 
     @staticmethod
     def _confmat_cls_pr_rc(conf_mat: np.ndarray) -> np.ndarray:
@@ -692,32 +696,38 @@ class DepthMetric(MetricBase):
         if isinstance(pred_depth, List):
             pred_depth = pred_depth[0]
 
-        pred_depth = pred_depth.squeeze(dim=1)[gt_depth > 0]
+        pred_depth = pred_depth.squeeze(dim=1)
         pred_depth[pred_depth == 0] += 1e-7
-        gt_depth = gt_depth[gt_depth > 0]
 
-        pred_depth = pred_depth[gt_depth < 80]
-        gt_depth = gt_depth[gt_depth < 80]
+        gt_mask = gt_depth < 80.0
+        gt_mask &= gt_depth > 0.0
+        gt_mask = gt_mask.float()
+        n_valid = torch.sum(gt_mask, dim=(1, 2))
 
-        difference = pred_depth - gt_depth
+        difference = (pred_depth - gt_depth) * gt_mask
         squared_diff = difference.pow(2)
-        log_diff = torch.log(pred_depth) - torch.log(gt_depth)
-        sq_log_diff = log_diff.pow(2).mean()
+        log_diff = (torch.log(pred_depth) - torch.log(gt_depth))
+        log_diff[gt_mask != 1.0] = 0
+        sq_log_diff = torch.sum(log_diff.pow(2), dim=(1, 2)) / n_valid
 
+        abs_rel = difference.abs() / gt_depth
+        abs_rel[gt_mask != 1.0] = 0
         self.metric_data['Batch_Absolute_Relative'].append(
-            torch.mean(difference.abs()/gt_depth).cpu().data.numpy())
+            (torch.sum(abs_rel, dim=(1, 2)) / n_valid).cpu().data.numpy())
 
+        sqr_rel = squared_diff / gt_depth
+        sqr_rel[gt_mask != 1.0] = 0
         self.metric_data['Batch_Squared_Relative'].append(
-            torch.mean(squared_diff/gt_depth).cpu().data.numpy())
+            (torch.sum(sqr_rel, dim=(1, 2)) / n_valid).cpu().data.numpy())
 
         self.metric_data['Batch_RMSE_Linear'].append(
-            torch.sqrt(squared_diff.mean()).cpu().data.numpy())
+            torch.sqrt(torch.sum(squared_diff, dim=(1, 2)) / n_valid).cpu().data.numpy())
 
         self.metric_data['Batch_RMSE_Log'].append(
             torch.sqrt(sq_log_diff).cpu().data.numpy())
 
         eqn1 = sq_log_diff
-        eqn2 = log_diff.abs().sum()**2 / gt_depth.shape[0]**2
+        eqn2 = torch.sum(log_diff.abs(), dim=(1, 2))**2 / n_valid**2
         self.metric_data['Batch_Invariant'].append((eqn1 - eqn2).cpu().data.numpy())
 
     def max_accuracy(self, main_metric=True):
