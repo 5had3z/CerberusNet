@@ -142,7 +142,7 @@ class FocalLoss2D(nn.Module):
         if self.dynamic_weights:
             class_ids, counts = seg_gt[seg_gt != self.ignore_index].unique(return_counts=True)
             weights[class_ids] = self.scale_factor / \
-                    (self.scale_factor + counts[class_ids]/float(seg_gt.nelement()))
+                    (self.scale_factor + counts / float(seg_gt.nelement()))
 
         # compute the negative likelyhood
         ce_loss = F.cross_entropy(

@@ -88,7 +88,8 @@ def flow_warp(image, flow12, pad='border', mode='bilinear'):
     base_grid = mesh_grid(batch_sz, height, width).type_as(image)  # B2HW
 
     v_grid = norm_grid(base_grid + flow12)  # BHW2
-    im1_recons = nn.functional.grid_sample(image, v_grid, mode=mode, padding_mode=pad, align_corners=False)
+    im1_recons = nn.functional.grid_sample(image, v_grid, mode=mode, padding_mode=pad,
+                                           align_corners=False)
     return im1_recons
 
 def get_occu_mask_bidirection(flow12, flow21, scale=0.01, bias=0.5):

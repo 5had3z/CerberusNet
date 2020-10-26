@@ -79,7 +79,10 @@ class MetricBase(object):
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
-                    top_group.create_dataset(name, data=np.asarray(data))
+                    data = np.asarray(data)
+                    if name[:6] == "Batch_" and len(data.shape) > 1:
+                        data = data.reshape(data.shape[0] * data.shape[1], -1)
+                    top_group.create_dataset(name, data=data)
 
                 summary_stats = np.asarray(self.get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
@@ -160,8 +163,11 @@ class MetricBase(object):
                     group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
 
                 top_group = hfile.create_group(group_name)
-                for metric in self.metric_data:
-                    top_group.create_dataset(metric, data=np.asarray(self.metric_data[metric]))
+                for name, data in self.metric_data.items():
+                    data = np.asarray(data)
+                    if name[:6] == "Batch_" and len(data.shape) > 1:
+                        data = data.reshape(data.shape[0] * data.shape[1], -1)
+                    top_group.create_dataset(name, data=data)
 
                 summary_stats = np.asarray(self.get_epoch_statistics(main_metric=False))
                 top_group.create_dataset('Summary', data=summary_stats)
@@ -730,6 +736,14 @@ class DepthMetric(MetricBase):
         eqn2 = torch.sum(log_diff.abs(), dim=(1, 2))**2 / n_valid**2
         self.metric_data['Batch_Invariant'].append((eqn1 - eqn2).cpu().data.numpy())
 
+        threshold = torch.max(pred_depth / gt_depth, gt_depth / pred_depth)
+        self.metric_data['Batch_a1'].append(
+            (torch.sum(threshold < 1.25, dim=(1, 2)) / n_valid).cpu().numpy())
+        self.metric_data['Batch_a2'].append(
+            (torch.sum(threshold < 1.25 ** 2, dim=(1, 2)) / n_valid).cpu().numpy())
+        self.metric_data['Batch_a3'].append(
+            (torch.sum(threshold < 1.25 ** 3, dim=(1, 2)) / n_valid).cpu().numpy())
+
     def max_accuracy(self, main_metric=True):
         """
         Returns highest scale invariant, absolute relative, squared relative,
@@ -744,7 +758,10 @@ class DepthMetric(MetricBase):
             'Batch_RMSE_Log': [min, sys.float_info.max],
             'Batch_RMSE_Linear': [min, sys.float_info.max],
             'Batch_Squared_Relative': [min, sys.float_info.max],
-            'Batch_Absolute_Relative': [min, sys.float_info.max]
+            'Batch_Absolute_Relative': [min, sys.float_info.max],
+            'Batch_a1': [max, 0.],
+            'Batch_a2': [max, 0.],
+            'Batch_a3': [max, 0.],
         }
 
         if self._path is not None:
@@ -761,7 +778,10 @@ class DepthMetric(MetricBase):
             Batch_Squared_Relative=[],
             Batch_RMSE_Linear=[],
             Batch_RMSE_Log=[],
-            Batch_Invariant=[]
+            Batch_Invariant=[],
+            Batch_a1=[],
+            Batch_a2=[],
+            Batch_a3=[]
         )
 
 class OpticFlowMetric(MetricBase):
@@ -824,7 +844,8 @@ class OpticFlowMetric(MetricBase):
         cost_func = {
             'Batch_Loss': [min, sys.float_info.max],
             'Batch_SAD': [min, sys.float_info.max],
-            'Batch_EPE': [min, sys.float_info.max]
+            'Batch_EPE': [min, sys.float_info.max],
+            'Batch_Fl_all': [min, sys.float_info.max]
         }
 
         if self._path is not None:
