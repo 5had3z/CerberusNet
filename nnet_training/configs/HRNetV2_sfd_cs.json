@@ -1,13 +1,13 @@
 {
-    "note" : "Testing Cityscapes with image normalisation 3090",
+    "note" : "Testing Cityscapes with high resolution",
     "dataset" : {
         "type" : "Cityscapes",
         "rootdir" : "/home/bryce/Documents/Cityscapes Data/",
-        "batch_size" : 8,
+        "batch_size" : 2,
         "shuffle" : true,
         "drop_last" : true,
         "augmentations" : {
-            "output_size" : [512, 256],
+            "output_size" : [1024, 512],
             "rand_brightness" : 10,
             "rand_rotation" : 5,
             "disparity_out" : false,

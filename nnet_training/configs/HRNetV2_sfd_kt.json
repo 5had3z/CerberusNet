@@ -1,5 +1,5 @@
 {
-    "note" : "KITTI testing very low resolution with even higher batch and lower seg weighting",
+    "note" : "KITTI testing very low resolution with even higher batch: dupe for test",
     "dataset" : {
         "type" : "Kitti",
         "rootdir" : "/home/bryce/Documents/Kitti_2015/training",
@@ -36,7 +36,7 @@
             "type" :"segmentation",
             "function" : "RMILossAux",
             "args" : {
-                "weight" : 0.1, "num_classes":19, "aux_weight" : 0.4, "rmi_radius":3,
+                "weight" : 0.5, "num_classes":19, "aux_weight" : 0.4, "rmi_radius":3,
                 "rmi_pool_way":1, "rmi_pool_size":4, "rmi_pool_stride":4,
                 "loss_weight_lambda":0.5, "lambda_way":1, "ignore_index":255
             }

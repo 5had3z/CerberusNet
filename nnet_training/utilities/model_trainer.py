@@ -156,10 +156,10 @@ class ModelTrainer(object):
 
             if self._checkpoints:
                 for key, logger in self.metric_loggers.items():
-                    epoch_acc, _ = logger.get_epoch_statistics(
+                    epoch_acc, _ = logger.get_current_statistics(
                         main_metric=True, loss_metric=False)
                     prev_best = logger.max_accuracy(main_metric=True)
-                    if prev_best[0](epoch_acc[0], prev_best[1]):
+                    if prev_best is None or prev_best[0](epoch_acc[0], prev_best[1]):
                         filename = f"{self._model.modelname}_{key}.pth"
                         self.save_checkpoint(self._basepath / filename, metrics=False)
 
@@ -168,7 +168,7 @@ class ModelTrainer(object):
 
                 self.write_summary()
 
-            sys.stdout.write(f'\rEpoch {str(self.epoch)} Finished, Time: {str(epoch_duration)}s\n')
+            sys.stdout.write(f'\rEpoch {self.epoch} Finished, Time: {epoch_duration}s\n')
             sys.stdout.write("\033[K")
             sys.stdout.flush()
 

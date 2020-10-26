@@ -9,12 +9,18 @@ import shutil
 import hashlib
 import argparse
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Union, List
 from easydict import EasyDict
 
-import numpy as np
+from scipy import stats
 import matplotlib.pyplot as plt
 from nnet_training.utilities.metrics import MetricBase, get_loggers
+
+STATISTIC_2_TYPE = {
+    "Batch_IoU": "seg",
+    "Batch_RMSE_Linear": "depth",
+    "Batch_EPE": "flow"
+}
 
 def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBase]]):
     """
@@ -197,13 +203,17 @@ def parse_experiment_list(experiment_dict: Dict[str, Union[EasyDict, MetricBase]
         experiment_dict[exper_hash]['config'] = exper_config
 
 def final_accuracy_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
-                              exper_type: str, metric_type: str):
+                              statistic: str):
+    """
+    Barplot that depicts the accuracy against each other.
+    """
     all_data = {}
+    exper_type = STATISTIC_2_TYPE[statistic]
     for exper_hash, exper_data in experiment_dict.items():
         if exper_type in exper_data:
             max_data = exper_data[exper_type].max_accuracy(main_metric=False)
-            if metric_type in max_data and 0.0 < max_data[metric_type] < 100.0:
-                all_data[exper_hash] = max_data[metric_type]
+            if statistic in max_data and 0.0 < max_data[statistic] < 100.0:
+                all_data[exper_hash] = max_data[statistic]
 
     all_data = dict(sorted(all_data.items(), key=lambda x: x[1]))
     plt.bar(list(all_data.keys()), all_data.values())
@@ -213,35 +223,50 @@ def final_accuracy_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricB
     plt.xticks(rotation=10)
     plt.show()
 
+def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, MetricBase]]],
+                      null_hyp: str, comparitors: List[str], statistic: str):
+    """
+    Prints a list of p-value test results for a base experiment and list of alternat experiments.
+    """
+    exper_type = STATISTIC_2_TYPE[statistic]
+    null_data = experiment_dict[null_hyp][exper_type].get_epoch_data(statistic=statistic)
+
+    for exper_hash in comparitors:
+        comp_data = experiment_dict[exper_hash][exper_type].get_epoch_data(statistic=statistic)
+        statistic, p_value = stats.ttest_ind(
+            null_data, comp_data, equal_var=False, nan_policy='omit')
+        print(p_value)
+
 if __name__ == "__main__":
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('-e', '--experiments', nargs='+',
+                        default=['fb04870fa815a7018a5a7b8cb8f8096d',
+                                 '03c8122b856204bd91346213495f577c'])
+
     EXPER_DICTS = {}
 
     ROOT_DIRS = [
         Path.cwd() / "torch_models",
-        Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
+        # Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
     ]
 
-    for root_dir in ROOT_DIRS:
-        parse_expeiment_folder(root_dir, EXPER_DICTS)
+    # for rdir in ROOT_DIRS:
+    #     parse_expeiment_folder(rdir, EXPER_DICTS)
 
-    # print_experiment_notes(EXPER_DICTS)
+    for exper in PARSER.parse_args().experiments:
+        EXPER_DICTS[exper] = {"root" : Path.cwd() / "torch_models"}
+
+    parse_experiment_list(EXPER_DICTS)
+
     # print_experiment_perf(EXPER_DICTS, 'flow')
     # print_experiment_perf(EXPER_DICTS, 'seg')
 
-    PARSER = argparse.ArgumentParser()
-    # PARSER.add_argument('-e', '--experiments', nargs='+',
-    #                     default=['53b0d9580685d93958aa2468edb6c8d9',
-    #                              '6bb400efe627eec5e854a4a623550f5f',
-    #                              '69661449d4920dab67e521d8b173c43f',
-    #                              'fb04870fa815a7018a5a7b8cb8f8096d',
-    #                              '716f08f61521cc663b365e8dc62230e8'])
+    print_experiment_notes(EXPER_DICTS)
 
-    # for exper in PARSER.parse_args().experiments:
-    #     EXPER_DICTS[exper] = {"root" : Path.cwd() / "torch_models"}
-
-    # parse_experiment_list(EXPER_DICTS)
-    # print_experiment_notes(EXPER_DICTS)
+    significance_test(
+        EXPER_DICTS, 'fb04870fa815a7018a5a7b8cb8f8096d',
+        ['03c8122b856204bd91346213495f577c'], 'Batch_RMSE_Linear')
 
     # epoch_summary_comparison(EXPER_DICTS)
-    final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
+    # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_analysis(EXPER_DICTS)

@@ -84,7 +84,7 @@ class MetricBase(object):
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                mean, variance = np.asarray(self.get_epoch_statistics(main_metric=False))
+                mean, variance = np.asarray(self.get_current_statistics(main_metric=False))
                 top_group.create_dataset('Summary_Mean', data=mean)
                 top_group.create_dataset('Summary_Variance', data=variance)
 
@@ -170,7 +170,7 @@ class MetricBase(object):
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                mean, variance = np.asarray(self.get_epoch_statistics(main_metric=False))
+                mean, variance = np.asarray(self.get_current_statistics(main_metric=False))
                 top_group.create_dataset('Summary_Mean', data=mean)
                 top_group.create_dataset('Summary_Variance', data=variance)
 
@@ -308,7 +308,7 @@ class MetricBase(object):
     def _reset_metric(self):
         raise NotImplementedError
 
-    def get_epoch_statistics(self, main_metric=True, loss_metric=True):
+    def get_current_statistics(self, main_metric=True, loss_metric=True):
         """
         Returns Accuracy and Loss Metrics from an Epoch\n
         @todo   get a specified epoch instead of only currently loaded one\n
@@ -361,6 +361,9 @@ class MetricBase(object):
                     srt_fnc = lambda x: x[0]
                     for idx, (key, data) in enumerate(sorted(criterion_dict.items(), key=srt_fnc)):
                         criterion_dict[key][1] = data[0](data[1], summary_data[idx])
+            else:
+                Warning(f"No validation in {str(path)}.")
+                return None
 
         if specific is not None:
             return criterion_dict[specific]
@@ -392,6 +395,35 @@ class MetricBase(object):
             stripped = key.replace("Batch_", "")
             mean_data = np.asarray(data).mean()
             print("%s: %.3f" %(stripped, mean_data))
+
+    def get_epoch_data(self, epoch=-1, statistic=None, mode='validation'):
+        """
+        Returns epoch statistics form hdf5 file
+        """
+        assert mode in ['validation', 'training']
+        with h5py.File(self._path, 'a') as hfile:
+            if mode in list(hfile):
+                if epoch == -1:
+                    epoch = max(list(hfile[mode]), key=lambda x: int(x[6:]))
+                else:
+                    epoch = f'Epoch_{epoch}'
+
+                if statistic is not None:
+                    return hfile[f'{mode}/{epoch}/{statistic}'][:]
+
+                data = {}
+                for dataset in list(hfile[f'{mode}/{epoch}']):
+                    data[dataset] = hfile[f'{mode}/{epoch}/{dataset}'][:]
+
+        Warning(f"No validation in {str(self._path)}.")
+        return None
+
+    def get_epoch_statistic(self, statistic: str, epoch=-1, mode='validation'):
+        """
+        Returns the mean and variance of an epoch
+        """
+        epoch_data = self.get_epoch_data(epoch, statistic, mode)
+        return np.nanmean(epoch_data), np.nanvar(epoch_data, ddof=1)
 
 class SegmentationMetric(MetricBase):
     """
@@ -442,7 +474,7 @@ class SegmentationMetric(MetricBase):
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
         print(f"Pixel Accuracy: {pixel_acc:.4f}\nmIoU: {miou:.4f}\nLoss: {loss:.4f}")
 
-    def get_epoch_statistics(self, main_metric=True, loss_metric=True):
+    def get_current_statistics(self, main_metric=True, loss_metric=True):
         """
         Returns Accuracy Metrics [pixelwise, mIoU, loss]\n
         @todo   get a specified epoch instead of only currently loaded one\n
