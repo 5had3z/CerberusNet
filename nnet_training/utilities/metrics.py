@@ -241,7 +241,7 @@ class MetricBase(object):
             plt.subplot(1, len(summary_data), idx+1)
 
             data_mean = summary_data[metric]["Training_Mean"]
-            data_var = summary_data[metric]["Training_Variance"]
+            data_var = np.sqrt(summary_data[metric]["Training_Variance"])
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -249,7 +249,7 @@ class MetricBase(object):
                 alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
-            data_var = summary_data[metric]["Validation_Variance"]
+            data_var = np.sqrt(summary_data[metric]["Validation_Variance"])
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -642,13 +642,13 @@ class SegmentationMetric(MetricBase):
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
                 training_mean[idx] = np.nanmean(
                     hfile[f'training/{epoch}/Batch_IoU'][:], axis=0)
-                training_var[idx] = np.nanvar(
+                training_var[idx] = np.nanstd(
                     hfile[f'training/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
                 testing_mean[idx] = np.nanmean(
                     hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0)
-                testing_var[idx] = np.nanvar(
+                testing_var[idx] = np.nanstd(
                     hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
 
         for idx in range(self._n_classes):
