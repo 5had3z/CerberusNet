@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Union, List
 from easydict import EasyDict
 
+import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 from nnet_training.utilities.metrics import MetricBase, get_loggers
@@ -49,7 +50,14 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         # Plot each metric on a different subplot
         for idx, metric in enumerate(sample_data):
             for name, summary_dict in experiment_data.items():
-                axis[idx].plot(summary_dict[metric]["Validation"], label=name)
+                data_mean = summary_dict[metric]["Validation_Mean"]
+                data_svar = summary_dict[metric]["Validation_Variance"]
+                axis[idx].plot(data_mean, label=name)
+                axis[idx].fill_between(
+                    np.arange(0, data_mean.shape[0]),
+                    data_mean - data_svar,
+                    data_mean + data_svar,
+                    alpha=0.2)
 
             axis[idx].set_title(f'{metric}')
             axis[idx].set_xlabel('Epoch #')
@@ -240,23 +248,25 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['fb04870fa815a7018a5a7b8cb8f8096d',
-                                 '03c8122b856204bd91346213495f577c'])
+                        default=['9f528be8b9c320c148cc682a7da0b361',
+                                 '6bb400efe627eec5e854a4a623550f5f'])
 
     EXPER_DICTS = {}
 
-    ROOT_DIRS = [
-        Path.cwd() / "torch_models",
-        # Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
-    ]
-
-    # for rdir in ROOT_DIRS:
-    #     parse_expeiment_folder(rdir, EXPER_DICTS)
-
+    ## Parsing args
     for exper in PARSER.parse_args().experiments:
         EXPER_DICTS[exper] = {"root" : Path.cwd() / "torch_models"}
 
     parse_experiment_list(EXPER_DICTS)
+
+    ## Parsing Folders
+    # ROOT_DIRS = [
+    #     Path.cwd() / "torch_models",
+    #     # Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
+    # ]
+
+    # for rdir in ROOT_DIRS:
+    #     parse_expeiment_folder(rdir, EXPER_DICTS)
 
     # print_experiment_perf(EXPER_DICTS, 'flow')
     # print_experiment_perf(EXPER_DICTS, 'seg')
@@ -264,9 +274,9 @@ if __name__ == "__main__":
     print_experiment_notes(EXPER_DICTS)
 
     significance_test(
-        EXPER_DICTS, 'fb04870fa815a7018a5a7b8cb8f8096d',
-        ['03c8122b856204bd91346213495f577c'], 'Batch_RMSE_Linear')
+        EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
+        ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_EPE')
 
-    # epoch_summary_comparison(EXPER_DICTS)
+    epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_analysis(EXPER_DICTS)

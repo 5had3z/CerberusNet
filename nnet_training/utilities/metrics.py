@@ -246,7 +246,7 @@ class MetricBase(object):
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
                 data_mean - data_var, data_mean + data_var,
-                color='gray', alpha=0.2)
+                alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
             data_var = summary_data[metric]["Validation_Variance"]
@@ -254,7 +254,7 @@ class MetricBase(object):
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
                 data_mean - data_var, data_mean + data_var,
-                color='gray', alpha=0.2)
+                alpha=0.2)
 
             plt.legend(["Training", "Validation"])
             plt.title(f'{metric.replace("Batch_", "")} over Epochs')
@@ -659,14 +659,14 @@ class SegmentationMetric(MetricBase):
                 np.arange(0, training_mean[:, idx].shape[0]),
                 training_mean[:, idx] - training_var[:, idx],
                 training_mean[:, idx] + training_var[:, idx],
-                color='gray', alpha=0.2)
+                alpha=0.2)
 
             plt.plot(testing_mean[:, idx])
             plt.fill_between(
                 np.arange(0, testing_mean[:, idx].shape[0]),
                 testing_mean[:, idx] - testing_var[:, idx],
                 testing_mean[:, idx] + testing_var[:, idx],
-                color='gray', alpha=0.2)
+                alpha=0.2)
 
             plt.legend(["Training", "Validation"])
             plt.title(f'{trainId2name[idx]} over Epochs')
