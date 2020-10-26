@@ -600,22 +600,42 @@ class SegmentationMetric(MetricBase):
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
         with h5py.File(self._path, 'r') as hfile:
-            n_classes = hfile['training/Epoch_1/Batch_IoU'][:].shape[1]
+            training_mean = np.zeros((len(list(hfile['training'])), self._n_classes))
+            training_var = np.zeros((len(list(hfile['training'])), self._n_classes))
 
-            training_data = np.zeros((len(list(hfile['training'])), n_classes))
-            testing_data = np.zeros((len(list(hfile['validation'])), n_classes))
+            testing_mean = np.zeros((len(list(hfile['validation'])), self._n_classes))
+            testing_var = np.zeros((len(list(hfile['validation'])), self._n_classes))
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                training_data[idx] = np.nanmean(hfile['training/'+epoch+'/Batch_IoU'][:], axis=0)
+                training_mean[idx] = np.nanmean(
+                    hfile[f'training/{epoch}/Batch_IoU'][:], axis=0)
+                training_var[idx] = np.nanvar(
+                    hfile[f'training/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                testing_data[idx] = np.nanmean(hfile['validation/'+epoch+'/Batch_IoU'][:], axis=0)
+                testing_mean[idx] = np.nanmean(
+                    hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0)
+                testing_var[idx] = np.nanvar(
+                    hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
 
-        for idx in range(n_classes):
-            plt.subplot(3, n_classes//3+1, idx+1)
-            plt.plot(training_data[:, idx])
-            plt.plot(testing_data[:, idx])
+        for idx in range(self._n_classes):
+            plt.subplot(3, self._n_classes//3+1, idx+1)
+
+            plt.plot(training_mean[:, idx])
+            plt.fill_between(
+                np.arange(0, training_mean[:, idx].shape[0]),
+                training_mean[:, idx] - training_var[:, idx],
+                training_mean[:, idx] + training_var[:, idx],
+                color='gray', alpha=0.2)
+
+            plt.plot(testing_mean[:, idx])
+            plt.fill_between(
+                np.arange(0, testing_mean[:, idx].shape[0]),
+                testing_mean[:, idx] - testing_var[:, idx],
+                testing_mean[:, idx] + testing_var[:, idx],
+                color='gray', alpha=0.2)
+
             plt.legend(["Training", "Validation"])
             plt.title(f'{trainId2name[idx]} over Epochs')
             plt.xlabel('Epoch #')
