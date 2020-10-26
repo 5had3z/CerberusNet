@@ -84,8 +84,9 @@ class MetricBase(object):
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                summary_stats = np.asarray(self.get_epoch_statistics(main_metric=False))
-                top_group.create_dataset('Summary', data=summary_stats)
+                mean, variance = np.asarray(self.get_epoch_statistics(main_metric=False))
+                top_group.create_dataset('Summary_Mean', data=mean)
+                top_group.create_dataset('Summary_Variance', data=variance)
 
                 # Flush current data as its now in long term
                 # storage and we're ready for next dataset
@@ -169,8 +170,9 @@ class MetricBase(object):
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                summary_stats = np.asarray(self.get_epoch_statistics(main_metric=False))
-                top_group.create_dataset('Summary', data=summary_stats)
+                mean, variance = np.asarray(self.get_epoch_statistics(main_metric=False))
+                top_group.create_dataset('Summary_Mean', data=mean)
+                top_group.create_dataset('Summary_Variance', data=variance)
 
         else:
             print("No File Specified for Metric Manager")
@@ -195,21 +197,33 @@ class MetricBase(object):
                 if metric[:5] == 'Batch':
                     metrics.append(metric)
 
-            training_data = np.zeros((len(list(hfile['training'])), len(metrics)))
-            testing_data = np.zeros((len(list(hfile['validation'])), len(metrics)))
+            training_mean = np.zeros((len(list(hfile['training'])), len(metrics)))
+            testing_mean = np.zeros((len(list(hfile['validation'])), len(metrics)))
+            training_var = np.zeros((len(list(hfile['training'])), len(metrics)))
+            testing_var = np.zeros((len(list(hfile['validation'])), len(metrics)))
 
             sort_func = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_func)):
-                training_data[idx] = hfile['training/'+epoch+'/Summary'][:]
+                if 'Summary' in list(hfile['training/'+epoch]):
+                    training_mean[idx] = hfile['training/'+epoch+'/Summary'][:]
+                else:
+                    training_mean[idx] = hfile['training/'+epoch+'/Summary_Mean'][:]
+                    training_var[idx] = hfile['training/'+epoch+'/Summary_Variance'][:]
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_func)):
-                testing_data[idx] = hfile['validation/'+epoch+'/Summary'][:]
+                if 'Summary' in list(hfile['validation/'+epoch]):
+                    testing_mean[idx] = hfile['validation/'+epoch+'/Summary'][:]
+                else:
+                    testing_mean[idx] = hfile['validation/'+epoch+'/Summary_Mean'][:]
+                    testing_var[idx] = hfile['validation/'+epoch+'/Summary_Variance'][:]
 
         ret_val = {}
         for idx, metric in enumerate(metrics):
             ret_val[metric] = {
-                "Training" : training_data[:, idx],
-                "Validation" : testing_data[:, idx]
+                "Training_Mean" : training_mean[:, idx],
+                "Validation_Mean" : testing_mean[:, idx],
+                "Training_Variance" : training_var[:, idx],
+                "Validation_Variance" : testing_var[:, idx],
             }
 
         return ret_val
@@ -225,8 +239,23 @@ class MetricBase(object):
 
         for idx, metric in enumerate(summary_data):
             plt.subplot(1, len(summary_data), idx+1)
-            plt.plot(summary_data[metric]["Training"])
-            plt.plot(summary_data[metric]["Validation"])
+
+            data_mean = summary_data[metric]["Training_Mean"]
+            data_var = summary_data[metric]["Training_Variance"]
+            plt.plot(data_mean)
+            plt.fill_between(
+                np.arange(0, data_mean.shape[0]),
+                data_mean - data_var, data_mean + data_var,
+                color='gray', alpha=0.2)
+
+            data_mean = summary_data[metric]["Validation_Mean"]
+            data_var = summary_data[metric]["Validation_Variance"]
+            plt.plot(data_mean)
+            plt.fill_between(
+                np.arange(0, data_mean.shape[0]),
+                data_mean - data_var, data_mean + data_var,
+                color='gray', alpha=0.2)
+
             plt.legend(["Training", "Validation"])
             plt.title(f'{metric.replace("Batch_", "")} over Epochs')
             plt.xlabel('Epoch #')
@@ -286,18 +315,24 @@ class MetricBase(object):
         @param  main_metric, only main metric\n
         @param  loss_metric, returns recorded loss\n
         """
-        ret_val = ()
+        ret_mean = ()
+        ret_var = ()
         if main_metric:
-            ret_val += (np.asarray(self.metric_data[self.main_metric]).mean(),)
+            data = np.asarray(self.metric_data[self.main_metric]).flatten()
+            ret_mean += (data.mean(),)
+            ret_var += (data.var(ddof=1),)
             if loss_metric:
-                ret_val += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
+                ret_mean += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
+                ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
 
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key != "Batch_Loss" or loss_metric:
-                    ret_val += (np.asarray(data).mean(),)
+                    data = np.asarray(data).flatten()
+                    ret_mean += (data.mean(),)
+                    ret_var += (data.var(ddof=1),)
 
-        return ret_val
+        return ret_mean, ret_var
 
     def max_accuracy(self, main_metric=True):
         """
@@ -318,7 +353,10 @@ class MetricBase(object):
         with h5py.File(path, 'a') as hfile:
             if 'validation' in list(hfile):
                 for epoch in hfile['validation']:
-                    summary_data = hfile['validation/'+epoch+'/Summary'][:]
+                    if 'Summary' in list(hfile['validation/'+epoch]):
+                        summary_data = hfile['validation/'+epoch+'/Summary'][:]
+                    else:
+                        summary_data = hfile['validation/'+epoch+'/Summary_Mean'][:]
 
                     srt_fnc = lambda x: x[0]
                     for idx, (key, data) in enumerate(sorted(criterion_dict.items(), key=srt_fnc)):
@@ -411,24 +449,33 @@ class SegmentationMetric(MetricBase):
         @param  main_metric, returns mIoU and not Pixel Accuracy\n
         @param  loss_metric, returns recorded loss\n
         """
-        ret_val = ()
+        ret_mean = ()
+        ret_var = ()
         if main_metric:
             if self.main_metric == 'Batch_IoU':
-                ret_val += (np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
+                ret_mean += (np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
+                data = np.asarray(self.metric_data['Batch_IoU']).reshape(-1, self._n_classes)
+                ret_var += (np.nanvar(data, axis=1).mean(),)
             else:
-                ret_val += (np.asarray(self.metric_data[self.main_metric]).mean(),)
+                data = np.asarray(self.metric_data[self.main_metric]).flatten()
+                ret_mean += (data.mean(),)
+                ret_var += (data.var(ddof=1),)
             if loss_metric:
-                loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-                ret_val += (loss,)
+                ret_mean += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
+                ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if key == 'Batch_IoU':
-                    ret_val += (np.nanmean(
+                    ret_mean += (np.nanmean(
                         self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
+                    data = np.asarray(data).reshape(-1, self._n_classes)
+                    ret_var += (np.nanvar(data, axis=1).mean(),)
                 elif (key != 'Batch_Loss' or loss_metric) and key[:5] == 'Batch':
-                    ret_val += (np.asarray(data).mean(),)
+                    data = np.asarray(data).flatten()
+                    ret_mean += (data.mean(),)
+                    ret_var += (data.var(ddof=1),)
 
-        return ret_val
+        return ret_mean, ret_var
 
     def max_accuracy(self, main_metric=True):
         """
