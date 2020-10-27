@@ -808,22 +808,24 @@ class DepthMetric(MetricBase):
 
         gt_mask = gt_depth < 80.
         gt_mask &= gt_depth > 0.
-        gt_mask = gt_mask.float()
         n_valid = torch.sum(gt_mask, dim=(1, 2))
+        gt_mask = ~gt_mask
 
-        difference = (pred_depth - gt_depth) * gt_mask
+        difference = pred_depth - gt_depth
+        difference[gt_mask] = 0.
         squared_diff = difference.pow(2)
+
         log_diff = (torch.log(pred_depth) - torch.log(gt_depth))
-        log_diff[gt_mask != 1.0] = 0
+        log_diff[gt_mask] = 0.
         sq_log_diff = torch.sum(log_diff.pow(2), dim=(1, 2)) / n_valid
 
         abs_rel = difference.abs() / gt_depth
-        abs_rel[gt_mask != 1.0] = 0
+        abs_rel[gt_mask] = 0.
         self.metric_data['Batch_Absolute_Relative'].append(
             (torch.sum(abs_rel, dim=(1, 2)) / n_valid).cpu().data.numpy())
 
         sqr_rel = squared_diff / gt_depth
-        sqr_rel[gt_mask != 1.0] = 0
+        sqr_rel[gt_mask] = 0.
         self.metric_data['Batch_Squared_Relative'].append(
             (torch.sum(sqr_rel, dim=(1, 2)) / n_valid).cpu().data.numpy())
 
@@ -838,6 +840,7 @@ class DepthMetric(MetricBase):
         self.metric_data['Batch_Invariant'].append((eqn1 - eqn2).cpu().data.numpy())
 
         threshold = torch.max(pred_depth / gt_depth, gt_depth / pred_depth)
+        threshold[gt_mask] = 1.25 ** 3
         self.metric_data['Batch_a1'].append(
             (torch.sum(threshold < 1.25, dim=(1, 2)) / n_valid).cpu().numpy())
         self.metric_data['Batch_a2'].append(
