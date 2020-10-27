@@ -8,11 +8,11 @@ If I get all 3 objectives working well, I call shotgun on the name Cerberus-Net.
 
 Current WIP, still doing model exploration at the moment, no refinement or deeper cycles training yet.
 
+## Cityscapes Segmentation + Flow + Depth
+![Cityscapes HrnetV2 Segmentation + Flow + Depth](misc/E40_2.png)
+
 ## KITTI Segmentaiton + Flow
 ![KITTI HrnetV2 Segmentation + Flow](misc/E150_4.png)
-
-## Cityscapes Segmentation + Flow + Depth
-![Cityscapes HrnetV2 Segmentation + Flow + Depth](misc/E30_4.png)
 
 ## Dependencies
 ### On the C++ Side of Things:
