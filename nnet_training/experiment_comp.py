@@ -40,7 +40,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         experiment_data = {}
         for exper_hash, data in experiment_dict.items():
             if objective in data.keys():
-                experiment_data[exper_hash] = data[objective].get_summary_data()
+                experiment_data[exper_hash], n_samples = data[objective].get_summary_data()
 
         sample_data = next(iter(experiment_data.values()))
 
@@ -51,7 +51,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         for idx, metric in enumerate(sample_data):
             for name, summary_dict in experiment_data.items():
                 data_mean = summary_dict[metric]["Validation_Mean"]
-                data_svar = summary_dict[metric]["Validation_Variance"]
+                data_svar = 3 * np.sqrt(summary_dict[metric]["Validation_Variance"] / n_samples)
                 axis[idx].plot(data_mean, label=name)
                 axis[idx].fill_between(
                     np.arange(0, data_mean.shape[0]),
@@ -241,9 +241,13 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
 
     for exper_hash in comparitors:
         comp_data = experiment_dict[exper_hash][exper_type].get_epoch_data(statistic=statistic)
-        statistic, p_value = stats.ttest_ind(
+        _, p_value = stats.ttest_ind(
             null_data, comp_data, equal_var=False, nan_policy='omit')
-        print(p_value)
+
+        if p_value.shape[0] > 1:
+            print(f"{statistic} average p-value {p_value.mean()}")
+        else:
+            print(f"{statistic} p-value {p_value}")
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
@@ -276,6 +280,10 @@ if __name__ == "__main__":
     significance_test(
         EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
         ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_EPE')
+
+    significance_test(
+        EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
+        ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_IoU')
 
     epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')

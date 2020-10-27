@@ -192,10 +192,13 @@ class MetricBase(object):
         Returns dictionary with testing and validation statistics
         """
         with h5py.File(self._path, 'r') as hfile:
+            n_samples = 0
             metrics = []
             for metric in list(hfile['training/Epoch_1']):
                 if metric[:5] == 'Batch':
                     metrics.append(metric)
+                    if n_samples == 0:
+                        n_samples = hfile[f'training/Epoch_1/{metric}'][:].shape[0]
 
             training_mean = np.zeros((len(list(hfile['training'])), len(metrics)))
             testing_mean = np.zeros((len(list(hfile['validation'])), len(metrics)))
@@ -226,7 +229,7 @@ class MetricBase(object):
                 "Validation_Variance" : testing_var[:, idx],
             }
 
-        return ret_val
+        return ret_val, n_samples
 
     def plot_summary_data(self):
         """
@@ -235,13 +238,13 @@ class MetricBase(object):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        summary_data = self.get_summary_data()
+        summary_data, n_samples = self.get_summary_data()
 
         for idx, metric in enumerate(summary_data):
             plt.subplot(1, len(summary_data), idx+1)
 
             data_mean = summary_data[metric]["Training_Mean"]
-            data_var = np.sqrt(summary_data[metric]["Training_Variance"])
+            data_var = 3 * np.sqrt(summary_data[metric]["Training_Variance"] / n_samples)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -249,7 +252,7 @@ class MetricBase(object):
                 alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
-            data_var = np.sqrt(summary_data[metric]["Validation_Variance"])
+            data_var = 3 * np.sqrt(summary_data[metric]["Validation_Variance"] / n_samples)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -640,16 +643,15 @@ class SegmentationMetric(MetricBase):
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                training_mean[idx] = np.nanmean(
-                    hfile[f'training/{epoch}/Batch_IoU'][:], axis=0)
-                training_var[idx] = np.nanstd(
-                    hfile[f'training/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
+                epoch_data = hfile[f'training/{epoch}/Batch_IoU'][:]
+                n_samples = epoch_data.shape[0]
+                training_mean[idx] = np.nanmean(epoch_data, axis=0)
+                training_var[idx] = 3 * np.nanstd(epoch_data, axis=0, ddof=1) / np.sqrt(n_samples)
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                testing_mean[idx] = np.nanmean(
-                    hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0)
-                testing_var[idx] = np.nanstd(
-                    hfile[f'validation/{epoch}/Batch_IoU'][:], axis=0, ddof=1)
+                epoch_data = hfile[f'validation/{epoch}/Batch_IoU'][:]
+                testing_mean[idx] = np.nanmean(epoch_data, axis=0)
+                testing_var[idx] = 3 * np.nanstd(epoch_data, axis=0, ddof=1) / np.sqrt(n_samples)
 
         for idx in range(self._n_classes):
             plt.subplot(3, self._n_classes//3+1, idx+1)
