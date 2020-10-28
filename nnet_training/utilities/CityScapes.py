@@ -390,6 +390,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
                 scale_range=dataset_config.augmentations.rand_scale)
         )
     else:
+        torch.backends.cudnn.benchmark = True
+
         dataloaders['Training'] = torch.utils.data.DataLoader(
             datasets["Training"],
             batch_size=dataset_config.batch_size,

@@ -404,6 +404,8 @@ def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
                 scale_range=dataset_config.augmentations.rand_scale)
         )
     else:
+        torch.backends.cudnn.benchmark = True
+
         dataloaders['Training'] = torch.utils.data.DataLoader(
             datasets["Training"],
             batch_size=dataset_config.batch_size,
