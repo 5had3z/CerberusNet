@@ -236,7 +236,7 @@ class MultiScaleRMILoss(nn.Module):
         return loss
 
 class RMILossAux(nn.Module):
-    def __init__(self, weight: float, aux_weight=0.4, **kwargs):
+    def __init__(self, weight=1, aux_weight=0.4, **kwargs):
         super(RMILossAux, self).__init__()
         self.rmi = RMILoss(**kwargs)
         self.aux_weight = aux_weight

@@ -12,7 +12,7 @@ Current WIP, still doing model exploration at the moment, no refinement or deepe
 ![Cityscapes HrnetV2 Segmentation + Flow + Depth](misc/E40_2.png)
 
 ## KITTI Segmentaiton + Flow
-![KITTI HrnetV2 Segmentation + Flow](misc/E150_4.png)
+![KITTI HrnetV2 Segmentation + Flow](misc/E400_4.png)
 
 ## Dependencies
 ### On the C++ Side of Things:

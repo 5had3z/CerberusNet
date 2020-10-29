@@ -78,6 +78,8 @@ class ModelTrainer(object):
         Sets new base learning rate for manager
         """
         self._lr_manager.base_lr = new_lr
+        if self._lr_manager.mode == 'constant':
+            self._lr_manager.target_lr = new_lr
 
     def load_checkpoint(self, path: Path):
         '''
@@ -209,7 +211,7 @@ class ModelTrainer(object):
 
                 sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
                                  f'Iter [{batch_idx + 1:4d}/{len(self._training_loader):4d}] || '
-                                 f'lr: {self._lr_manager.get_lr():.8f} || '
+                                 f'lr: {self._lr_manager.get_lr():.2e} || '
                                  f'Loss: {loss.item():.4f} || '
                                  f'Time Elapsed: {time_elapsed:.2f} s '
                                  f'Remain: {time_remain:.2f} s')
