@@ -12,9 +12,9 @@ import hashlib
 import platform
 import multiprocessing
 
+from typing import Tuple
 from pathlib import Path
 from easydict import EasyDict
-from typing import Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt

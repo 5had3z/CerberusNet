@@ -98,6 +98,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self.img_normalize = torchvision.transforms.Normalize(
                 kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
 
+        self.rand_flip = True
+
         # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
         #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
         self._key = np.array([255, 255, 255, 255, 255, 255,
@@ -256,7 +258,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.output_shape = [scale_func(x) for x in self.base_size]
 
         # random mirror
-        if random.random() < 0.5:
+        if random.random() < 0.5 and self.rand_flip:
             for key, data in epoch_data.items():
                 epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
 
