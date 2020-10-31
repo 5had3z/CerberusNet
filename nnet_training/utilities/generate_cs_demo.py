@@ -133,7 +133,6 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
     seg_vid = cv2.VideoWriter(str(path/"seg.avi"), fourcc, VIDEO_HZ, resolution)
     depth_vid = cv2.VideoWriter(str(path/"depth.avi"), fourcc, VIDEO_HZ, resolution)
     flow_vid = cv2.VideoWriter(str(path/"flow.avi"), fourcc, VIDEO_HZ, resolution)
-    raw_vid = cv2.VideoWriter(str(path/"raw.avi"), fourcc, VIDEO_HZ, resolution)
 
     composed_vid = cv2.VideoWriter(
         str(path/"composed.avi"), fourcc, VIDEO_HZ, tuple(2*res for res in resolution))
@@ -174,7 +173,7 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
 
             image_frame = np.moveaxis(
                 batch_data['l_img'][i].cpu().numpy() * 255, 0, 2).astype(np.uint8)
-            cv2.cvtColor(image_frame, cv2.COLOR_RGB2BGR, dst=image_frame)
+            image_frame = cv2.cvtColor(image_frame, cv2.COLOR_RGB2BGR)
 
             composed_frame[:y_res, :x_res] = image_frame
             composed_frame[:y_res, x_res:] = seg_frame
@@ -184,16 +183,14 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
             seg_vid.write(seg_frame)
             depth_vid.write(depth_frame)
             flow_vid.write(flow_frame)
-            raw_vid.write(image_frame)
             composed_vid.write(composed_frame)
 
-        sys.stdout.write(f'\rWriting Video: [{idx+1:4d}/{len(dataloader):4d}]')
+        sys.stdout.write(f'\rWriting Video: [{idx+1:3d}/{len(dataloader):3d}]')
         sys.stdout.flush()
 
     seg_vid.release()
     depth_vid.release()
     flow_vid.release()
-    raw_vid.release()
     composed_vid.release()
 
     print("Finished Writing Videos")
