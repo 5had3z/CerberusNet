@@ -74,9 +74,44 @@ class CityScapesDataset(torch.utils.data.Dataset):
             print("Neither Segmentation, Disparity or Img Sequence Keys are defined")
 
         if l_img_key is None:
-            print("Left Image Key Error")
+            print("Empty dataset given to base cityscapes dataset")
+        else:
+            self._initialize_dataset(directories, l_img_key, seg_dir_key, **kwargs)
 
-        #Get all file names
+        self.disparity_out = disparity_out
+        self.base_size = output_size
+        self.output_shape = output_size
+        self.scale_factor = 1
+
+        if 'crop_fraction' in kwargs:
+            self.crop_fraction = kwargs['crop_fraction']
+        if 'rand_rotation' in kwargs:
+            self.rand_rot = kwargs['rand_rotation']
+        if 'rand_brightness' in kwargs:
+            self.brightness = kwargs['rand_brightness']
+        if 'rand_scale' in kwargs:
+            assert len(kwargs['rand_scale']) == 2
+            self.scale_range = kwargs['rand_scale']
+        if 'img_normalize' in kwargs:
+            # Typical normalisation parameters:
+            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+            self.img_normalize = torchvision.transforms.Normalize(
+                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
+
+        # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+        #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
+        self._key = np.array([255, 255, 255, 255, 255, 255,
+                              255, 255, 0, 1, 255, 255,
+                              2, 3, 4, 255, 255, 255,
+                              5, 255, 6, 7, 8, 9,
+                              10, 11, 12, 13, 14, 15,
+                              255, 255, 16, 17, 18])
+        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
+
+    def _initialize_dataset(self, directories, l_img_key, seg_dir_key, **kwargs):
+        """
+        Gets all the filenames
+        """
         for dir_name, _, file_list in os.walk(directories[l_img_key]):
             for filename in file_list:
                 if filename.endswith(IMG_EXT):
@@ -180,36 +215,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.cam = [self.cam[i] for i in kwargs['id_vector']]
             if hasattr(self, 'pose'):
                 self.pose = [self.pose[i] for i in kwargs['id_vector']]
-
-        self.disparity_out = disparity_out
-        self.base_size = output_size
-        self.output_shape = output_size
-        self.scale_factor = 1
-
-        if 'crop_fraction' in kwargs:
-            self.crop_fraction = kwargs['crop_fraction']
-        if 'rand_rotation' in kwargs:
-            self.rand_rot = kwargs['rand_rotation']
-        if 'rand_brightness' in kwargs:
-            self.brightness = kwargs['rand_brightness']
-        if 'rand_scale' in kwargs:
-            assert len(kwargs['rand_scale']) == 2
-            self.scale_range = kwargs['rand_scale']
-        if 'img_normalize' in kwargs:
-            # Typical normalisation parameters:
-            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
-            self.img_normalize = torchvision.transforms.Normalize(
-                kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
-
-        # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
-        #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
-        self._key = np.array([255, 255, 255, 255, 255, 255,
-                              255, 255, 0, 1, 255, 255,
-                              2, 3, 4, 255, 255, 255,
-                              5, 255, 6, 7, 8, 9,
-                              10, 11, 12, 13, 14, 15,
-                              255, 255, 16, 17, 18])
-        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):
         return len(self.l_img)

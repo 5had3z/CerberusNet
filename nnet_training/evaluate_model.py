@@ -230,12 +230,12 @@ if __name__ == "__main__":
 
         if not os.path.isdir(MODEL_PATH):
             raise EnvironmentError("Existing not Found")
-        else:
-            for filename in os.listdir(MODEL_PATH):
-                if filename.endswith('.json'):
-                    with open(MODEL_PATH / filename) as f:
-                        CFG = EasyDict(json.load(f))
-                    break
+
+        for filename in os.listdir(MODEL_PATH):
+            if filename.endswith('.json'):
+                with open(MODEL_PATH / filename) as f:
+                    CFG = EasyDict(json.load(f))
+                break
 
     MODEL, DATALOADER = initialise_evaluation(CFG, MODEL_PATH)
 
