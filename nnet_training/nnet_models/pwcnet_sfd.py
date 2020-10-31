@@ -163,6 +163,8 @@ class MonoSFDNet(nn.Module):
         if 'flow_est_network' in kwargs:
             if kwargs['flow_est_network']['type'] == 'FlowEstimatorDense':
                 self.flow_estimator = FlowEstimatorDense(num_ch_in)
+            elif kwargs['flow_est_network']['type'] == 'FlowEstimatorLite':
+                self.flow_estimator = FlowEstimatorLite(num_ch_in)
             else:
                 raise NotImplementedError(kwargs['flow_est_network']['type'])
         else:

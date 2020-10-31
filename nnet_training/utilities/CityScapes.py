@@ -46,6 +46,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         @param rand_rotation randomly rotates an image a maximum number of degrees.\n
         @param rand_brightness, the maximum random increase or decrease as a percentage.
         '''
+        super(CityScapesDataset, self).__init__()
         l_img_key = None
 
         for key in directories.keys():
@@ -85,29 +86,34 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
                     if hasattr(self, 'r_img'):
                         r_imgname = filename.replace('leftImg8bit', 'rightImg8bit')
-                        r_imgpath = os.path.join(directories['right_images'], foldername, r_imgname)
+                        r_imgpath = os.path.join(
+                            directories['right_images'], foldername, r_imgname)
                         if not os.path.isfile(r_imgpath):
                             read_check = False
                             print("Error finding corresponding right image to ", l_imgpath)
 
                     if hasattr(self, 'seg'):
                         seg_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
-                        seg_path = os.path.join(directories[seg_dir_key], foldername, seg_name)
+                        seg_path = os.path.join(
+                            directories[seg_dir_key], foldername, seg_name)
                         if not os.path.isfile(seg_path):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)
 
                     if hasattr(self, 'l_disp'):
                         disp_name = filename.replace('leftImg8bit', 'disparity')
-                        disp_path = os.path.join(directories['disparity'], foldername, disp_name)
+                        disp_path = os.path.join(
+                            directories['disparity'], foldername, disp_name)
                         if not os.path.isfile(disp_path):
                             read_check = False
                             print("Error finding corresponding disparity image to ", l_imgpath)
 
                     if hasattr(self, 'l_seq'):
                         frame_n = int(re.split("_", filename)[2])
-                        left_seq_name = filename.replace(str(frame_n).zfill(6), str(frame_n+1).zfill(6))
-                        left_seq_path = os.path.join(directories['left_seq'], foldername, left_seq_name)
+                        left_seq_name = filename.replace(
+                            str(frame_n).zfill(6), str(frame_n+1).zfill(6))
+                        left_seq_path = os.path.join(
+                            directories['left_seq'], foldername, left_seq_name)
                         if not os.path.isfile(left_seq_path):
                             read_check = False
                             print("Error finding corresponding left sequence image to ", l_imgpath)
@@ -118,24 +124,27 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             str(frame_n).zfill(6)+"_leftImg8bit",
                             str(frame_n+1).zfill(6)+"_rightImg8bit"
                         )
-                        right_seq_path = os.path.join(directories['right_seq'], foldername, right_seq_name)
+                        right_seq_path = os.path.join(
+                            directories['right_seq'], foldername, right_seq_name)
                         if not os.path.isfile(right_seq_path):
                             read_check = False
                             print("Error finding corresponding right sequence image to ", l_imgpath)
 
                     if hasattr(self, 'cam'):
                         cam_name = filename.replace('leftImg8bit.png', 'camera.json')
-                        cam_path = os.path.join(directories['cam'], foldername, cam_name)
+                        cam_path = os.path.join(
+                            directories['cam'], foldername, cam_name)
                         if not os.path.isfile(cam_path):
                             read_check = False
-                            print("Error finding corresponding camera parameters for ", l_imgpath)
+                            print("Error finding corresponding camera parameters to ", l_imgpath)
 
                     if hasattr(self, 'pose'):
                         pose_name = filename.replace('leftImg8bit.png', 'vehicle.json')
-                        pose_path = os.path.join(directories['pose'], foldername, pose_name)
+                        pose_path = os.path.join(
+                            directories['pose'], foldername, pose_name)
                         if not os.path.isfile(pose_path):
                             read_check = False
-                            print("Error finding corresponding GPS/Pose information for ", l_imgpath)
+                            print("Error finding corresponding GPS/Pose information to ", l_imgpath)
 
                     if read_check:
                         self.l_img.append(l_imgpath)
