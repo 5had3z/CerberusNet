@@ -120,12 +120,16 @@ def get_loader_and_model(model_cfg: EasyDict, model_path: Path, data_dir: str):
     return dataloader, model
 
 def generate_quiver_image(flow: np.ndarray, base_image: np.ndarray):
+    """
+    Returns the base image overlayed with a quiver plot from the flow field
+    """
     quiver_image = np.zeros_like(base_image)
-    for y_1 in range(1, flow.shape[0], 10):
-        for x_1 in range(1, flow.shape[1], 10):
+    for y_1 in range(25, flow.shape[0], 25):
+        for x_1 in range(25, flow.shape[1], 25):
             y_2 = np.clip(int(y_1 + flow[y_1, x_1, 1]), 0, flow.shape[0])
             x_2 = np.clip(int(x_1 + flow[y_1, x_1, 0]), 0, flow.shape[1])
-            quiver_image = cv2.arrowedLine(quiver_image, (x_1, y_1), (x_2, y_2), [0, 255, 0], 1)
+            quiver_image = cv2.arrowedLine(
+                quiver_image, (x_1, y_1), (x_2, y_2), [0, 255, 0], 2, tipLength=0.2)
     quiver_image = cv2.add(base_image, quiver_image)
     return quiver_image
 
@@ -143,16 +147,13 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
     depth_vid = cv2.VideoWriter(str(path/"depth.avi"), fourcc, VIDEO_HZ, resolution)
     flow_vid = cv2.VideoWriter(str(path/"flow.avi"), fourcc, VIDEO_HZ, resolution)
     quiver_vid = cv2.VideoWriter(str(path/"quiver.avi"), fourcc, VIDEO_HZ, resolution)
-
     composed_vid = cv2.VideoWriter(
         str(path/"composed.avi"), fourcc, VIDEO_HZ, tuple(2*res for res in resolution))
 
-    temp_list = np.asarray(
+    color_lut = np.zeros((256, 3), dtype=np.uint8)
+    color_lut[:len(CITYSPALLETTE)//3, :] = np.asarray(
         [CITYSPALLETTE[i:i + 3] for i in range(0, len(CITYSPALLETTE), 3)],
         dtype=np.uint8)
-
-    color_lut = np.zeros((256, 3), dtype=np.uint8)
-    color_lut[:temp_list.shape[0], :] = temp_list
 
     composed_frame = np.zeros((2*y_res, 2*x_res, 3), dtype=np.uint8)
 
@@ -211,7 +212,7 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
 
 if __name__ == "__main__":
     DATA_DIR = Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'+\
-               '/leftImg8bit_demoVideo/leftImg8bit/demoVideo/stuttgart_00')
+                    '/leftImg8bit_demoVideo/leftImg8bit/demoVideo/stuttgart_00')
     BASE_PATHS = [Path.cwd() / "torch_models"]
 
     MODEL_CFG, MODEL_PTH = get_config_argparse(BASE_PATHS)
