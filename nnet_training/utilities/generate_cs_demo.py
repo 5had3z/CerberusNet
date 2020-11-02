@@ -119,6 +119,16 @@ def get_loader_and_model(model_cfg: EasyDict, model_path: Path, data_dir: str):
 
     return dataloader, model
 
+def generate_quiver_image(flow: np.ndarray, base_image: np.ndarray):
+    quiver_image = np.zeros_like(base_image)
+    for y_1 in range(1, flow.shape[0], 10):
+        for x_1 in range(1, flow.shape[1], 10):
+            y_2 = np.clip(int(y_1 + flow[y_1, x_1, 1]), 0, flow.shape[0])
+            x_2 = np.clip(int(x_1 + flow[y_1, x_1, 0]), 0, flow.shape[1])
+            quiver_image = cv2.arrowedLine(quiver_image, (x_1, y_1), (x_2, y_2), [0, 255, 0], 1)
+    quiver_image = cv2.add(base_image, quiver_image)
+    return quiver_image
+
 @torch.no_grad()
 def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader,
                    path: str):
@@ -128,11 +138,11 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
 
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     resolution = tuple(dataloader.dataset.output_shape)
-    x_res = resolution[0]
-    y_res = resolution[1]
+    x_res, y_res = resolution
     seg_vid = cv2.VideoWriter(str(path/"seg.avi"), fourcc, VIDEO_HZ, resolution)
     depth_vid = cv2.VideoWriter(str(path/"depth.avi"), fourcc, VIDEO_HZ, resolution)
     flow_vid = cv2.VideoWriter(str(path/"flow.avi"), fourcc, VIDEO_HZ, resolution)
+    quiver_vid = cv2.VideoWriter(str(path/"quiver.avi"), fourcc, VIDEO_HZ, resolution)
 
     composed_vid = cv2.VideoWriter(
         str(path/"composed.avi"), fourcc, VIDEO_HZ, tuple(2*res for res in resolution))
@@ -165,7 +175,8 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
                 seg_frame[..., j] = cv2.LUT(batch_seg[i].astype(np.uint8), color_lut[:, j])
             cv2.cvtColor(seg_frame, cv2.COLOR_RGB2BGR, dst=seg_frame)
 
-            flow_frame = flow_to_image(batch_flow[i].transpose([1, 2, 0]))
+            flow_transpose = batch_flow[i].transpose([1, 2, 0])
+            flow_frame = flow_to_image(flow_transpose)
 
             depth_frame = cv2.applyColorMap(
                 (batch_depth[i, 0] / MAX_DEPTH * 255).astype(np.uint8),
@@ -185,6 +196,8 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
             flow_vid.write(flow_frame)
             composed_vid.write(composed_frame)
 
+            quiver_vid.write(generate_quiver_image(flow_transpose, image_frame))
+
         sys.stdout.write(f'\rWriting Video: [{idx+1:3d}/{len(dataloader):3d}]')
         sys.stdout.flush()
 
@@ -192,6 +205,7 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
     depth_vid.release()
     flow_vid.release()
     composed_vid.release()
+    quiver_vid.release()
 
     print("Finished Writing Videos")
 
