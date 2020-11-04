@@ -54,7 +54,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 l_img_key = key
                 self.l_img = []
             elif key == 'seg':
-                seg_dir_key = key
                 self.seg = []
             elif key == 'right_images':
                 self.r_img = []
@@ -76,7 +75,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if l_img_key is None:
             print("Empty dataset given to base cityscapes dataset")
         else:
-            self._initialize_dataset(directories, l_img_key, seg_dir_key, **kwargs)
+            self._initialize_dataset(directories, l_img_key, **kwargs)
 
         self.disparity_out = disparity_out
         self.base_size = output_size
@@ -110,7 +109,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                               255, 255, 16, 17, 18])
         self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
-    def _initialize_dataset(self, directories, l_img_key, seg_dir_key, **kwargs):
+    def _initialize_dataset(self, directories, l_img_key, **kwargs):
         """
         Gets all the filenames
         """
@@ -132,7 +131,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     if hasattr(self, 'seg'):
                         seg_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
                         seg_path = os.path.join(
-                            directories[seg_dir_key], foldername, seg_name)
+                            directories['seg'], foldername, seg_name)
                         if not os.path.isfile(seg_path):
                             read_check = False
                             print("Error finding corresponding segmentation image to ", l_imgpath)

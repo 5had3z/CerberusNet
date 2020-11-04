@@ -122,10 +122,11 @@ class FocalLoss2D(nn.Module):
     """
     Focal Loss for Imbalanced problems, also includes additonal weighting
     """
-    def __init__(self, gamma=2.0, ignore_index=255, dynamic_weights=False,
+    def __init__(self, weight=1.0, gamma=2.0, ignore_index=255, dynamic_weights=False,
                  scale_factor=0.125, **kwargs):
         super(FocalLoss2D, self).__init__()
 
+        self.weight = weight
         self.gamma = gamma
         self.ignore_index = ignore_index
         self.dynamic_weights = dynamic_weights
@@ -152,4 +153,30 @@ class FocalLoss2D(nn.Module):
         focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
 
         # return the average
-        return focal_loss.mean()
+        return self.weight * focal_loss.mean()
+
+class SegCrossEntropy(nn.Module):
+    def __init__(self, weight=1.0, ignore_index=255, dynamic_weights=False,
+                 scale_factor=0.125, **kwargs):
+        super(SegCrossEntropy, self).__init__()
+
+        self.weight = weight
+        self.ignore_index = ignore_index
+        self.dynamic_weights = dynamic_weights
+        self.scale_factor = scale_factor
+
+    def forward(self, seg_pred: Dict[str, torch.Tensor],
+                seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+        '''
+        Forward implementation that returns cross entropy between prediciton and target
+        '''
+        assert 'seg' in seg_pred.keys()
+
+        weights = torch.ones(seg_pred['seg'].shape[1]).to(seg_pred['seg'].get_device())
+        if self.dynamic_weights:
+            class_ids, counts = seg_gt[seg_gt != self.ignore_index].unique(return_counts=True)
+            weights[class_ids] = self.scale_factor / \
+                    (self.scale_factor + counts / float(seg_gt.nelement()))
+
+        return self.weight * F.cross_entropy(
+            seg_pred['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)

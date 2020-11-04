@@ -249,42 +249,54 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
         else:
             print(f"{statistic} p-value {p_value}")
 
-if __name__ == "__main__":
-    PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('-e', '--experiments', nargs='+',
-                        default=['9f528be8b9c320c148cc682a7da0b361',
-                                 '6bb400efe627eec5e854a4a623550f5f'])
+def arg_parse_list():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--experiments', nargs='+',
+                        default=['8f23c8346c898db41c5bc7c13c36da66',
+                                 '3d45eb8797d11b18fd26abf561e104e2',
+                                 '03ebd634e17f7e4d3003a0a8bbb46ce8'])
 
-    EXPER_DICTS = {}
+    experiment_dicts = {}
 
     ## Parsing args
-    for exper in PARSER.parse_args().experiments:
-        EXPER_DICTS[exper] = {"root" : Path.cwd() / "torch_models"}
+    for exper in parser.parse_args().experiments:
+        experiment_dicts[exper] = {"root" : Path.cwd() / "torch_models"}
 
-    parse_experiment_list(EXPER_DICTS)
+    parse_experiment_list(experiment_dicts)
+
+    return experiment_dicts
+
+def parse_folders():
+    experiment_dicts = {}
 
     ## Parsing Folders
-    # ROOT_DIRS = [
-    #     Path.cwd() / "torch_models",
-    #     # Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
-    # ]
+    root_dirs = [
+        Path.cwd() / "torch_models",
+        # Path('/media/bryce/4TB Seagate/Autonomous Vehicles Data/Pytorch Models')
+    ]
 
-    # for rdir in ROOT_DIRS:
-    #     parse_expeiment_folder(rdir, EXPER_DICTS)
+    for rdir in root_dirs:
+        parse_expeiment_folder(rdir, experiment_dicts)
+
+    return experiment_dicts
+
+if __name__ == "__main__":
+    EXPER_DICTS = parse_folders()
+    # EXPER_DICTS = arg_parse_list()
 
     # print_experiment_perf(EXPER_DICTS, 'flow')
     # print_experiment_perf(EXPER_DICTS, 'seg')
 
     print_experiment_notes(EXPER_DICTS)
 
-    significance_test(
-        EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
-        ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_EPE')
+    # significance_test(
+    #     EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
+    #     ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_EPE')
 
-    significance_test(
-        EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
-        ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_IoU')
+    # significance_test(
+    #     EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
+    #     ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_IoU')
 
-    epoch_summary_comparison(EXPER_DICTS)
+    # epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_analysis(EXPER_DICTS)

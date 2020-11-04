@@ -161,7 +161,8 @@ class ModelTrainer(object):
                     epoch_acc, _ = logger.get_current_statistics(
                         main_metric=True, loss_metric=False)
                     prev_best = logger.max_accuracy(main_metric=True)
-                    if prev_best is None or prev_best[0](epoch_acc[0], prev_best[1]):
+                    if prev_best is None or \
+                        prev_best[0](epoch_acc[0], prev_best[1]) == epoch_acc[0]:
                         filename = f"{self._model.modelname}_{key}.pth"
                         self.save_checkpoint(self._basepath / filename, metrics=False)
 

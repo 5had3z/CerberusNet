@@ -9,7 +9,7 @@ import torch
 from .depth_losses import InvHuberLoss, InvHuberLossPyr, DepthAwareLoss, ScaleInvariantError
 from .UnFlowLoss import unFlowLoss
 from .rmi import RMILoss, RMILossAux, MultiScaleRMILoss
-from .seg_losses import FocalLoss2D
+from .seg_losses import FocalLoss2D, SegCrossEntropy
 
 def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
     """
@@ -36,6 +36,8 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
             loss_fn_dict[loss_fn['type']] = RMILossAux(**loss_fn.args)
         elif loss_fn['function'] == "MultiScaleRMILoss":
             loss_fn_dict[loss_fn['type']] = MultiScaleRMILoss(**loss_fn.args)
+        elif loss_fn['function'] == "SegCrossEntropy":
+            loss_fn_dict[loss_fn['type']] = SegCrossEntropy(**loss_fn.args)
         else:
             raise NotImplementedError(loss_fn['function'])
 
