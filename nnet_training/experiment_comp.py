@@ -52,7 +52,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
             for name, summary_dict in experiment_data.items():
                 data_mean = summary_dict[metric]["Validation_Mean"]
                 data_svar = 3 * np.sqrt(summary_dict[metric]["Validation_Variance"] / n_samples)
-                axis[idx].plot(data_mean, label=name)
+                axis[idx].plot(data_mean, label=experiment_dict[name]['config'].note)
                 axis[idx].fill_between(
                     np.arange(0, data_mean.shape[0]),
                     data_mean - data_svar,
@@ -281,8 +281,8 @@ def parse_folders():
     return experiment_dicts
 
 if __name__ == "__main__":
-    EXPER_DICTS = parse_folders()
-    # EXPER_DICTS = arg_parse_list()
+    # EXPER_DICTS = parse_folders()
+    EXPER_DICTS = arg_parse_list()
 
     # print_experiment_perf(EXPER_DICTS, 'flow')
     # print_experiment_perf(EXPER_DICTS, 'seg')
@@ -297,6 +297,6 @@ if __name__ == "__main__":
     #     EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
     #     ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_IoU')
 
-    # epoch_summary_comparison(EXPER_DICTS)
+    epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_analysis(EXPER_DICTS)
