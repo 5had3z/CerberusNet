@@ -240,7 +240,7 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
     exper_type = STATISTIC_2_TYPE[statistic]
     null_data = experiment_dict[null_hyp][exper_type].get_epoch_data(statistic=statistic)
 
-    print(f"Null Hypothesis: {experiment_dict[null_hyp]['config'].note}, Statistic {statistic}")
+    print(f"\nNull Hypothesis: {experiment_dict[null_hyp]['config'].note}, Statistic {statistic}")
     for exper_hash, experiment_data in experiment_dict.items():
         if exper_hash != null_hyp and exper_type in experiment_data:
             comp_data = experiment_data[exper_type].get_epoch_data(statistic=statistic)
