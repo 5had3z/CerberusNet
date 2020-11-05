@@ -9,13 +9,14 @@ import shutil
 import hashlib
 import argparse
 from pathlib import Path
-from typing import Dict, Union, List
+from typing import Dict, Union
 from easydict import EasyDict
 
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 from nnet_training.utilities.metrics import MetricBase, get_loggers
+from nnet_training.utilities.cityscapes_labels import trainId2name
 
 STATISTIC_2_TYPE = {
     "Batch_IoU": "seg",
@@ -72,10 +73,47 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
     """
     Tool for analysing segmentation data
     """
-    for data in experiment_dict.values():
+    experiment_data = {}
+    for exper_hash, data in experiment_dict.items():
         if 'seg' in data.keys():
-            data['seg'].plot_classwise_data()
+            experiment_data[exper_hash], _ = data['seg'].conf_summary_data()
 
+    iou_fig, iou_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
+    iou_fig.suptitle("Comparision between Class IoU Validation Results")
+
+    rec_fig, rec_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
+    rec_fig.suptitle("Comparision between Class Recall Validation Results")
+
+    prc_fig, prc_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
+    prc_fig.suptitle("Comparision between Class Precision Validation Results")
+
+    for name, summary_dict in experiment_data.items():
+        for idx in range(19):
+            iou_axis[idx%3][idx//3].plot(
+                summary_dict["iou"][:, idx],
+                label=experiment_dict[name]['config'].note)
+
+            rec_axis[idx%3][idx//3].plot(
+                summary_dict["recall"][:, idx],
+                label=experiment_dict[name]['config'].note)
+
+            prc_axis[idx%3][idx//3].plot(
+                summary_dict["precision"][:, idx],
+                label=experiment_dict[name]['config'].note)
+
+    for idx in range(19):
+        iou_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
+        iou_axis[idx%3][idx//3].set_xlabel('Epoch #')
+        rec_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
+        rec_axis[idx%3][idx//3].set_xlabel('Epoch #')
+        prc_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
+        prc_axis[idx%3][idx//3].set_xlabel('Epoch #')
+
+    iou_fig.legend(*iou_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+    rec_fig.legend(*rec_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+    prc_fig.legend(*prc_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+
+    plt.tight_layout()
     plt.show()
 
 def parse_expeiment_folder(root_dir: Path, experiment_dict: Dict[str, Union[EasyDict, MetricBase]]):
@@ -291,15 +329,15 @@ if __name__ == "__main__":
 
     print_experiment_notes(EXPER_DICTS)
 
-    significance_test(
-        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_EPE')
+    # significance_test(
+    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_EPE')
 
-    significance_test(
-        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_IoU')
+    # significance_test(
+    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_IoU')
 
-    significance_test(
-        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_RMSE_Linear')
+    # significance_test(
+    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_RMSE_Linear')
 
     # epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
-    # segmentation_analysis(EXPER_DICTS)
+    segmentation_comparison(EXPER_DICTS)
