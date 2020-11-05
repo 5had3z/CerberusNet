@@ -55,12 +55,13 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         for idx, metric in enumerate(sample_data):
             for name, summary_dict in experiment_data.items():
                 data_mean = summary_dict[metric]["Validation_Mean"]
-                data_svar = 2. * np.sqrt(summary_dict[metric]["Validation_Variance"] / n_samples)
+                data_conf = stats.t.ppf(0.95, n_samples-1) * \
+                    summary_dict[metric]["Validation_Variance"] / np.sqrt(n_samples)
                 axis[idx].plot(data_mean, label=experiment_dict[name]['config'].note)
                 axis[idx].fill_between(
                     np.arange(0, data_mean.shape[0]),
-                    data_mean - data_svar,
-                    data_mean + data_svar,
+                    data_mean - data_conf,
+                    data_mean + data_conf,
                     alpha=0.2)
 
             axis[idx].set_title(f'{metric}')
@@ -161,7 +162,7 @@ def print_experiment_perf_all(experiment_dict: Dict[str, Union[EasyDict, MetricB
             max_data = obj_data.max_accuracy(main_metric=False)
             n_samples = obj_data.get_n_samples('validation')
             for statistic, data in max_data.items():
-                conf_95 = 2. * np.sqrt(data[1] / n_samples)
+                conf_95 = stats.t.ppf(0.95, n_samples-1) * data[1] / np.sqrt(n_samples)
                 print(f'{obj_type} {statistic}: mean {data[0]:.3f} +/- {conf_95:.3f}')
 
 def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
@@ -283,7 +284,7 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
         if exper_hash != null_hyp and exper_type in experiment_data:
             comp_data = experiment_data[exper_type].get_epoch_data(statistic=statistic)
             _, p_value = stats.ttest_ind(
-                null_data, comp_data, equal_var=False, nan_policy='omit')
+                null_data, comp_data, equal_var=True, nan_policy='omit')
 
             if p_value.shape[0] > 1:
                 print(f"{experiment_data['config'].note}: average p-value {p_value.mean():.4f}")
@@ -339,7 +340,7 @@ if __name__ == "__main__":
     # significance_test(
     #     EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66', 'Batch_RMSE_Log')
 
-    # epoch_summary_comparison(EXPER_DICTS)
-    print_experiment_perf_all(EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66')
+    epoch_summary_comparison(EXPER_DICTS)
+    # print_experiment_perf_all(EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66')
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_comparison(EXPER_DICTS)

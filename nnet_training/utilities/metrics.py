@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sn
 import pandas as pd
+from scipy import stats
 
 import torch
 
@@ -256,19 +257,21 @@ class MetricBase(object):
             plt.subplot(1, len(summary_data), idx+1)
 
             data_mean = summary_data[metric]["Training_Mean"]
-            data_var = 2 * np.sqrt(summary_data[metric]["Training_Variance"] / n_training)
+            data_conf = stats.t.ppf(0.95, n_training-1) * \
+                summary_data[metric]["Training_Variance"] / np.sqrt(n_training)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
-                data_mean - data_var, data_mean + data_var,
+                data_mean - data_conf, data_mean + data_conf,
                 alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
-            data_var = 2 * np.sqrt(summary_data[metric]["Validation_Variance"] / n_validation)
+            data_conf = stats.t.ppf(0.95, n_validation-1) * \
+                summary_data[metric]["Validation_Variance"] / np.sqrt(n_validation)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
-                data_mean - data_var, data_mean + data_var,
+                data_mean - data_conf, data_mean + data_conf,
                 alpha=0.2)
 
             plt.legend(["Training", "Validation"])
@@ -650,48 +653,32 @@ class SegmentationMetric(MetricBase):
         """
         This plots the iou of each class over all epochs
         """
-        plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Summary Training and Validation Results')
+        fig, axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
+        fig.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        with h5py.File(self._path, 'r') as hfile:
-            training_mean = np.zeros((len(list(hfile['training'])), self._n_classes))
-            training_var = np.zeros((len(list(hfile['training'])), self._n_classes))
+        for dataset in ['training', 'validation']:
+            with h5py.File(self._path, 'r') as hfile:
+                data_mean = np.zeros((len(list(hfile[dataset])), self._n_classes))
+                data_conf = np.zeros((len(list(hfile[dataset])), self._n_classes))
 
-            testing_mean = np.zeros((len(list(hfile['validation'])), self._n_classes))
-            testing_var = np.zeros((len(list(hfile['validation'])), self._n_classes))
+                sort_lmbda = lambda x: int(x[6:])
+                for idx, epoch in enumerate(sorted(list(hfile[dataset]), key=sort_lmbda)):
+                    epoch_data = hfile[f'{dataset}/{epoch}/Batch_IoU'][:]
+                    n_samples = np.count_nonzero(~np.isnan(epoch_data), axis=0)
+                    data_mean[idx] = np.nanmean(epoch_data, axis=0)
+                    data_conf[idx] = stats.t.ppf(0.95, n_samples-1) * \
+                        np.nanvar(epoch_data, axis=0, ddof=1) / np.sqrt(n_samples)
 
-            sort_lmbda = lambda x: int(x[6:])
-            for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                epoch_data = hfile[f'training/{epoch}/Batch_IoU'][:]
-                n_samples = epoch_data.shape[0]
-                training_mean[idx] = np.nanmean(epoch_data, axis=0)
-                training_var[idx] = 3 * np.nanstd(epoch_data, axis=0, ddof=1) / np.sqrt(n_samples)
-
-            for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                epoch_data = hfile[f'validation/{epoch}/Batch_IoU'][:]
-                testing_mean[idx] = np.nanmean(epoch_data, axis=0)
-                testing_var[idx] = 3 * np.nanstd(epoch_data, axis=0, ddof=1) / np.sqrt(n_samples)
+            for idx in range(self._n_classes):
+                axis[idx%3][idx//3].plot(data_mean[:, idx], label=dataset)
+                axis[idx%3][idx//3].fill_between(
+                    np.arange(0, data_mean[:, idx].shape[0]),
+                    data_mean[:, idx] - data_conf[:, idx],
+                    data_mean[:, idx] + data_conf[:, idx],
+                    alpha=0.2)
 
         for idx in range(self._n_classes):
-            plt.subplot(3, self._n_classes//3+1, idx+1)
-
-            plt.plot(training_mean[:, idx])
-            plt.fill_between(
-                np.arange(0, training_mean[:, idx].shape[0]),
-                training_mean[:, idx] - training_var[:, idx],
-                training_mean[:, idx] + training_var[:, idx],
-                alpha=0.2)
-
-            plt.plot(testing_mean[:, idx])
-            plt.fill_between(
-                np.arange(0, testing_mean[:, idx].shape[0]),
-                testing_mean[:, idx] - testing_var[:, idx],
-                testing_mean[:, idx] + testing_var[:, idx],
-                alpha=0.2)
-
-            plt.legend(["Training", "Validation"])
-            plt.title(f'{trainId2name[idx]} over Epochs')
-            plt.xlabel('Epoch #')
+            axis[idx%3][idx//3].set_title(f'{trainId2name[idx]} over Epochs')
 
         plt.show(block=False)
 
