@@ -21,7 +21,9 @@ from nnet_training.utilities.cityscapes_labels import trainId2name
 STATISTIC_2_TYPE = {
     "Batch_IoU": "seg",
     "Batch_RMSE_Linear": "depth",
-    "Batch_EPE": "flow"
+    "Batch_RMSE_Log": "depth",
+    "Batch_EPE": "flow",
+    "Batch_SAD": "flow"
 }
 
 def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBase]]):
@@ -41,7 +43,8 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         experiment_data = {}
         for exper_hash, data in experiment_dict.items():
             if objective in data.keys():
-                experiment_data[exper_hash], n_samples = data[objective].get_summary_data()
+                experiment_data[exper_hash] = data[objective].get_summary_data()
+                n_samples = data[objective].get_n_samples('validation')
 
         sample_data = next(iter(experiment_data.values()))
 
@@ -52,7 +55,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         for idx, metric in enumerate(sample_data):
             for name, summary_dict in experiment_data.items():
                 data_mean = summary_dict[metric]["Validation_Mean"]
-                data_svar = 3 * np.sqrt(summary_dict[metric]["Validation_Variance"] / n_samples)
+                data_svar = 2. * np.sqrt(summary_dict[metric]["Validation_Variance"] / n_samples)
                 axis[idx].plot(data_mean, label=experiment_dict[name]['config'].note)
                 axis[idx].fill_between(
                     np.arange(0, data_mean.shape[0]),
@@ -93,10 +96,9 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
     for statistic, (fig, axis) in plots.items():
         for idx in range(19):
             axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
-            axis[idx%3][idx//3].set_xlabel('Epoch #')
 
         fig.legend(*fig.axes[0].get_legend_handles_labels(), loc='lower center')
-        fig.suptitle(f"Class {statistic} validation comparision")
+        fig.suptitle(f"Class {statistic} validation comparision over Epochs")
 
     plt.tight_layout()
     plt.show()
@@ -139,8 +141,8 @@ def print_experiment_notes(experiment_dict: Dict[str, Union[EasyDict, MetricBase
         else:
             print(f'{exper_hash}: no note avaliable')
 
-def print_experiment_perf(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
-                          exper_type: str):
+def print_experiment_perf_main(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
+                               exper_type: str):
     """
     Prints basic performance of each experiment
     """
@@ -148,6 +150,19 @@ def print_experiment_perf(experiment_dict: Dict[str, Union[EasyDict, MetricBase]
         if exper_type in exper_data:
             max_data = exper_data[exper_type].max_accuracy(main_metric=True)
             print(f'{exper_hash} {exper_data[exper_type].main_metric}: {max_data[1]}')
+
+def print_experiment_perf_all(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
+                              exper_hash: str):
+    """
+    Prints basic performance of each experiment
+    """
+    for obj_type, obj_data in experiment_dict[exper_hash].items():
+        if obj_type in ['seg', 'depth', 'flow']:
+            max_data = obj_data.max_accuracy(main_metric=False)
+            n_samples = obj_data.get_n_samples('validation')
+            for statistic, data in max_data.items():
+                conf_95 = 2. * np.sqrt(data[1] / n_samples)
+                print(f'{obj_type} {statistic}: mean {data[0]:.3f} +/- {conf_95:.3f}')
 
 def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     """
@@ -244,7 +259,7 @@ def final_accuracy_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricB
     for exper_hash, exper_data in experiment_dict.items():
         if exper_type in exper_data:
             max_data = exper_data[exper_type].max_accuracy(main_metric=False)
-            if statistic in max_data and 0.0 < max_data[statistic] < 100.0:
+            if statistic in max_data and 0.0 < max_data[statistic][0] < 100.0:
                 all_data[exper_hash] = max_data[statistic]
 
     all_data = dict(sorted(all_data.items(), key=lambda x: x[1]))
@@ -271,15 +286,16 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
                 null_data, comp_data, equal_var=False, nan_policy='omit')
 
             if p_value.shape[0] > 1:
-                print(f"{experiment_data['config'].note}: average p-value {p_value.mean():.3f}")
+                print(f"{experiment_data['config'].note}: average p-value {p_value.mean():.4f}")
             else:
-                print(f"{experiment_data['config'].note}: p-value {p_value.mean():.3f}")
+                print(f"{experiment_data['config'].note}: p-value {p_value.mean():.4f}")
 
 def arg_parse_list():
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--experiments', nargs='+',
-                        default=['336fefb145f02597b8f0a7d2acfbaa02',
-                                 'fe33b0d75016b2c04f9309743fcb28e2'])
+                        default=['8f23c8346c898db41c5bc7c13c36da66',
+                                 '03ebd634e17f7e4d3003a0a8bbb46ce8',
+                                 '3d45eb8797d11b18fd26abf561e104e2'])
 
     experiment_dicts = {}
 
@@ -315,14 +331,15 @@ if __name__ == "__main__":
     print_experiment_notes(EXPER_DICTS)
 
     # significance_test(
-    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_EPE')
+    #     EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66', 'Batch_SAD')
 
     # significance_test(
-    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_IoU')
+    #     EXPER_DICTS, '03ebd634e17f7e4d3003a0a8bbb46ce8', 'Batch_IoU')
 
     # significance_test(
-    #     EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_RMSE_Linear')
+    #     EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66', 'Batch_RMSE_Log')
 
     # epoch_summary_comparison(EXPER_DICTS)
+    print_experiment_perf_all(EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66')
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
-    segmentation_comparison(EXPER_DICTS)
+    # segmentation_comparison(EXPER_DICTS)

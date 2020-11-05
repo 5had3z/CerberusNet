@@ -192,13 +192,10 @@ class MetricBase(object):
         Returns dictionary with testing and validation statistics
         """
         with h5py.File(self._path, 'r') as hfile:
-            n_samples = 0
             metrics = []
             for metric in list(hfile['training/Epoch_1']):
                 if metric[:5] == 'Batch':
                     metrics.append(metric)
-                    if n_samples == 0:
-                        n_samples = hfile[f'training/Epoch_1/{metric}'][:].shape[0]
 
             training_mean = np.zeros((len(list(hfile['training'])), len(metrics)))
             testing_mean = np.zeros((len(list(hfile['validation'])), len(metrics)))
@@ -229,7 +226,20 @@ class MetricBase(object):
                 "Validation_Variance" : testing_var[:, idx],
             }
 
-        return ret_val, n_samples
+        return ret_val
+
+    def get_n_samples(self, dataset='validation'):
+        """
+        Returns the number of samples in the validation set
+        """
+        assert dataset in ['validation', 'training']
+
+        with h5py.File(self._path, 'r') as hfile:
+            for metric in list(hfile[f'{dataset}/Epoch_1']):
+                if metric[:5] == 'Batch':
+                    return hfile[f'{dataset}/Epoch_1/{metric}'][:].shape[0]
+
+        return 0
 
     def plot_summary_data(self):
         """
@@ -238,13 +248,15 @@ class MetricBase(object):
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        summary_data, n_samples = self.get_summary_data()
+        n_training = self.get_n_samples('training')
+        n_validation = self.get_n_samples('validation')
+        summary_data = self.get_summary_data()
 
         for idx, metric in enumerate(summary_data):
             plt.subplot(1, len(summary_data), idx+1)
 
             data_mean = summary_data[metric]["Training_Mean"]
-            data_var = 3 * np.sqrt(summary_data[metric]["Training_Variance"] / n_samples)
+            data_var = 2 * np.sqrt(summary_data[metric]["Training_Variance"] / n_training)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -252,7 +264,7 @@ class MetricBase(object):
                 alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
-            data_var = 3 * np.sqrt(summary_data[metric]["Validation_Variance"] / n_samples)
+            data_var = 2 * np.sqrt(summary_data[metric]["Validation_Variance"] / n_validation)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -353,17 +365,24 @@ class MetricBase(object):
         and its initialisation value.\n
         The dictionary should be structured as {metric_name: [compare_function, init_value]}
         """
+        for criterion in criterion_dict:
+            criterion_dict[criterion].append(0.)
+
         with h5py.File(path, 'a') as hfile:
             if 'validation' in list(hfile):
                 for epoch in hfile['validation']:
                     if 'Summary' in list(hfile['validation/'+epoch]):
-                        summary_data = hfile['validation/'+epoch+'/Summary'][:]
+                        summary_mean = hfile['validation/'+epoch+'/Summary'][:]
+                        summary_var = 0.
                     else:
-                        summary_data = hfile['validation/'+epoch+'/Summary_Mean'][:]
+                        summary_mean = hfile['validation/'+epoch+'/Summary_Mean'][:]
+                        summary_var = hfile['validation/'+epoch+'/Summary_Variance'][:]
 
                     srt_fnc = lambda x: x[0]
                     for idx, (key, data) in enumerate(sorted(criterion_dict.items(), key=srt_fnc)):
-                        criterion_dict[key][1] = data[0](data[1], summary_data[idx])
+                        if data[0](data[1], summary_mean[idx]) == summary_mean[idx]:
+                            criterion_dict[key][1] = summary_mean[idx]
+                            criterion_dict[key][2] = summary_var[idx]
             else:
                 Warning(f"No validation in {str(path)}.")
                 return None
@@ -374,7 +393,7 @@ class MetricBase(object):
         ret_val = {}
         for key, value in criterion_dict.items():
             if key != "Batch_Loss":
-                ret_val[key] = value[1]
+                ret_val[key] = value[1], value[2]
         return ret_val
 
     def get_last_batch(self, main_metric=True):
@@ -684,7 +703,7 @@ class SegmentationMetric(MetricBase):
         train = {}
 
         with h5py.File(self._path, 'r') as hfile:
-            assert len(list(hfile['training'])) == len(list(hfile['validation']))
+            # assert len(list(hfile['training'])) == len(list(hfile['validation']))
             num_epochs = len(list(hfile['validation']))
             training_data = np.zeros((num_epochs, self._n_classes, self._n_classes))
             testing_data = np.zeros((num_epochs, self._n_classes, self._n_classes))
