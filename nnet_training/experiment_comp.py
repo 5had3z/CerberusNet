@@ -78,40 +78,26 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
         if 'seg' in data.keys():
             experiment_data[exper_hash], _ = data['seg'].conf_summary_data()
 
-    iou_fig, iou_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
-    iou_fig.suptitle("Comparision between Class IoU Validation Results")
+    plots = {
+        "iou" : plt.subplots(3, 19//3+1, figsize=(18, 5)),
+        "recall" : plt.subplots(3, 19//3+1, figsize=(18, 5)),
+        "precision" : plt.subplots(3, 19//3+1, figsize=(18, 5))
+    }
 
-    rec_fig, rec_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
-    rec_fig.suptitle("Comparision between Class Recall Validation Results")
+    for statistic, (fig, axis) in plots.items():
+        for exper_hash, summary_dict in experiment_data.items():
+            for idx in range(19):
+                axis[idx%3][idx//3].plot(
+                    summary_dict[statistic][:, idx],
+                    label=experiment_dict[exper_hash]['config'].note)
 
-    prc_fig, prc_axis = plt.subplots(3, 19//3+1, figsize=(18, 5))
-    prc_fig.suptitle("Comparision between Class Precision Validation Results")
-
-    for name, summary_dict in experiment_data.items():
+    for statistic, (fig, axis) in plots.items():
         for idx in range(19):
-            iou_axis[idx%3][idx//3].plot(
-                summary_dict["iou"][:, idx],
-                label=experiment_dict[name]['config'].note)
+            axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
+            axis[idx%3][idx//3].set_xlabel('Epoch #')
 
-            rec_axis[idx%3][idx//3].plot(
-                summary_dict["recall"][:, idx],
-                label=experiment_dict[name]['config'].note)
-
-            prc_axis[idx%3][idx//3].plot(
-                summary_dict["precision"][:, idx],
-                label=experiment_dict[name]['config'].note)
-
-    for idx in range(19):
-        iou_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
-        iou_axis[idx%3][idx//3].set_xlabel('Epoch #')
-        rec_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
-        rec_axis[idx%3][idx//3].set_xlabel('Epoch #')
-        prc_axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
-        prc_axis[idx%3][idx//3].set_xlabel('Epoch #')
-
-    iou_fig.legend(*iou_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
-    rec_fig.legend(*rec_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
-    prc_fig.legend(*prc_fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+        fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+        fig.suptitle(f"Class {statistic} validation comparision")
 
     plt.tight_layout()
     plt.show()
