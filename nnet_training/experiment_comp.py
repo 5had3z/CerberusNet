@@ -65,7 +65,6 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
 
         fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
         plt.tight_layout()
-        plt.show(block=False)
 
     plt.show()
 
@@ -96,7 +95,7 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
             axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
             axis[idx%3][idx//3].set_xlabel('Epoch #')
 
-        fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+        fig.legend(*fig.axes[0].get_legend_handles_labels(), loc='lower center')
         fig.suptitle(f"Class {statistic} validation comparision")
 
     plt.tight_layout()
