@@ -63,6 +63,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
             axis[idx].set_xlabel('Epoch #')
 
         fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+        plt.tight_layout()
         plt.show(block=False)
 
     plt.show()
@@ -232,29 +233,30 @@ def final_accuracy_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricB
     plt.show()
 
 def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, MetricBase]]],
-                      null_hyp: str, comparitors: List[str], statistic: str):
+                      null_hyp: str, statistic: str):
     """
     Prints a list of p-value test results for a base experiment and list of alternat experiments.
     """
     exper_type = STATISTIC_2_TYPE[statistic]
     null_data = experiment_dict[null_hyp][exper_type].get_epoch_data(statistic=statistic)
 
-    for exper_hash in comparitors:
-        comp_data = experiment_dict[exper_hash][exper_type].get_epoch_data(statistic=statistic)
-        _, p_value = stats.ttest_ind(
-            null_data, comp_data, equal_var=False, nan_policy='omit')
+    print(f"Null Hypothesis: {experiment_dict[null_hyp]['config'].note}, Statistic {statistic}")
+    for exper_hash, experiment_data in experiment_dict.items():
+        if exper_hash != null_hyp and exper_type in experiment_data:
+            comp_data = experiment_data[exper_type].get_epoch_data(statistic=statistic)
+            _, p_value = stats.ttest_ind(
+                null_data, comp_data, equal_var=False, nan_policy='omit')
 
-        if p_value.shape[0] > 1:
-            print(f"{statistic} average p-value {p_value.mean()}")
-        else:
-            print(f"{statistic} p-value {p_value}")
+            if p_value.shape[0] > 1:
+                print(f"{experiment_data['config'].note}: average p-value {p_value.mean():.3f}")
+            else:
+                print(f"{experiment_data['config'].note}: p-value {p_value.mean():.3f}")
 
 def arg_parse_list():
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--experiments', nargs='+',
-                        default=['8f23c8346c898db41c5bc7c13c36da66',
-                                 '3d45eb8797d11b18fd26abf561e104e2',
-                                 '03ebd634e17f7e4d3003a0a8bbb46ce8'])
+                        default=['336fefb145f02597b8f0a7d2acfbaa02',
+                                 'fe33b0d75016b2c04f9309743fcb28e2'])
 
     experiment_dicts = {}
 
@@ -289,14 +291,15 @@ if __name__ == "__main__":
 
     print_experiment_notes(EXPER_DICTS)
 
-    # significance_test(
-    #     EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
-    #     ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_EPE')
+    significance_test(
+        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_EPE')
 
-    # significance_test(
-    #     EXPER_DICTS, '6bb400efe627eec5e854a4a623550f5f',
-    #     ['9f528be8b9c320c148cc682a7da0b361'], 'Batch_IoU')
+    significance_test(
+        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_IoU')
 
-    epoch_summary_comparison(EXPER_DICTS)
+    significance_test(
+        EXPER_DICTS, '336fefb145f02597b8f0a7d2acfbaa02', 'Batch_RMSE_Linear')
+
+    # epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_analysis(EXPER_DICTS)
