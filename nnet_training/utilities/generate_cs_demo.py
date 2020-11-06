@@ -178,6 +178,13 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
         for i in range(batch_seg.shape[0]):
             diff_depth = (batch_depth[i] - seq_depth[i]).cpu().numpy()
 
+            # Plot histogram of estimates
+            # plt.hist(diff_depth[diff_depth != 0], bins='auto', log=True)
+            # plt.title("Motion Estimation with Depth(t) - FlowWarp(Depth(t+1))")
+            # plt.xlabel("Difference (m)")
+            # plt.ylabel("Numer of Pixels")
+            # plt.show()
+
             diff_depth *= generate_static_mask(batch_seg[i]).cpu().numpy()
 
             hist, bin_edges = np.histogram(
