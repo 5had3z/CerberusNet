@@ -145,7 +145,7 @@ def print_experiment_notes(experiment_dict: Dict[str, Union[EasyDict, MetricBase
 def print_experiment_perf_main(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
                                exper_type: str):
     """
-    Prints basic performance of each experiment
+    Prints expected performance of each experiment on an objective
     """
     for exper_hash, exper_data in experiment_dict.items():
         if exper_type in exper_data:
@@ -155,15 +155,18 @@ def print_experiment_perf_main(experiment_dict: Dict[str, Union[EasyDict, Metric
 def print_experiment_perf_all(experiment_dict: Dict[str, Union[EasyDict, MetricBase]],
                               exper_hash: str):
     """
-    Prints basic performance of each experiment
+    Prints all performance of an experiment with 95% confidence interval
     """
+    print(f"\nPerformance in metrics for {experiment_dict[exper_hash]['config'].note}")
     for obj_type, obj_data in experiment_dict[exper_hash].items():
         if obj_type in ['seg', 'depth', 'flow']:
+            print(f'-----------{obj_type}-----------')
             max_data = obj_data.max_accuracy(main_metric=False)
             n_samples = obj_data.get_n_samples('validation')
             for statistic, data in max_data.items():
                 conf_95 = stats.t.ppf(0.95, n_samples-1) * data[1] / np.sqrt(n_samples)
-                print(f'{obj_type} {statistic}: mean {data[0]:.3f} +/- {conf_95:.3f}')
+                print(f'{statistic}: mean {data[0]:.3f} +/- {conf_95:.3f}, '
+                      f'[{data[0] - conf_95:.3f}, {data[0] + conf_95:.3f}]')
 
 def fix_experiment_cfg(root_dir: Path, original_hash: str, config: EasyDict):
     """
@@ -284,7 +287,7 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
         if exper_hash != null_hyp and exper_type in experiment_data:
             comp_data = experiment_data[exper_type].get_epoch_data(statistic=statistic)
             _, p_value = stats.ttest_ind(
-                null_data, comp_data, equal_var=True, nan_policy='omit')
+                null_data, comp_data, equal_var=False, nan_policy='omit')
 
             if p_value.shape[0] > 1:
                 print(f"{experiment_data['config'].note}: average p-value {p_value.mean():.4f}")
@@ -294,9 +297,8 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
 def arg_parse_list():
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--experiments', nargs='+',
-                        default=['8f23c8346c898db41c5bc7c13c36da66',
-                                 '03ebd634e17f7e4d3003a0a8bbb46ce8',
-                                 '3d45eb8797d11b18fd26abf561e104e2'])
+                        default=['336fefb145f02597b8f0a7d2acfbaa02',
+                                 'fe33b0d75016b2c04f9309743fcb28e2'])
 
     experiment_dicts = {}
 
@@ -326,21 +328,22 @@ if __name__ == "__main__":
     # EXPER_DICTS = parse_folders()
     EXPER_DICTS = arg_parse_list()
 
-    # print_experiment_perf(EXPER_DICTS, 'flow')
-    # print_experiment_perf(EXPER_DICTS, 'seg')
+    # print_experiment_perf_main(EXPER_DICTS, 'flow')
+    # print_experiment_perf_main(EXPER_DICTS, 'seg')
 
     print_experiment_notes(EXPER_DICTS)
 
-    # significance_test(
-    #     EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66', 'Batch_SAD')
+    significance_test(
+        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_EPE')
 
-    # significance_test(
-    #     EXPER_DICTS, '03ebd634e17f7e4d3003a0a8bbb46ce8', 'Batch_IoU')
+    significance_test(
+        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_IoU')
 
-    # significance_test(
-    #     EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66', 'Batch_RMSE_Log')
+    significance_test(
+        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_RMSE_Linear')
+
+    print_experiment_perf_all(EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2')
 
     epoch_summary_comparison(EXPER_DICTS)
-    # print_experiment_perf_all(EXPER_DICTS, '8f23c8346c898db41c5bc7c13c36da66')
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
     # segmentation_comparison(EXPER_DICTS)

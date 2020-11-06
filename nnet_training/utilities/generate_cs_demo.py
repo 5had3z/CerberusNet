@@ -15,7 +15,9 @@ from easydict import EasyDict
 import cv2
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 
+from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.evaluate_model import data_to_gpu
 from nnet_training.nnet_models import get_model
 from nnet_training.utilities.CityScapes import CityScapesDataset
@@ -134,6 +136,34 @@ def generate_quiver_image(flow: np.ndarray, base_image: np.ndarray):
     return quiver_image
 
 @torch.no_grad()
+def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader):
+    """
+    Testing odometry concept
+    """
+    batch_data = next(iter(dataloader))
+    data_to_gpu(batch_data)
+    forward = model(**batch_data, slam=True)
+
+    batch_depth = forward['depth'].detach()
+    batch_depth[batch_depth < MIN_DEPTH] = MIN_DEPTH
+    batch_depth[batch_depth > MAX_DEPTH] = MAX_DEPTH
+
+    batch_depth_seq = forward['depth_b'].detach()
+    batch_depth_seq[batch_depth_seq < MIN_DEPTH] = MIN_DEPTH
+    batch_depth_seq[batch_depth_seq > MAX_DEPTH] = MAX_DEPTH
+
+    batch_flow = forward['flow'][0].detach()
+
+    batch_seg = torch.argmax(forward['seg'], dim=1).cpu().numpy()
+    seq_depth = flow_warp(batch_depth_seq, batch_flow)
+
+    for i in range(batch_seg.shape[0]):
+        diff_depth = (batch_depth[i] - seq_depth[i]).cpu().numpy()
+
+        plt.imshow(diff_depth[0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+        plt.show()
+
+@torch.no_grad()
 def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader,
                    path: str):
     """
@@ -219,4 +249,6 @@ if __name__ == "__main__":
 
     DATALOADER, MODEL = get_loader_and_model(MODEL_CFG, MODEL_PTH, DATA_DIR)
 
-    generate_video(MODEL, DATALOADER, MODEL_PTH)
+    slam_testing(MODEL, DATALOADER)
+
+    # generate_video(MODEL, DATALOADER, MODEL_PTH)

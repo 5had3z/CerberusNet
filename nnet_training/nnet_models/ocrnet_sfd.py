@@ -231,6 +231,18 @@ class OCRNetSFD(nn.Module):
                 # Flow pass with image 2
                 forward['flow_b'] = self.flow_forward(im2_pyr, im1_pyr, scale_factor)
 
+            if 'slam' in kwargs and kwargs['slam'] is True:
+                # Another forward brah
+                high_level_features, _ = self.backbone(kwargs['l_seq'])
+
+                # Estimate seg and depth
+                forward['depth_b'] = self.depth_head(high_level_features)
+                forward['seg_b'], _, _ = self.ocr(high_level_features)
+
+                # Rescale
+                forward['seg_b'] = scale_as(forward['seg_b'], l_img)
+                forward['depth_b'] = scale_as(forward['depth_b'], l_img)
+
         forward['seg'] = scale_as(forward['seg'], l_img)
         forward['depth'] = scale_as(forward['depth'], l_img)
 
