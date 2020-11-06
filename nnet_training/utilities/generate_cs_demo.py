@@ -22,6 +22,7 @@ from nnet_training.evaluate_model import data_to_gpu
 from nnet_training.nnet_models import get_model
 from nnet_training.utilities.CityScapes import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, CITYSPALLETTE
+from nnet_training.utilities.cityscapes_labels import labels
 
 IMG_EXT = '.png'
 MIN_DEPTH = 0.
@@ -136,46 +137,58 @@ def generate_quiver_image(flow: np.ndarray, base_image: np.ndarray):
     return quiver_image
 
 def generate_static_mask(segmentation: torch.Tensor):
-    raise NotImplementedError
+    """
+    Given a segmentation mask returns a mask tensor of flat, construction and object
+    """
+    mask = torch.zeros_like(segmentation)
+    for label in labels:
+        if label.category in ['flat', 'construction', 'object']:
+            mask[segmentation == label.trainId] = 1
+
+    return mask
 
 @torch.no_grad()
 def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader):
     """
     Testing odometry concept
     """
-    batch_data = next(iter(dataloader))
-    data_to_gpu(batch_data)
-    forward = model(**batch_data, slam=True)
+    mode = []
 
-    batch_depth = forward['depth'].detach()
-    batch_depth[batch_depth < MIN_DEPTH] = MIN_DEPTH
-    batch_depth[batch_depth > MAX_DEPTH] = MAX_DEPTH
+    for idx, batch_data in enumerate(dataloader):
+        data_to_gpu(batch_data)
+        forward = model(**batch_data, slam=True)
 
-    batch_depth_seq = forward['depth_b'].detach()
-    batch_depth_seq[batch_depth_seq < MIN_DEPTH] = MIN_DEPTH
-    batch_depth_seq[batch_depth_seq > MAX_DEPTH] = MAX_DEPTH
+        batch_depth = forward['depth'].detach()
+        batch_depth[batch_depth < MIN_DEPTH] = MIN_DEPTH
+        batch_depth[batch_depth > MAX_DEPTH] = MAX_DEPTH
 
-    batch_flow = forward['flow'][0].detach()
+        batch_depth_seq = forward['depth_b'].detach()
+        batch_depth_seq[batch_depth_seq < MIN_DEPTH] = MIN_DEPTH
+        batch_depth_seq[batch_depth_seq > MAX_DEPTH] = MAX_DEPTH
 
-    batch_seg = torch.argmax(forward['seg'], dim=1).cpu().numpy()
-    seq_depth = flow_warp(batch_depth_seq, batch_flow)
+        batch_flow = forward['flow'][0].detach()
 
-    for i in range(batch_seg.shape[0]):
-        diff_depth = (batch_depth[i] - seq_depth[i]).cpu().numpy()
+        batch_seg = torch.argmax(forward['seg'], dim=1)
+        seq_depth = flow_warp(batch_depth_seq, batch_flow)
 
-        hist, bin_edges = np.histogram(
-            diff_depth[diff_depth != 0],
-            bins=np.arange(diff_depth.min(), diff_depth.max(), 0.1))
+        for i in range(batch_seg.shape[0]):
+            diff_depth = (batch_depth[i] - seq_depth[i]).cpu().numpy()
 
-        # plt.subplot(1, 3, 1)
-        # plt.hist(hist, bins=bin_edges)
-        # plt.subplot(1, 3, 2)
-        # plt.hist(diff_depth[diff_depth != 0].flatten(), bins='auto')
-        # plt.subplot(1, 3, 3)
-        # plt.imshow(diff_depth[0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-        # plt.show()
+            diff_depth *= generate_static_mask(batch_seg[i]).cpu().numpy()
 
-        print(f'km/h: {17.*bin_edges[np.argmax(hist)]*3.6}')
+            hist, bin_edges = np.histogram(
+                diff_depth[diff_depth != 0],
+                bins=np.arange(diff_depth.min(), diff_depth.max(), 0.025))
+
+            mode.append(bin_edges[np.argmax(hist)])
+
+        sys.stdout.write(f'\rParsing Video: [{idx+1:3d}/{len(dataloader):3d}]')
+        sys.stdout.flush()
+
+    plt.plot(17.*np.asarray(mode)*3.6)
+    plt.xlabel("Image Sequence Index")
+    plt.ylabel("Speed (km/h)")
+    plt.show()
 
 @torch.no_grad()
 def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader,
