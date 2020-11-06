@@ -152,7 +152,7 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
     """
     Testing odometry concept
     """
-    mode = []
+    est_speed_history = []
 
     vid_writer = cv2.VideoWriter(
         str(path/"speed.avi"), cv2.VideoWriter_fourcc(*'XVID'),
@@ -184,12 +184,16 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
                 diff_depth[diff_depth != 0],
                 bins=np.arange(diff_depth.min(), diff_depth.max(), 0.1))
 
-            est_speed = 17.*bin_edges[np.argmax(hist)]*3.6
-            mode.append(est_speed)
+            est_speed_history.append(17.*bin_edges[np.argmax(hist)]*3.6)
 
             image_frame = np.moveaxis(
                 batch_data['l_img'][i].cpu().numpy() * 255, 0, 2).astype(np.uint8)
             image_frame = cv2.cvtColor(image_frame, cv2.COLOR_RGB2BGR)
+
+            if len(est_speed_history) < 5:
+                est_speed = np.asarray(est_speed_history).mean()
+            else:
+                est_speed = np.asarray(est_speed_history[-5:]).mean()
 
             cv2.putText(
                 image_frame, f'{est_speed:.3f} km/h', (50, 50),
@@ -202,7 +206,7 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
 
     vid_writer.release()
 
-    plt.plot(np.asarray(mode))
+    plt.plot(np.asarray(est_speed_history))
     plt.xlabel("Image Sequence Index")
     plt.ylabel("Speed (km/h)")
     plt.show()
