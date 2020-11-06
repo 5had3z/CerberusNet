@@ -135,6 +135,9 @@ def generate_quiver_image(flow: np.ndarray, base_image: np.ndarray):
     quiver_image = cv2.add(base_image, quiver_image)
     return quiver_image
 
+def generate_static_mask(segmentation: torch.Tensor):
+    raise NotImplementedError
+
 @torch.no_grad()
 def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader):
     """
@@ -160,8 +163,19 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
     for i in range(batch_seg.shape[0]):
         diff_depth = (batch_depth[i] - seq_depth[i]).cpu().numpy()
 
-        plt.imshow(diff_depth[0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-        plt.show()
+        hist, bin_edges = np.histogram(
+            diff_depth[diff_depth != 0],
+            bins=np.arange(diff_depth.min(), diff_depth.max(), 0.1))
+
+        # plt.subplot(1, 3, 1)
+        # plt.hist(hist, bins=bin_edges)
+        # plt.subplot(1, 3, 2)
+        # plt.hist(diff_depth[diff_depth != 0].flatten(), bins='auto')
+        # plt.subplot(1, 3, 3)
+        # plt.imshow(diff_depth[0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+        # plt.show()
+
+        print(f'km/h: {17.*bin_edges[np.argmax(hist)]*3.6}')
 
 @torch.no_grad()
 def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader,
