@@ -148,11 +148,15 @@ def generate_static_mask(segmentation: torch.Tensor):
     return mask
 
 @torch.no_grad()
-def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader):
+def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, path: str):
     """
     Testing odometry concept
     """
     mode = []
+
+    vid_writer = cv2.VideoWriter(
+        str(path/"speed.avi"), cv2.VideoWriter_fourcc(*'XVID'),
+        VIDEO_HZ, tuple(dataloader.dataset.output_shape))
 
     for idx, batch_data in enumerate(dataloader):
         data_to_gpu(batch_data)
@@ -178,14 +182,27 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
 
             hist, bin_edges = np.histogram(
                 diff_depth[diff_depth != 0],
-                bins=np.arange(diff_depth.min(), diff_depth.max(), 0.025))
+                bins=np.arange(diff_depth.min(), diff_depth.max(), 0.1))
 
-            mode.append(bin_edges[np.argmax(hist)])
+            est_speed = 17.*bin_edges[np.argmax(hist)]*3.6
+            mode.append(est_speed)
+
+            image_frame = np.moveaxis(
+                batch_data['l_img'][i].cpu().numpy() * 255, 0, 2).astype(np.uint8)
+            image_frame = cv2.cvtColor(image_frame, cv2.COLOR_RGB2BGR)
+
+            cv2.putText(
+                image_frame, f'{est_speed:.3f} km/h', (50, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+            vid_writer.write(image_frame)
 
         sys.stdout.write(f'\rParsing Video: [{idx+1:3d}/{len(dataloader):3d}]')
         sys.stdout.flush()
 
-    plt.plot(17.*np.asarray(mode)*3.6)
+    vid_writer.release()
+
+    plt.plot(np.asarray(mode))
     plt.xlabel("Image Sequence Index")
     plt.ylabel("Speed (km/h)")
     plt.show()
@@ -276,6 +293,6 @@ if __name__ == "__main__":
 
     DATALOADER, MODEL = get_loader_and_model(MODEL_CFG, MODEL_PTH, DATA_DIR)
 
-    slam_testing(MODEL, DATALOADER)
+    slam_testing(MODEL, DATALOADER, MODEL_PTH)
 
     # generate_video(MODEL, DATALOADER, MODEL_PTH)
