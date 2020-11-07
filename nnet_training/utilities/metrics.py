@@ -278,6 +278,7 @@ class MetricBase(object):
             plt.title(f'{metric.replace("Batch_", "")} over Epochs')
             plt.xlabel('Epoch #')
 
+        plt.tight_layout()
         plt.show(block=False)
 
     def plot_iteration_data(self):

@@ -189,7 +189,7 @@ def slam_testing(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader
 
             hist, bin_edges = np.histogram(
                 diff_depth[diff_depth != 0],
-                bins=np.arange(diff_depth.min(), diff_depth.max(), 0.1))
+                bins=np.arange(diff_depth.min(), diff_depth.max(), 0.05))
 
             est_speed_history.append(17.*bin_edges[np.argmax(hist)]*3.6)
 

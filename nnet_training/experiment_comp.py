@@ -49,7 +49,7 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
         sample_data = next(iter(experiment_data.values()))
 
         fig, axis = plt.subplots(1, len(sample_data), figsize=(18, 5))
-        fig.suptitle(f"Comparision between {objective} Validation Results")
+        fig.suptitle(f"Comparision between {objective} Validation Results over Epochs")
 
         # Plot each metric on a different subplot
         for idx, metric in enumerate(sample_data):
@@ -65,9 +65,9 @@ def epoch_summary_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBa
                     alpha=0.2)
 
             axis[idx].set_title(f'{metric}')
-            axis[idx].set_xlabel('Epoch #')
 
-        fig.legend(*fig.axes[-1].get_legend_handles_labels(), loc='lower center')
+        fig.legend(*fig.axes[-1].get_legend_handles_labels(),
+                   loc='lower center', ncol=min(len(experiment_data), 4))
         plt.tight_layout()
 
     plt.show()
@@ -98,7 +98,8 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
         for idx in range(19):
             axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
 
-        fig.legend(*fig.axes[0].get_legend_handles_labels(), loc='lower center')
+        fig.legend(*fig.axes[0].get_legend_handles_labels(),
+                   loc='lower center', ncol=min(len(experiment_data), 4))
         fig.suptitle(f"Class {statistic} validation comparision over Epochs")
 
     plt.tight_layout()
@@ -297,8 +298,8 @@ def significance_test(experiment_dict: Dict[str, Dict[str, Union[EasyDict, Metri
 def arg_parse_list():
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--experiments', nargs='+',
-                        default=['336fefb145f02597b8f0a7d2acfbaa02',
-                                 'fe33b0d75016b2c04f9309743fcb28e2'])
+                        default=['9df8e9e62963906fd052a8ebdd611fbe',
+                                 '0ad32ead4e944e1165ac1981f0c159f9'])
 
     experiment_dicts = {}
 
@@ -333,16 +334,16 @@ if __name__ == "__main__":
 
     print_experiment_notes(EXPER_DICTS)
 
-    significance_test(
-        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_EPE')
+    # significance_test(
+    #     EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_EPE')
 
-    significance_test(
-        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_IoU')
+    # significance_test(
+    #     EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_IoU')
 
-    significance_test(
-        EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_RMSE_Linear')
+    # significance_test(
+    #     EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2', 'Batch_RMSE_Linear')
 
-    print_experiment_perf_all(EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2')
+    # print_experiment_perf_all(EXPER_DICTS, 'fe33b0d75016b2c04f9309743fcb28e2')
 
     epoch_summary_comparison(EXPER_DICTS)
     # final_accuracy_comparison(EXPER_DICTS, 'flow', 'Batch_EPE')
