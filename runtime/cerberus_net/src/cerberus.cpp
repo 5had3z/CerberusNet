@@ -55,8 +55,8 @@ CERBERUS::CERBERUS() :
             new_tensor.blobName = m_Engine->getBindingName(b);
             new_tensor.bindingIndex = b;
             m_InputTensors.push_back(new_tensor);
-            m_InputH = binding_dims.d[1];
-            m_InputW = binding_dims.d[2];
+            m_InputH = binding_dims.d[2];
+            m_InputW = binding_dims.d[3];
         }
         // 19 Channel outputs means segmentation
         else if (binding_dims.d[1] == 19){
@@ -205,31 +205,35 @@ void CERBERUS::allocateBuffers()
 
     if (m_SegmentationTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
-                m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
     }
 
     if (m_FlowTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex),
-                m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
     }
 
     if (m_DepthTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
-                m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
     }
 }
 
 void CERBERUS::doInference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq)
 {
-    cudaMemcpy(img.data, m_DeviceBuffers[0], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(img_seq.data, m_DeviceBuffers[1], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(m_DeviceBuffers[0], img.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
+    if (m_InputTensors.size() == 2) {
+        cudaMemcpy(m_DeviceBuffers[1], img_seq.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
+    }
     m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
 }
 
 void CERBERUS::doInference(const cv::Mat &img, const cv::Mat &img_seq)
 {
-    cudaMemcpy(img.data, m_DeviceBuffers[0], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(img_seq.data, m_DeviceBuffers[1], m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(m_DeviceBuffers[0], img.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
+    if (m_InputTensors.size() == 2) {
+        cudaMemcpy(m_DeviceBuffers[1], img_seq.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
+    }
     m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
 }
 

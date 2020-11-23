@@ -20,6 +20,8 @@ int main(int argc, char** argv)
     cv::Size net_input { nnet.getInputH(), nnet.getInputW() };
     cv::resize(image1, image1, net_input);
 
+    nnet.doInference(image1, image2);
+
     cv::imshow("Sample Input", image1);
     cv::waitKey(0);
 }
