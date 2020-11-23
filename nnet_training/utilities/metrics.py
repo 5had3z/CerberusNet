@@ -738,7 +738,7 @@ class SegmentationMetric(MetricBase):
             epoch_data = hfile[dataset][epoch_name+'/Confusion_Mat'][:]
 
         plt.figure(figsize=(18, 5))
-
+        plt.suptitle("Class Confusion Matrix")
         labels = [trainId2name[i] for i in range(19)]
         normalised_data = epoch_data / np.sum(epoch_data, axis=1, keepdims=True)
         conf_mat = pd.DataFrame(normalised_data, labels, labels)

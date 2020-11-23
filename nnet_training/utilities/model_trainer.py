@@ -331,6 +331,7 @@ class ModelTrainer(object):
 
         if 'seg' in self.metric_loggers.keys():
             self.metric_loggers['seg'].plot_classwise_iou()
+            self.metric_loggers['seg'].display_conf_mat()
 
     @torch.no_grad()
     def visualize_output(self):

@@ -4,13 +4,14 @@
 #include "../trt_plugins/correlation.hpp"
 #include "../trt_plugins/grid_sampler.hpp"
 
+#include <fstream>
 #include <numeric>
 #include <iostream>
 
 #include <NvOnnxParser.h>
 
 static Logger gLogger;
-#define MAX_WORKSPACE (1 << 31)
+#define MAX_WORKSPACE (1UL << 32)
 
 CERBERUS::CERBERUS() :
     m_Network(nullptr),
@@ -104,21 +105,23 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
     m_Network = m_Builder->createNetworkV2(netflags);
     
     auto parser = nvonnxparser::createParser(*m_Network, gLogger);
-    int verbosity = (int) nvinfer1::ILogger::Severity::kINFO;
+    int verbosity = (int) nvinfer1::ILogger::Severity::kWARNING;
 
-    std::cout << "Parsing ..." << onnx_path << std::endl;
+    std::cout << "Parsing " << onnx_path << std::endl;
     if (!parser->parseFromFile(onnx_path.begin(), verbosity))
     {
-       std::cout << "failed";
+       std::cout << "ONNX Parsing Failed";
     }
-    std::cout << "Parsing done" << std::endl;
+    std::cout << "ONNX Parsing Done" << std::endl;
 
     nvinfer1::IBuilderConfig* netcfg = m_Builder->createBuilderConfig();
     netcfg->setMaxWorkspaceSize(MAX_WORKSPACE);
     m_Builder->setMaxBatchSize(m_maxBatchSize);
 
     m_Engine = m_Builder->buildEngineWithConfig(*m_Network, *netcfg);
-    assert(m_Engine);    
+    assert(m_Engine);
+
+    std::cout << "Engine Built" << std::endl;
 
     /* we can clean up our mess */
     netcfg->destroy();
@@ -129,10 +132,47 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
 
 void CERBERUS::writeSerializedEngine()
 {
+    std::cout << "Serializing TensorRT Engine..." << std::endl;
+    assert(m_Engine && "Invalid TensorRT Engine");
+    m_ModelStream = m_Engine->serialize();
+    assert(m_ModelStream && "Unable to serialize engine");
+    assert(!m_EnginePath.empty() && "Unable to save, No engine path");
+
+    // Write engine to output file
+    std::stringstream trtModelStream;
+    trtModelStream.seekg(0, trtModelStream.beg);
+    trtModelStream.write(static_cast<const char*>(m_ModelStream->data()), m_ModelStream->size());
+    std::ofstream outFile;
+    outFile.open(m_EnginePath);
+    outFile << trtModelStream.rdbuf();
+    outFile.close();
+
+    std::cout << "Serialized plan file cached at location : " << m_EnginePath << std::endl;
 }
 
 void CERBERUS::loadSerializedEngine()
 {
+    // Reading the model in memory
+    std::cout << "Loading TRT Engine: " << m_EnginePath.c_str() << std::endl;
+    assert(fileExists(m_EnginePath, true));
+    std::stringstream trtModelStream;
+    trtModelStream.seekg(0, trtModelStream.beg);
+    std::ifstream cache(m_EnginePath);
+    assert(cache.good());
+    trtModelStream << cache.rdbuf();
+    cache.close();
+
+    // Calculating model size
+    trtModelStream.seekg(0, std::ios::end);
+    const int modelSize = trtModelStream.tellg();
+    trtModelStream.seekg(0, std::ios::beg);
+    void* modelMem = malloc(modelSize);
+    trtModelStream.read((char*) modelMem, modelSize);
+
+    nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(gLogger);
+    m_Engine = runtime->deserializeCudaEngine(modelMem, modelSize);
+    free(modelMem);
+    runtime->destroy();
 }
 
 void CERBERUS::allocateBuffers()
@@ -177,11 +217,12 @@ void Logger::log(Severity severity, const char* msg)
 
     switch (severity)
     {
-    case Severity::kINTERNAL_ERROR: std::cerr << "INTERNAL_ERROR: "; break;
-    case Severity::kERROR: std::cerr << "ERROR: "; break;
-    case Severity::kWARNING: std::cerr << "WARNING: "; break;
-    case Severity::kINFO: std::cerr << "INFO: "; break;
-    default: std::cerr << "UNKNOWN: "; break;
+        case Severity::kINTERNAL_ERROR: std::cerr << "INTERNAL_ERROR: "; break;
+        case Severity::kERROR: std::cerr << "ERROR: "; break;
+        case Severity::kWARNING: std::cerr << "WARNING: "; break;
+        case Severity::kINFO: std::cerr << "INFO: "; break;
+        case Severity::kVERBOSE: std::cerr << "VERBOSE: "; break;
+        default: std::cerr << "UNKNOWN: "; break;
     }
     std::cerr << msg << std::endl;
 }

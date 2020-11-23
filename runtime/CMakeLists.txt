@@ -4,7 +4,7 @@ project(monash_fyp LANGUAGES CXX VERSION 0.01)
 # MANUALLY SET PATHS IF REQUIRED, example: "$ENV{HOME}/OpenCV-3.4.6"
 # set(OPENCV_ROOT "")
 # set(TRT_SDK_ROOT "")
-set(CUDA_ARCH "6.1") #Check yours here: https://developer.nvidia.com/cuda-gpus
+set(CUDA_ARCH "8.6") #Check yours here: https://developer.nvidia.com/cuda-gpus
 # add_definitions(-DOPENCV_CUDA) # Flag for CUDA Operations with OpenCV have been compiled
 # add_definitions(-DUNIFIED) # Flag for unified memory
 
