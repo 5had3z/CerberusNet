@@ -46,8 +46,6 @@ CERBERUS::CERBERUS() :
         return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
     };
 
-    m_InputTensors.reserve(2);
-    // IDX:0-1 (inputs), IDX:2-5 (outputs)
     for (int b = 0; b < m_Engine->getNbBindings(); ++b)
     {
         const nvinfer1::Dims binding_dims = m_Engine->getBindingDimensions(b);
@@ -61,19 +59,19 @@ CERBERUS::CERBERUS() :
             m_InputW = binding_dims.d[2];
         }
         // 19 Channel outputs means segmentation
-        else if (binding_dims.d[0] == 19){
+        else if (binding_dims.d[1] == 19){
             m_SegmentationTensor.volume = volume(binding_dims);
             m_SegmentationTensor.blobName = m_Engine->getBindingName(b);
             m_SegmentationTensor.bindingIndex = b;
         } 
         // 2 Channel outputs means flow
-        else if (binding_dims.d[0] == 2){
+        else if (binding_dims.d[1] == 2){
             m_FlowTensor.volume = volume(binding_dims);
             m_FlowTensor.blobName = m_Engine->getBindingName(b);
             m_FlowTensor.bindingIndex = b;
         } 
         // 1 Channel output means depth
-        else if (binding_dims.d[0] == 1){
+        else if (binding_dims.d[1] == 1){
             m_DepthTensor.volume = volume(binding_dims);
             m_DepthTensor.blobName = m_Engine->getBindingName(b);
             m_DepthTensor.bindingIndex = b;
@@ -91,11 +89,30 @@ CERBERUS::~CERBERUS()
 {
     for (auto& tensor : m_InputTensors)
     {
-        NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(tensor.bindingIndex)));
+        NV_CUDA_CHECK(cudaFree(m_DeviceBuffers.at(tensor.bindingIndex)));
     }
-    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex)));
-    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex)));
-    NV_CUDA_CHECK(cudaFree(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex)));
+
+    if (m_SegmentationTensor.bindingIndex != -1){
+        NV_CUDA_CHECK(cudaFree(m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex)));
+    }
+    if (m_FlowTensor.bindingIndex != -1){
+        NV_CUDA_CHECK(cudaFree(m_DeviceBuffers.at(m_FlowTensor.bindingIndex)));
+    }
+    if (m_DepthTensor.bindingIndex != -1){
+        NV_CUDA_CHECK(cudaFree(m_DeviceBuffers.at(m_DepthTensor.bindingIndex)));
+    }
+
+    NV_CUDA_CHECK(cudaStreamDestroy(m_CudaStream));
+
+    if (m_Context) {
+        m_Context->destroy();
+        m_Context = nullptr;
+    }
+
+    if (m_Engine) {
+        m_Engine->destroy();
+        m_Engine = nullptr;
+    }
 }
 
 void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
@@ -185,14 +202,21 @@ void CERBERUS::allocateBuffers()
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(tensor.bindingIndex),
             m_maxBatchSize * 3U * m_InputW * m_InputH * sizeof(float)));
     }
-    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
-            m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
 
-    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex),
-            m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
+    if (m_SegmentationTensor.bindingIndex != -1) {
+        NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
+                m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
+    }
 
-    NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
-            m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
+    if (m_FlowTensor.bindingIndex != -1) {
+        NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex),
+                m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
+    }
+
+    if (m_DepthTensor.bindingIndex != -1) {
+        NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
+                m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
+    }
 }
 
 void CERBERUS::doInference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq)
