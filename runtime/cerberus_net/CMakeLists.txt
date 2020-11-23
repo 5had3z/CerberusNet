@@ -20,17 +20,20 @@ set(TMP_FLAGS ${CMAKE_CXX_FLAGS})
 set(CMAKE_CXX_FLAGS "-std=c++14 -Ofast -Wall -Wfatal-errors")
 # SET(CUDA_SEPARABLE_COMPILATION ON) #  Required when compiling CUDA Kernels with Dynamic Parallelism
 set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=compute_${CUDA_COMPUTE} -code=sm_${CUDA_COMPUTE}") # -rdc=true
-CUDA_COMPILE(CU_OBJS ${TRT_PLUGINS_CU_SRCS})
+CUDA_COMPILE(CU_PLUGIN_OBJS ${TRT_PLUGINS_CU_SRCS})
+CUDA_COMPILE(CU_CERB_OBJS src/nhwc2nchw.cu)
 set(CMAKE_CXX_FLAGS ${TMP_FLAGS})
 
 add_library( trt_plugins_lib STATIC
-    ${TRT_PLUGINS_SRCS} ${CU_OBJS}
+    ${TRT_PLUGINS_SRCS}
+    ${CU_PLUGIN_OBJS}
 )
 
 file(GLOB CERB_NET_SRCS src/*.cpp)
 
 add_library( cerberus_lib STATIC
     ${CERB_NET_SRCS}
+    ${CU_CERB_OBJS}
 )
 
 target_link_libraries( cerberus_lib

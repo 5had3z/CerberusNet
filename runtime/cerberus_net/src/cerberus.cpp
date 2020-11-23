@@ -1,8 +1,5 @@
 #include "cerberus.hpp"
 #include "utils.hpp"
-#include "../trt_plugins/trt_utils.hpp"
-#include "../trt_plugins/correlation.hpp"
-#include "../trt_plugins/grid_sampler.hpp"
 
 #include <fstream>
 #include <numeric>
@@ -19,7 +16,8 @@ CERBERUS::CERBERUS() :
     m_ModelStream(nullptr),
     m_Engine(nullptr),
     m_Context(nullptr),
-    m_CudaStream(nullptr)
+    m_CudaStream(nullptr),
+    m_InputBuffer(nullptr)
 {
     constexpr std::string_view labels_path { "/home/bryce/cs_labels.txt" };
     constexpr std::string_view ONNX_path { "/home/bryce/export_test.onnx" };
@@ -55,6 +53,7 @@ CERBERUS::CERBERUS() :
             new_tensor.blobName = m_Engine->getBindingName(b);
             new_tensor.bindingIndex = b;
             m_InputTensors.push_back(new_tensor);
+            m_InputC = binding_dims.d[1];
             m_InputH = binding_dims.d[2];
             m_InputW = binding_dims.d[3];
         }
@@ -200,41 +199,43 @@ void CERBERUS::allocateBuffers()
     for (auto& tensor : m_InputTensors)
     {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(tensor.bindingIndex),
-            m_maxBatchSize * 3U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * tensor.volume * sizeof(float)));
     }
 
     if (m_SegmentationTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
-            m_maxBatchSize * 19U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * m_SegmentationTensor.volume * sizeof(float)));
     }
 
     if (m_FlowTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_FlowTensor.bindingIndex),
-            m_maxBatchSize * 2U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * m_FlowTensor.volume * sizeof(float)));
     }
 
     if (m_DepthTensor.bindingIndex != -1) {
         NV_CUDA_CHECK(cudaMallocManaged(&m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
-            m_maxBatchSize * 1U * m_InputW * m_InputH * sizeof(float)));
+            m_maxBatchSize * m_DepthTensor.volume * sizeof(float)));
     }
 }
 
-void CERBERUS::doInference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq)
+cv::Mat CERBERUS::get_segmentation()
 {
-    cudaMemcpy(m_DeviceBuffers[0], img.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
-    if (m_InputTensors.size() == 2) {
-        cudaMemcpy(m_DeviceBuffers[1], img_seq.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyDeviceToDevice);
-    }
-    m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
+
 }
 
-void CERBERUS::doInference(const cv::Mat &img, const cv::Mat &img_seq)
+cv::Mat CERBERUS::get_depth()
 {
-    cudaMemcpy(m_DeviceBuffers[0], img.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
-    if (m_InputTensors.size() == 2) {
-        cudaMemcpy(m_DeviceBuffers[1], img_seq.data, m_InputW * m_InputH * 3U * sizeof(float), cudaMemcpyHostToDevice);
-    }
-    m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
+    std::cout << "Getting Depth" << std::endl;
+    cv::Mat depth_image(cv::Size(m_InputH, m_InputW), CV_32FC1);
+    cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex), m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
+    cv::divide(80.0, depth_image, depth_image);
+    std::cout << "Returning Depth" << std::endl;
+    return depth_image;
+}
+
+cv::Mat CERBERUS::get_flow()
+{
+
 }
 
 void Logger::log(Severity severity, const char* msg)
