@@ -225,12 +225,9 @@ cv::Mat CERBERUS::get_segmentation()
 
 cv::Mat CERBERUS::get_depth()
 {
-    std::cout << "Getting Depth" << std::endl;
     cv::Mat depth_image(cv::Size(m_InputH, m_InputW), CV_32FC1);
     cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex), m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
-    cv::divide(80.0, depth_image, depth_image);
-    std::cout << "Returning Depth" << std::endl;
-    return depth_image;
+    return depth_image / 80.0f;
 }
 
 cv::Mat CERBERUS::get_flow()

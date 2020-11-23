@@ -68,7 +68,7 @@ public:
             nhwc2nchw(img.data, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
                 m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
         }
-        else{
+        else {
             std::cerr << "INCOMPATIBLE INPUT FORMAT";
         }
 
@@ -83,7 +83,7 @@ public:
                 nhwc2nchw(img_seq.data, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
                     m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
             }
-            else{
+            else {
                 std::cerr << "INCOMPATIBLE INPUT FORMAT";
             }
         }
@@ -97,6 +97,7 @@ public:
     [[nodiscard]] std::string getClassName(const int& classID) const noexcept { return m_class_names[classID]; }
     [[nodiscard]] std::size_t getNumClasses(const int& classID) const noexcept { return m_class_names.size(); }
 
+    [[nodiscard]] std::size_t getInputC() const noexcept { return m_InputC; }
     [[nodiscard]] std::size_t getInputH() const noexcept { return m_InputH; }
     [[nodiscard]] std::size_t getInputW() const noexcept { return m_InputW; }
 
