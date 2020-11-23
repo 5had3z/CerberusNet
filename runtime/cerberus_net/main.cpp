@@ -5,6 +5,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <chrono>
+
 int main(int argc, char** argv)
 {
     CERBERUS nnet;
@@ -21,7 +23,11 @@ int main(int argc, char** argv)
     cv::resize(image1, image1, net_input);
 
     std::cout << "Doing inference" << std::endl;
+
+    std::chrono::high_resolution_clock timer;
+    auto begin = timer.now();
     nnet.doInference(image1, image2);
+    std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 << " ms" << std::endl;
 
     std::cout << "Showing Images" << std::endl;
     cv::imshow("Sample Input", image1);
