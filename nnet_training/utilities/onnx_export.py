@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
@@ -44,8 +44,8 @@ def export_model(config: EasyDict, exp_path: Path) -> None:
     torch.onnx.register_custom_op_symbolic('cerberus::correlation', correlation_op, 11)
     torch.onnx.register_custom_op_symbolic('::grid_sampler', grid_sample_op, 11)
 
-    dim_h = config.dataset.augmentations.output_size[0]
-    dim_w = config.dataset.augmentations.output_size[1]
+    dim_w = config.dataset.augmentations.output_size[0]
+    dim_h = config.dataset.augmentations.output_size[1]
     dummy_input_1 = torch.randn(1, 3, dim_h, dim_w, device=device)
     dummy_input_2 = torch.randn(1, 3, dim_h, dim_w, device=device)
 
@@ -57,7 +57,7 @@ def export_model(config: EasyDict, exp_path: Path) -> None:
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
-    PARSER.add_argument('-c', '--config', default='configs/HRNetV2_sfd_kt.json')
+    PARSER.add_argument('-c', '--config', default='configs/HRNetV2_sfd_cs.json')
 
     with open(PARSER.parse_args().config) as f:
         CONFIG = EasyDict(json.load(f))

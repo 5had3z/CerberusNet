@@ -19,15 +19,19 @@ int main(int argc, char** argv)
     assert(!image1.empty());
     assert(!image2.empty());
 
-    cv::Size net_input { nnet.getInputH(), nnet.getInputW() };
+    cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
     cv::resize(image1, image1, net_input);
+    cv::resize(image2, image2, net_input);
 
     std::cout << "Doing inference" << std::endl;
 
     std::chrono::high_resolution_clock timer;
     auto begin = timer.now();
-    nnet.doInference(image1, image2);
-    std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 << " ms" << std::endl;
+    for (size_t i=0; i<10; i++)
+    {
+        nnet.doInference(image1, image2);
+    }
+    std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 / 10. << " ms" << std::endl;
 
     std::cout << "Showing Images" << std::endl;
     cv::imshow("Sample Input", image1);

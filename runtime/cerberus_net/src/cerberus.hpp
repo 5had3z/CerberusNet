@@ -59,8 +59,8 @@ public:
         const int rowSize = (int) img.step / (int) img.elemSize1();
         // CUDA kernel to reshape the non-continuous GPU Mat structure and make it channel-first continuous
         if constexpr(std::is_same<MatType, cv::Mat>::value) {
-            if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, m_InputC*m_InputH*m_InputW)); }
-            cudaMemcpy(m_InputBuffer, img.data, m_InputC*m_InputH*m_InputW, cudaMemcpyHostToDevice);
+            if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize1())); }
+            cudaMemcpy(m_InputBuffer, img.data, img.total()*img.elemSize1(), cudaMemcpyHostToDevice);
             nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
                 m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
         }
@@ -74,8 +74,8 @@ public:
 
         if (m_InputTensors.size() == 2) {
             if constexpr(std::is_same<MatType, cv::Mat>::value) {
-                if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, m_InputC*m_InputH*m_InputW)); }
-                cudaMemcpy(m_InputBuffer, img_seq.data, m_InputC*m_InputH*m_InputW, cudaMemcpyHostToDevice);
+                if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize1())); }
+                cudaMemcpy(m_InputBuffer, img_seq.data, img.total()*img.elemSize1(), cudaMemcpyHostToDevice);
                 nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
                     m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
             }
