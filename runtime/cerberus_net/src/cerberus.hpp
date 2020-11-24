@@ -23,8 +23,8 @@
 // Declare CUDA Kernels
 void nhwc2nchw(const unsigned char* source, float* dest, int channelSize, int channelsNum, int rowElements, int rowSize, cudaStream_t Stream);
 template<typename scalar_t, size_t n_ch>
-void normalize_image_chw(scalar_t* image, size_t height, size_t width,
-    const std::array<scalar_t, n_ch> &mean, const std::array<scalar_t, n_ch> &std, cudaStream_t Stream);
+void normalize_image_chw(scalar_t* image, size_t ch_stride, const std::array<scalar_t, n_ch> &mean,
+    const std::array<scalar_t, n_ch> &std, cudaStream_t Stream);
 
 // Logger for TensorRT info/warning/errors
 class Logger : public nvinfer1::ILogger
@@ -76,7 +76,7 @@ public:
             m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
         
         normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex),
-            m_InputH, m_InputW, mean, std, m_CudaStream);
+            m_InputH * m_InputW, mean, std, m_CudaStream);
 
         if (m_InputTensors.size() == 2) {
             if constexpr(std::is_same<MatType, cv::Mat>::value) {
@@ -94,7 +94,7 @@ public:
                 m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
 
             normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex),
-                m_InputH, m_InputW, mean, std, m_CudaStream);
+                m_InputH * m_InputW, mean, std, m_CudaStream);
         }
         m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
     }
