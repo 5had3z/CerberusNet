@@ -248,7 +248,7 @@ cv::Mat CERBERUS::get_seg_image()
 
     cudaMalloc(&seg_colour, 3U * m_InputW*m_InputH*sizeof(uchar));
     seg_image<uchar, 19>((uchar*)seg_argmax, (uchar*)seg_colour,
-        static_cast<uchar*>(m_class_colourmap.data()), m_InputW*m_InputH, m_CudaStream);
+        const_cast<uchar*>(m_class_colourmap.data()), m_InputW*m_InputH, m_CudaStream);
     cudaFree(seg_argmax);
 
     cv::Mat seg_colour_mat(cv::Size(m_InputW, m_InputH), CV_8UC3);
@@ -260,7 +260,8 @@ cv::Mat CERBERUS::get_seg_image()
 cv::Mat CERBERUS::get_depth()
 {
     cv::Mat depth_image(cv::Size(m_InputW, m_InputH), CV_32FC1);
-    cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex), m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
+        m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
     return depth_image / 80.0f;
 }
 

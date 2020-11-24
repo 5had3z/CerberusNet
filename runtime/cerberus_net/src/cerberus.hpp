@@ -118,7 +118,27 @@ private:
     size_t m_InputC;
 
     std::vector<std::string> m_class_names;
-    std::array<uchar, 19*3> m_class_colourmap;
+    static constexpr auto m_class_colourmap = 
+        std::array<uchar, 19*3>{
+            128, 64,128,
+            244, 35,232,
+            70, 70, 70,
+            102,102,156,
+            190,153,153,
+            153,153,153,
+            250,170, 30,
+            220,220,  0,
+            107,142, 35,
+            152,251,152,
+             70,130,180,
+            220, 20, 60,
+            255,  0,  0,
+              0,  0,142,
+              0,  0, 70,
+              0, 60,100,
+              0, 80,100,
+              0,  0,230,
+            119, 11, 32};
 
     const std::string m_Precision = PRECISION;// Defined in cmake
     std::string m_EnginePath; // Will be automatically inferred from ONNX_FILE
