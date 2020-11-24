@@ -18,7 +18,7 @@ __global__ void nhwc2nchwKernel(const unsigned char* __restrict__ source, float*
 
     // actual element - skip padding
     int sourceIdx = row * rowSize + col;
-    dest[channelSize * channel + offset] = (float) source[sourceIdx];
+    dest[channelSize * channel + offset] = (float) source[sourceIdx] / 255.f;
 }
 
 // we expect all memory to already reside on device so no need to allocate anything
