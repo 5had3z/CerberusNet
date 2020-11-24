@@ -7,6 +7,10 @@
 
 #include <NvOnnxParser.h>
 
+template<typename scalar_t, typename intergral_t>
+void argmax_chw(const scalar_t* input, intergral_t* output,
+    size_t n_classes, size_t ch_stride, cudaStream_t Stream);
+
 static Logger gLogger;
 #define MAX_WORKSPACE (1UL << 32)
 
@@ -220,7 +224,9 @@ void CERBERUS::allocateBuffers()
 
 cv::Mat CERBERUS::get_segmentation()
 {
-
+    cv::Mat seg_argmax(cv::Size(m_InputW, m_InputH), CV_8UC1);
+    argmax_chw((float*)m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
+        seg_argmax.data, 19, m_InputW * m_InputH, m_CudaStream);
 }
 
 cv::Mat CERBERUS::get_depth()

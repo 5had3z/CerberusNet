@@ -52,3 +52,33 @@ void normalize_image_chw(scalar_t* image, size_t ch_stride, const std::array<sca
 
 template void normalize_image_chw<float, 3ul>(float*, size_t, std::array<float, 3ul> const&,
     std::array<float, 3ul> const&, cudaStream_t);
+
+template<typename scalar_t, typename intergral_t>
+__global__ void argmax_chw_Kernel(const scalar_t* __restrict__ source,
+    intergral_t* __restrict__ output, const size_t channel_stride, const size_t n_classes)
+{
+    const int offset = threadIdx.x + blockIdx.x * blockDim.x;
+    scalar_t best_score = 0;
+    intergral_t best_cls = n_classes+1;
+    for (size_t cls=0; cls<n_classes; ++cls)
+    {
+        if (source[offset + cls*channel_stride] > best_score)
+        {
+            best_score = source[offset + cls*channel_stride];
+            best_cls = cls;
+        }
+    }
+    output[offset] = best_cls;
+}
+
+template<typename scalar_t, typename intergral_t>
+void argmax_chw(const scalar_t* input, intergral_t* output,
+    size_t n_classes, size_t ch_stride, cudaStream_t Stream)
+{
+    const int nBlocks = ch_stride / BLOCK_SIZE;
+    argmax_chw_Kernel<scalar_t, intergral_t><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
+        input, output, ch_stride, n_classes);
+}
+
+template void argmax_chw<float, unsigned char>(
+    const float*, unsigned char*, size_t, size_t, cudaStream_t);
