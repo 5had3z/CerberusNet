@@ -3,6 +3,7 @@
 
 const int BLOCK_SIZE = 1024;
 #include <cuda_runtime.h>
+#include <array>
 
 __global__ void nhwc2nchwKernel(const unsigned char* __restrict__ source, float* __restrict__ dest,
     int channelSize, int channelsNum, int rowElems, int rowSize)
@@ -26,3 +27,24 @@ void nhwc2nchw(const unsigned char * source, float * dest, int channelSize, int 
     const int nBlocks = (channelSize * channelsNum) / BLOCK_SIZE;
     nhwc2nchwKernel<<<nBlocks, BLOCK_SIZE, 0, Stream>>>(source, dest, channelSize, channelsNum, rowElems, rowSize);
 }
+
+template<typename scalar_t>
+__global__ void normalizeChannelKernel(scalar_t* __restrict__ source, scalar_t mean, scalar_t std)
+{
+    const int offset = threadIdx.x + blockIdx.x * blockDim.x;
+    source[offset] = (source[offset] - mean) / std;
+}
+
+template<typename scalar_t, size_t n_ch>
+void normalize_image_chw(scalar_t* image, size_t height, size_t width,
+    const std::array<scalar_t, n_ch> &mean, const std::array<scalar_t, n_ch> &std, cudaStream_t Stream)
+{
+    const int channel_stride = height * width * sizeof(scalar_t);
+    const int nBlocks = channel_stride / BLOCK_SIZE;
+    for (size_t channel=0; channel < n_ch; channel++)
+    {
+        normalizeChannelKernel<scalar_t><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(image+channel*channel_stride, mean[channel], std[channel]);
+    }
+}
+
+template void normalize_image_chw<float, 3ul>(float*, size_t, size_t, std::array<float, 3ul> const&, std::array<float, 3ul> const&, cudaStream_t);

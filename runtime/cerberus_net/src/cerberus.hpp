@@ -20,8 +20,11 @@
         }                                                                                          \
     }
 
-// Declare CUDA Kernel
+// Declare CUDA Kernels
 void nhwc2nchw(const unsigned char* source, float* dest, int channelSize, int channelsNum, int rowElements, int rowSize, cudaStream_t Stream);
+template<typename scalar_t, size_t n_ch>
+void normalize_image_chw(scalar_t* image, size_t height, size_t width,
+    const std::array<scalar_t, n_ch> &mean, const std::array<scalar_t, n_ch> &std, cudaStream_t Stream);
 
 // Logger for TensorRT info/warning/errors
 class Logger : public nvinfer1::ILogger
@@ -61,31 +64,37 @@ public:
         if constexpr(std::is_same<MatType, cv::Mat>::value) {
             if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize1())); }
             cudaMemcpy(m_InputBuffer, img.data, img.total()*img.elemSize1(), cudaMemcpyHostToDevice);
-            nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
-                m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
         }
         else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
-            nhwc2nchw(img.data, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
-                m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+            m_InputBuffer = img.data;
         }
         else {
             std::cerr << "INCOMPATIBLE INPUT FORMAT";
         }
 
+        nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
+            m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+        
+        normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex),
+            m_InputH, m_InputW, mean, std, m_CudaStream);
+
         if (m_InputTensors.size() == 2) {
             if constexpr(std::is_same<MatType, cv::Mat>::value) {
                 if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize1())); }
-                cudaMemcpy(m_InputBuffer, img_seq.data, img.total()*img.elemSize1(), cudaMemcpyHostToDevice);
-                nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
-                    m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+                cudaMemcpy(m_InputBuffer, img_seq.data, img.total()*img.elemSize1(), cudaMemcpyHostToDevice);  
             }
             else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
-                nhwc2nchw(img_seq.data, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
-                    m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+                m_InputBuffer = img_seq.data;
             }
             else {
                 std::cerr << "INCOMPATIBLE INPUT FORMAT";
             }
+
+            nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
+                m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+
+            normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex),
+                m_InputH, m_InputW, mean, std, m_CudaStream);
         }
         m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
     }
@@ -125,6 +134,9 @@ private:
     TensorInfo m_DepthTensor;
     std::vector<void*> m_DeviceBuffers;
     void* m_InputBuffer;
+
+    static constexpr auto mean = std::array{0.485f, 0.456f, 0.406f};
+    static constexpr auto std = std::array{0.229f, 0.224f, 0.225f};
 
     void buildEngineFromONNX(const std::string_view onnx_path);
     void writeSerializedEngine();
