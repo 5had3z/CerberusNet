@@ -58,17 +58,20 @@ __global__ void argmax_chw_Kernel(const scalar_t* __restrict__ source,
     intergral_t* __restrict__ output, const size_t channel_stride, const size_t n_classes)
 {
     const int offset = threadIdx.x + blockIdx.x * blockDim.x;
-    scalar_t best_score = 0;
-    intergral_t best_cls = n_classes+1;
-    for (size_t cls=0; cls<n_classes; ++cls)
+    if (offset < channel_stride)
     {
-        if (source[offset + cls*channel_stride] > best_score)
+        scalar_t best_score = 0;
+        intergral_t best_cls = n_classes+1;
+        for (size_t cls=0; cls<n_classes; ++cls)
         {
-            best_score = source[offset + cls*channel_stride];
-            best_cls = cls;
+            if (source[offset + cls*channel_stride] > best_score)
+            {
+                best_score = source[offset + cls*channel_stride];
+                best_cls = cls;
+            }
         }
+        output[offset] = best_cls;
     }
-    output[offset] = best_cls;
 }
 
 template<typename scalar_t, typename intergral_t>
@@ -82,3 +85,38 @@ void argmax_chw(const scalar_t* input, intergral_t* output,
 
 template void argmax_chw<float, unsigned char>(
     const float*, unsigned char*, size_t, size_t, cudaStream_t);
+
+template<typename intergral_t, size_t n_classes>
+__global__ void seg_image_Kernel(const intergral_t* __restrict__ source,
+    u_char* __restrict__ output, const u_char* __restrict__ colour_map, size_t image_size)
+{
+    const int offset = 3U * (threadIdx.x + blockIdx.x * blockDim.x);
+    __shared__ u_char s_colour_map[n_classes * 3U];
+    if (offset < n_classes * 3)
+    {
+        s_colour_map[offset] = colour_map[offset];
+    }
+
+    __syncthreads();
+
+    if (offset < image_size)
+    {
+        intergral_t class_id = source[offset];
+        for (size_t ch=0; ch<3; ++ch)
+        {
+            output[offset + ch] = s_colour_map[class_id + ch];
+        }
+    }
+}
+
+template<typename intergral_t, size_t n_classes>
+void seg_image(const intergral_t* input, u_char* output, const u_char* colour_map,
+    size_t image_size, cudaStream_t Stream)
+{
+    const int nBlocks = image_size / BLOCK_SIZE;
+    seg_image_Kernel<intergral_t, n_classes><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
+        input, output, colour_map, image_size);
+}
+
+template void seg_image<u_char, 19ul>(
+    const u_char*, u_char*, const u_char*, size_t, cudaStream_t);

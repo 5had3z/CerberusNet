@@ -99,7 +99,8 @@ public:
         m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
     }
 
-    [[nodiscard]] cv::Mat get_segmentation();
+    [[nodiscard]] cv::Mat get_seg_class();
+    [[nodiscard]] cv::Mat get_seg_image();
     [[nodiscard]] cv::Mat get_depth();
     [[nodiscard]] cv::Mat get_flow();
 
@@ -117,6 +118,7 @@ private:
     size_t m_InputC;
 
     std::vector<std::string> m_class_names;
+    std::array<uchar, 19*3> m_class_colourmap;
 
     const std::string m_Precision = PRECISION;// Defined in cmake
     std::string m_EnginePath; // Will be automatically inferred from ONNX_FILE

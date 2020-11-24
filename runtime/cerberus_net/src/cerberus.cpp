@@ -11,6 +11,10 @@ template<typename scalar_t, typename intergral_t>
 void argmax_chw(const scalar_t* input, intergral_t* output,
     size_t n_classes, size_t ch_stride, cudaStream_t Stream);
 
+template<typename intergral_t, size_t n_classes>
+void seg_image(const intergral_t* input, u_char* output, const u_char* colour_map,
+    size_t image_size, cudaStream_t Stream);
+
 static Logger gLogger;
 #define MAX_WORKSPACE (1UL << 32)
 
@@ -222,11 +226,35 @@ void CERBERUS::allocateBuffers()
     }
 }
 
-cv::Mat CERBERUS::get_segmentation()
+cv::Mat CERBERUS::get_seg_class()
 {
     cv::Mat seg_argmax(cv::Size(m_InputW, m_InputH), CV_8UC1);
+    void* gpu_buffer;
+    cudaMalloc(&gpu_buffer, seg_argmax.total()*seg_argmax.elemSize1());
     argmax_chw((float*)m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
-        seg_argmax.data, 19, m_InputW * m_InputH, m_CudaStream);
+        (uchar*)gpu_buffer, 19, m_InputW * m_InputH, m_CudaStream);
+    cudaMemcpy(seg_argmax.data, gpu_buffer, seg_argmax.total()*seg_argmax.elemSize1(), cudaMemcpyDeviceToHost);
+    cudaFree(gpu_buffer);
+    return seg_argmax;
+}
+
+cv::Mat CERBERUS::get_seg_image()
+{
+    void* seg_argmax;
+    void* seg_colour;
+    cudaMalloc(&seg_argmax, m_InputW*m_InputH*sizeof(uchar));
+    argmax_chw((float*)m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
+        (uchar*)seg_argmax, 19, m_InputW * m_InputH, m_CudaStream);
+
+    cudaMalloc(&seg_colour, 3U * m_InputW*m_InputH*sizeof(uchar));
+    seg_image<uchar, 19>((uchar*)seg_argmax, (uchar*)seg_colour,
+        static_cast<uchar*>(m_class_colourmap.data()), m_InputW*m_InputH, m_CudaStream);
+    cudaFree(seg_argmax);
+
+    cv::Mat seg_colour_mat(cv::Size(m_InputW, m_InputH), CV_8UC3);
+    cudaMemcpy(seg_colour_mat.data, seg_colour, seg_colour_mat.total()*seg_colour_mat.elemSize1(), cudaMemcpyDeviceToHost);
+    cudaFree(seg_colour);
+    return seg_colour_mat;
 }
 
 cv::Mat CERBERUS::get_depth()
