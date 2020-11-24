@@ -60,13 +60,14 @@ __global__ void argmax_chw_Kernel(const scalar_t* __restrict__ source,
     const int offset = threadIdx.x + blockIdx.x * blockDim.x;
     if (offset < channel_stride)
     {
-        scalar_t best_score = 0;
-        intergral_t best_cls = n_classes+1;
-        for (size_t cls=0; cls<n_classes; ++cls)
+        scalar_t best_score = source[offset];
+        intergral_t best_cls = 0;
+        for (size_t cls=1; cls<n_classes; ++cls)
         {
-            if (source[offset + cls*channel_stride] > best_score)
+            const scalar_t class_score = source[offset + cls*channel_stride];
+            if (class_score > best_score)
             {
-                best_score = source[offset + cls*channel_stride];
+                best_score = class_score;
                 best_cls = cls;
             }
         }

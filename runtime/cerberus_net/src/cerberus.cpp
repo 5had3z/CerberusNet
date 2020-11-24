@@ -246,7 +246,7 @@ cv::Mat CERBERUS::get_seg_image()
 {
     const size_t n_px = m_InputW*m_InputH;
 
-    // Allocate temporary spaces for argmax and image on GPU
+    // Allocate temporary spaces for argmax and rgb image on GPU
     void* seg_argmax;
     void* seg_colour;
     NV_CUDA_CHECK(cudaMalloc(&seg_argmax, n_px*sizeof(uchar)));
@@ -260,8 +260,9 @@ cv::Mat CERBERUS::get_seg_image()
     NV_CUDA_CHECK(cudaFree(seg_argmax));
 
     cv::Mat seg_colour_mat(cv::Size(m_InputW, m_InputH), CV_8UC3);
-    NV_CUDA_CHECK(cudaMemcpy(seg_colour_mat.data, seg_colour, seg_colour_mat.total()*seg_colour_mat.elemSize1(), cudaMemcpyDeviceToHost));
+    NV_CUDA_CHECK(cudaMemcpy(seg_colour_mat.data, seg_colour, 3U*n_px*sizeof(uchar), cudaMemcpyDeviceToHost));
     NV_CUDA_CHECK(cudaFree(seg_colour));
+
     return seg_colour_mat;
 }
 
