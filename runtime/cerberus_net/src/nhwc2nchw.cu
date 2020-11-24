@@ -87,36 +87,36 @@ template void argmax_chw<float, unsigned char>(
     const float*, unsigned char*, size_t, size_t, cudaStream_t);
 
 template<typename intergral_t, size_t n_classes>
-__global__ void seg_image_Kernel(const intergral_t* __restrict__ source,
-    u_char* __restrict__ output, const u_char* __restrict__ colour_map, size_t image_size)
+__global__ void seg_image_Kernel(const intergral_t* __restrict__ argmax_image,
+    u_char* __restrict__ rgb_image, const u_char* __restrict__ colour_map, size_t image_size)
 {
-    const int offset = 3U * (threadIdx.x + blockIdx.x * blockDim.x);
-    __shared__ u_char s_colour_map[n_classes * 3U];
-    if (offset < n_classes * 3)
+    const int offset = threadIdx.x + blockIdx.x * blockDim.x;
+    __shared__ u_char smem_colour_map[n_classes * 3U];
+    if (offset < n_classes * 3U)
     {
-        s_colour_map[offset] = colour_map[offset];
+        smem_colour_map[offset] = colour_map[offset];
     }
-
+    
     __syncthreads();
 
     if (offset < image_size)
     {
-        intergral_t class_id = source[offset];
-        for (size_t ch=0; ch<3; ++ch)
+        const intergral_t class_id = argmax_image[offset];
+        for (size_t ch=0U; ch<3U; ++ch)
         {
-            output[offset + ch] = s_colour_map[class_id + ch];
+            rgb_image[3U * offset + ch] = smem_colour_map[3U * class_id + ch];
         }
     }
 }
 
 template<typename intergral_t, size_t n_classes>
-void seg_image(const intergral_t* input, u_char* output, const u_char* colour_map,
+void seg_image(const intergral_t* argmax_image, u_char* rgb_image, const u_char* colour_map,
     size_t image_size, cudaStream_t Stream)
 {
     const int nBlocks = image_size / BLOCK_SIZE;
     seg_image_Kernel<intergral_t, n_classes><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
-        input, output, colour_map, image_size);
+        argmax_image, rgb_image, colour_map, image_size);
 }
 
-template void seg_image<u_char, 19ul>(
+template void seg_image<u_char, 19>(
     const u_char*, u_char*, const u_char*, size_t, cudaStream_t);

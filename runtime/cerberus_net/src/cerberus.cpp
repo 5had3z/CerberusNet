@@ -90,6 +90,9 @@ CERBERUS::CERBERUS() :
 
     cudaStreamCreate(&m_CudaStream);
     allocateBuffers();
+
+    cudaMalloc(&m_dev_class_colourmap, m_class_colourmap.size());
+    cudaMemcpy(m_dev_class_colourmap, m_class_colourmap.data(), m_class_colourmap.size(), cudaMemcpyHostToDevice);
 }
 
 CERBERUS::~CERBERUS()
@@ -110,6 +113,7 @@ CERBERUS::~CERBERUS()
     }
 
     NV_CUDA_CHECK(cudaStreamDestroy(m_CudaStream));
+    NV_CUDA_CHECK(cudaFree(m_dev_class_colourmap));
 
     if (m_Context) {
         m_Context->destroy();
@@ -240,20 +244,24 @@ cv::Mat CERBERUS::get_seg_class()
 
 cv::Mat CERBERUS::get_seg_image()
 {
+    const size_t n_px = m_InputW*m_InputH;
+
+    // Allocate temporary spaces for argmax and image on GPU
     void* seg_argmax;
     void* seg_colour;
-    cudaMalloc(&seg_argmax, m_InputW*m_InputH*sizeof(uchar));
-    argmax_chw((float*)m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
-        (uchar*)seg_argmax, 19, m_InputW * m_InputH, m_CudaStream);
+    NV_CUDA_CHECK(cudaMalloc(&seg_argmax, n_px*sizeof(uchar)));
+    NV_CUDA_CHECK(cudaMalloc(&seg_colour, 3U*n_px*sizeof(uchar)));
 
-    cudaMalloc(&seg_colour, 3U * m_InputW*m_InputH*sizeof(uchar));
+    argmax_chw((float*)m_DeviceBuffers.at(m_SegmentationTensor.bindingIndex),
+        (uchar*)seg_argmax, 19, n_px, m_CudaStream);
+
     seg_image<uchar, 19>((uchar*)seg_argmax, (uchar*)seg_colour,
-        const_cast<uchar*>(m_class_colourmap.data()), m_InputW*m_InputH, m_CudaStream);
-    cudaFree(seg_argmax);
+        (uchar*)m_dev_class_colourmap, n_px, m_CudaStream);
+    NV_CUDA_CHECK(cudaFree(seg_argmax));
 
     cv::Mat seg_colour_mat(cv::Size(m_InputW, m_InputH), CV_8UC3);
-    cudaMemcpy(seg_colour_mat.data, seg_colour, seg_colour_mat.total()*seg_colour_mat.elemSize1(), cudaMemcpyDeviceToHost);
-    cudaFree(seg_colour);
+    NV_CUDA_CHECK(cudaMemcpy(seg_colour_mat.data, seg_colour, seg_colour_mat.total()*seg_colour_mat.elemSize1(), cudaMemcpyDeviceToHost));
+    NV_CUDA_CHECK(cudaFree(seg_colour));
     return seg_colour_mat;
 }
 

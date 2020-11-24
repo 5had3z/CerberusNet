@@ -105,7 +105,7 @@ public:
     [[nodiscard]] cv::Mat get_flow();
 
     [[nodiscard]] std::string getClassName(const int& classID) const noexcept { return m_class_names[classID]; }
-    [[nodiscard]] std::size_t getNumClasses(const int& classID) const noexcept { return m_class_names.size(); }
+    [[nodiscard]] std::size_t getNumClasses() const noexcept { return m_class_names.size(); }
 
     [[nodiscard]] std::size_t getInputC() const noexcept { return m_InputC; }
     [[nodiscard]] std::size_t getInputH() const noexcept { return m_InputH; }
@@ -139,6 +139,7 @@ private:
               0, 80,100,
               0,  0,230,
             119, 11, 32};
+    void* m_dev_class_colourmap;
 
     const std::string m_Precision = PRECISION;// Defined in cmake
     std::string m_EnginePath; // Will be automatically inferred from ONNX_FILE
