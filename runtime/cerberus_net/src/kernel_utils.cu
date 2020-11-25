@@ -93,9 +93,9 @@ __global__ void seg_image_Kernel(const intergral_t* __restrict__ argmax_image,
 {
     const int offset = threadIdx.x + blockIdx.x * blockDim.x;
     __shared__ u_char smem_colour_map[n_classes * 3U];
-    if (offset < n_classes * 3U)
+    if (threadIdx.x < n_classes * 3U)
     {
-        smem_colour_map[offset] = colour_map[offset];
+        smem_colour_map[threadIdx.x] = colour_map[threadIdx.x];
     }
     
     __syncthreads();

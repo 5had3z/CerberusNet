@@ -8,7 +8,7 @@ set(CUDA_ARCH "8.6") #Check yours here: https://developer.nvidia.com/cuda-gpus
 # add_definitions(-DOPENCV_CUDA) # Flag for CUDA Operations with OpenCV have been compiled
 # add_definitions(-DUNIFIED) # Flag for unified memory
 
-set(CMAKE_CXX_FLAGS "-std=c++17 -march=native -O0 -g -Wall -Wfatal-errors")
+set(CMAKE_CXX_FLAGS "-std=c++17 -march=native -Og -Wall -Wfatal-errors")
 
 # Cuda Architecture and Version Management
 find_package(CUDA 10 REQUIRED cudart cublas curand)

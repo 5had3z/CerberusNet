@@ -271,7 +271,7 @@ cv::Mat CERBERUS::get_depth()
     cv::Mat depth_image(cv::Size(m_InputW, m_InputH), CV_32FC1);
     cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
         m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
-    return depth_image / 80.0f;
+    return depth_image / 80.f;
 }
 
 cv::Mat CERBERUS::get_flow()
