@@ -215,16 +215,17 @@ __global__ void grid_sampler_kernel(const size_t nthreads,
     }
 }
 
-int GridSamplerPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+	const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
-    const int64_t count = batchSize * m_input_dims.d[1] * m_input_dims.d[2];
+    const int64_t count = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3];
 
-    if (m_datatype == nvinfer1::DataType::kFLOAT)
+    if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
     {
         grid_sampler_kernel<float><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-            reinterpret_cast<const float*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2],
+            reinterpret_cast<const float*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
             reinterpret_cast<const float*>(inputs[1]),
-            reinterpret_cast<float*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2],
+            reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
             m_interpolation_mode, m_padding_mode, m_align_corners);
     }
     // else if (m_datatype == nvinfer1::DataType::kHALF)

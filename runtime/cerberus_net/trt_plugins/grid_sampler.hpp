@@ -17,7 +17,7 @@ namespace GridSampler {
 using GridSampler::Interpolation;
 using GridSampler::Padding;
 
-class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
+class GridSamplerPlugin: public nvinfer1::IPluginV2DynamicExt
 {
     public:
         GridSamplerPlugin(const nvinfer1::PluginFieldCollection& fc);
@@ -26,26 +26,29 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 
         ~GridSamplerPlugin() override = default;
 
-        int getNbOutputs() const override
-        {
-            return 1;
-        }
+        int getNbOutputs() const override { return 1; }
 
-        nvinfer1::Dims getOutputDimensions(int index, const nvinfer1::Dims* inputs, int nbInputDims) override;
+        nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs,
+            int nbInputs, nvinfer1::IExprBuilder& exprBuilder) override;
 
         int initialize() override;
 
         void terminate() override;
 
-        size_t getWorkspaceSize(int maxBatchSize) const override { return 0;}
+        size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
+            const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
 
-        int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
+        int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+            const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
+        void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+            const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
 
         size_t getSerializationSize() const override;
 
         void serialize(void* buffer) const override;
 
-        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override;
+        bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
 
         const char* getPluginType() const override;
 
@@ -53,7 +56,7 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 
         void destroy() override;
 
-        IPluginV2IOExt* clone() const override;
+        IPluginV2DynamicExt* clone() const override;
 
         void setPluginNamespace(const char* pluginNamespace) override;
 
@@ -61,13 +64,7 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
 
         nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
 
-        bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override;
-
-        bool canBroadcastInputAcrossBatch(int inputIndex) const override;
-
         void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) override;
-
-        void configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInput, const nvinfer1::PluginTensorDesc* out, int nbOutput) override TRTNOEXCEPT;
 
         void detachFromContext() override;
 
@@ -75,9 +72,6 @@ class GridSamplerPlugin: public nvinfer1::IPluginV2IOExt
         bool m_align_corners;
         GridSampler::Interpolation m_interpolation_mode;
         GridSampler::Padding m_padding_mode;
-        nvinfer1::Dims m_input_dims;
-        nvinfer1::Dims m_output_dims;
-        nvinfer1::DataType m_datatype;
         const char* mPluginNamespace;
 };
 
@@ -94,9 +88,9 @@ class GridSamplerPluginCreator : public nvinfer1::IPluginCreator
 
         const nvinfer1::PluginFieldCollection* getFieldNames() override;
 
-        nvinfer1::IPluginV2IOExt* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
+        nvinfer1::IPluginV2DynamicExt* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
 
-        nvinfer1::IPluginV2IOExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+        nvinfer1::IPluginV2DynamicExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
 
         void setPluginNamespace(const char* libNamespace) override
         {
