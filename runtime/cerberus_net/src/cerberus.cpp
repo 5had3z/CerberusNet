@@ -3,7 +3,7 @@
 
 #include "../trt_plugins/correlation.hpp"
 #include "../trt_plugins/grid_sampler.hpp"
-// #include "../trt_plugins/scatter_nd.hpp"
+#include "../trt_plugins/scatter_nd.hpp"
 
 #include <fstream>
 #include <numeric>
