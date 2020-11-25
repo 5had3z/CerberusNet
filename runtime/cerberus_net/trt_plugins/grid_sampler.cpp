@@ -120,11 +120,11 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     // Two inputs and one output, only kFLOAT and kHALF Supported
     assert(nbOutputs == 1 && nbInputs == 2);
     // Should be a bog standard tensor
-    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    bool condition = 1; //inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT); // || (inOut[pos].type == nvinfer1::DataType::kHALF);
     // Input and output has same type
-    condition &= inOut[pos].type == inOut[nbInputs].type;
+    // condition &= inOut[pos].type == inOut[nbInputs].type;
     return condition;
 }
 
@@ -135,7 +135,12 @@ void GridSamplerPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc*
     assert(out && nbOutputs == 1);
     assert(in[0].desc.type == in[1].desc.type && in[0].desc.type == out[0].desc.type);
 
-    assert(in[0].desc.dims.d == in[1].desc.dims.d);
+    assert(in[0].desc.dims.nbDims == in[1].desc.dims.nbDims);
+    
+    // Input1: NCHW, Input2: NHW2
+    assert(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
+    assert(in[0].desc.dims.d[2] == in[1].desc.dims.d[1]);
+    assert(in[0].desc.dims.d[3] == in[1].desc.dims.d[2]);
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.

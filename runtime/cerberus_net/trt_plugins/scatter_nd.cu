@@ -17,5 +17,13 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     //     output[indices[i]] = updates[i]
     // return output
 
+    // Temporariy not actually updating input lmoa
+    size_t mem_size = sizeof(float);
+    for (size_t i=0; i<inputDesc[0].dims.nbDims; i++)
+    {
+        mem_size *= inputDesc[0].dims.d[i];
+    }
+    cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice);
+
     return cudaGetLastError();
 }

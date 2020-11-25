@@ -149,7 +149,11 @@ int CorrelationPlugin::initialize()
 size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs,
     int nbInputs, const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
 {
-    assert(inputs[0].dims.d == inputs[1].dims.d);
+    assert(inputs[0].dims.nbDims == inputs[1].dims.nbDims);
+    for (int i=0; i<inputs[0].dims.nbDims; i++)
+    {
+        assert(inputs[0].dims.d[i] == inputs[1].dims.d[i]);
+    }
 
     // Input descriptors [batch, channels, height, width]
     const int paddedInputHeight = m_input_dims.d[2] + 2 * m_pad_size;
@@ -173,14 +177,18 @@ bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
 {
     // Two inputs and one output
     assert(nbInputs == 2 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
-    // Should be a bog standard tensor
+    // Should be bog standard tensors
     bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF);
-    // Input and output has same type
-    condition &= inOut[pos].type == inOut[nbInputs].type;
+    // Input and output has same type unless output is now dynamic
+    condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
+
     // Both inputs have same dimensions
-    condition &= inOut[0].dims.d == inOut[1].dims.d;
+    for (int i=0; i<inOut[0].dims.nbDims; i++)
+    {
+        condition &= inOut[0].dims.d[i] == inOut[1].dims.d[i];
+    }
     return condition;
 }
 

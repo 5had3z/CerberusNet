@@ -57,7 +57,8 @@ void ScatterNDPlugin::terminate()
 nvinfer1::DimsExprs ScatterNDPlugin::getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs,
     int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
 {
-    
+    // Should be the same as the input (we are just updating it).
+    return inputs[0];
 }
 
 void ScatterNDPlugin::setPluginNamespace(const char* pluginNamespace)
@@ -90,25 +91,28 @@ bool ScatterNDPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginT
     // Two inputs and one output, only kFLOAT and kHALF Supported
     assert(nbOutputs == 1 && nbInputs == 3);
     // Should be a bog standard tensors
-    bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    bool condition = 1;
+    // Like it doesn't really matter I guess?
+    // condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
 
     if (pos != 1) {
         // Only kFLOAT and kHALF supported as data inputs/updates/outputs
         condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
+        // Input and output has same type, output is sometimes -1
+        condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
     }
     else {
+        // Only kINT32 is supported for the updates
         condition &= (inOut[pos].type == nvinfer1::DataType::kINT32);
     }
 
-    // Input and output has same type
-    condition &= inOut[pos].type == inOut[nbInputs].type;
     return condition;
 }
 
 void ScatterNDPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
 {
-    assert(in && nbInputs == 2);
+    assert(in && nbInputs == 3);
     assert(out && nbOutputs == 1);
 
     // # Check tensor shapes
@@ -121,6 +125,8 @@ void ScatterNDPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* i
 size_t ScatterNDPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
             const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
 {
+    // Everything is done inplace, no additional space requried
+    return 0;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
