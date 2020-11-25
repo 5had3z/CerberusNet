@@ -38,6 +38,7 @@ def export_model(config: EasyDict, exp_path: Path) -> None:
     for filename in os.listdir(exp_path):
         if filename.endswith("_latest.pth"):
             modelweights = exp_path / filename
+            onnx_name = filename.strip("_latest.pth")
 
     model.load_state_dict(torch.load(modelweights, map_location=device)['model_state_dict'])
 
@@ -52,7 +53,7 @@ def export_model(config: EasyDict, exp_path: Path) -> None:
     print("Exporting ONNX Engine")
     torch.onnx.export(
         model, (dummy_input_1, dummy_input_2),
-        "onnx_models/export_test.onnx",
+        f"onnx_models/{onnx_name}.onnx",
         opset_version=11)
 
 if __name__ == "__main__":

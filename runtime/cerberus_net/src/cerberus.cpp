@@ -1,6 +1,10 @@
 #include "cerberus.hpp"
 #include "utils.hpp"
 
+#include "../trt_plugins/correlation.hpp"
+#include "../trt_plugins/grid_sampler.hpp"
+// #include "../trt_plugins/scatter_nd.hpp"
+
 #include <fstream>
 #include <numeric>
 #include <iostream>
@@ -28,7 +32,7 @@ CERBERUS::CERBERUS() :
     m_InputBuffer(nullptr)
 {
     constexpr std::string_view labels_path { "/home/bryce/cs_labels.txt" };
-    constexpr std::string_view ONNX_path { "/home/bryce/export_test.onnx" };
+    constexpr std::string_view ONNX_path { "/home/bryce/OCRNetSFD.onnx" };
 
     m_class_names = loadListFromTextFile(std::string{labels_path});
 
