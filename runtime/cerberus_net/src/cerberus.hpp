@@ -99,10 +99,10 @@ public:
         m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
     }
 
-    [[nodiscard]] cv::Mat get_seg_class();
-    [[nodiscard]] cv::Mat get_seg_image();
-    [[nodiscard]] cv::Mat get_depth();
-    [[nodiscard]] cv::Mat get_flow();
+    [[nodiscard]] cv::Mat get_seg_class() const;
+    [[nodiscard]] cv::Mat get_seg_image() const;
+    [[nodiscard]] cv::Mat get_depth() const;
+    [[nodiscard]] cv::Mat get_flow() const;
 
     [[nodiscard]] std::string getClassName(const int& classID) const noexcept { return m_class_names[classID]; }
     [[nodiscard]] std::size_t getNumClasses() const noexcept { return m_class_names.size(); }

@@ -5,13 +5,12 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <list>
 #include <chrono>
+#include <experimental/filesystem>
 
-int main(int argc, char** argv)
+void single_image_example(CERBERUS& nnet)
 {
-    CERBERUS nnet;
-    std::cout << "Init Success!" << std::endl;
-
     const std::string base_path = "/home/bryce/Documents/Cityscapes Data/leftImg8bit_sequence/train/aachen/";
     cv::Mat image1 = cv::imread(base_path+"aachen_000000_000020_leftImg8bit.png");
     cv::Mat image2 = cv::imread(base_path+"aachen_000001_000020_leftImg8bit.png");
@@ -41,4 +40,41 @@ int main(int argc, char** argv)
     cv::imshow("Sample Seg", color_seg);
 
     cv::waitKey(0);
+}
+
+std::list<std::string> get_images(std::string_view base_path)
+{
+    std::list<std::string> image_filenames;
+
+    // Get all the png images from the folder
+    for (const auto & entry : std::experimental::filesystem::directory_iterator(base_path))
+    {
+        if (entry.path().extension() == ".png") {
+            image_filenames.emplace_back(entry.path().filename());
+        }
+    }
+
+    // Sort them according to the cityscapes standard
+    image_filenames.sort([](const std::string& str1, const std::string& str2)
+        {
+            return std::stoi(str1.substr(20, 6)) < std::stoi(str2.substr(20, 6));
+        });
+
+    // Optional printing to check
+    // std::for_each(image_filenames.begin(), image_filenames.end(),
+    //     [](const auto &filename){ std::cout << filename << std::endl; });
+    return image_filenames;
+}
+void video_sequence_example(CERBERUS& nnet)
+{
+    std::string_view folder{"/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_demoVideo/leftImg8bit/demoVideo/stuttgart_01"};
+    auto image_filenames = get_images(folder);
+}
+
+int main(int argc, char** argv)
+{
+    CERBERUS nnet;
+    std::cout << "Init Success!" << std::endl;
+
+    video_sequence_example(nnet);
 }

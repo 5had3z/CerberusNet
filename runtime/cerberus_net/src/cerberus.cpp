@@ -230,7 +230,7 @@ void CERBERUS::allocateBuffers()
     }
 }
 
-cv::Mat CERBERUS::get_seg_class()
+cv::Mat CERBERUS::get_seg_class() const
 {
     cv::Mat seg_argmax(cv::Size(m_InputW, m_InputH), CV_8UC1);
     void* gpu_buffer;
@@ -242,7 +242,7 @@ cv::Mat CERBERUS::get_seg_class()
     return seg_argmax;
 }
 
-cv::Mat CERBERUS::get_seg_image()
+cv::Mat CERBERUS::get_seg_image() const
 {
     const size_t n_px = m_InputW*m_InputH;
 
@@ -266,7 +266,7 @@ cv::Mat CERBERUS::get_seg_image()
     return seg_colour_mat;
 }
 
-cv::Mat CERBERUS::get_depth()
+cv::Mat CERBERUS::get_depth() const
 {
     cv::Mat depth_image(cv::Size(m_InputW, m_InputH), CV_32FC1);
     cudaMemcpy(depth_image.data, m_DeviceBuffers.at(m_DepthTensor.bindingIndex),
@@ -274,7 +274,7 @@ cv::Mat CERBERUS::get_depth()
     return depth_image / 80.f;
 }
 
-cv::Mat CERBERUS::get_flow()
+cv::Mat CERBERUS::get_flow() const
 {
 
 }
