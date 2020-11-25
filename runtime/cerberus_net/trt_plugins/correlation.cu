@@ -96,44 +96,59 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 	const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
 	const dim3 threadsPerBlock(THREADS_PER_BLOCK);
-	const dim3 reshape_grid(1, m_input_dims.d[1], m_input_dims.d[2]);
-    const dim3 corr_grid(1, m_output_dims.d[1], m_output_dims.d[2]);
-    
-    const int pInputWidth = m_input_dims.d[2] + 2 * m_pad_size;
-    const int pInputHeight = m_input_dims.d[1] + 2 * m_pad_size;
+	const dim3 reshape_grid(inputDesc[0].dims.d[0], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3]);
+    const dim3 corr_grid(inputDesc[0].dims.d[0], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3]);
+	
+	const size_t pInputHeight = inputDesc[0].dims.d[2] + 2 * m_pad_size;
+	const size_t pInputWidth = inputDesc[0].dims.d[3] + 2 * m_pad_size;
+	const size_t pInputVolume = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[1] * pInputHeight * pInputWidth;
 
-    if (m_datatype == nvinfer1::DataType::kFLOAT)
-    {
-        channels_first<float> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<const float*>(inputs[0]), reinterpret_cast<float*>(m_rInput1),
-            m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2], m_pad_size);
+	switch(inputDesc[0].type)
+	{
+		case nvinfer1::DataType::kFLOAT:
+		{
+			float* rInput1 = reinterpret_cast<float*>(workspace);
+			float* rInput2 = reinterpret_cast<float*>(workspace + pInputVolume * sizeof(float));
 
-        channels_first<float> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<const float*>(inputs[1]), reinterpret_cast<float*>(m_rInput2),
-            m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2], m_pad_size);
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+				reinterpret_cast<const float*>(inputs[0]), rInput1,
+				inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3], m_pad_size);
 
-        correlation_forward<float> <<<corr_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<float*>(outputs[0]), m_output_dims.d[0], m_output_dims.d[1], m_output_dims.d[2],
-            reinterpret_cast<const float*>(m_rInput1), m_input_dims.d[0], pInputHeight, pInputWidth,
-            reinterpret_cast<const float*>(m_rInput2),
-            m_kernel_size, m_max_displacement, m_stride1, m_stride2);
-    }
-    else if (m_datatype == nvinfer1::DataType::kHALF)
-    {
-        channels_first<__half> <<<reshape_grid, threadsPerBlock, 0, stream>>>(
-            reinterpret_cast<const __half*>(inputs[0]), reinterpret_cast<__half*>(m_rInput1),
-            m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2], m_pad_size);
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+				reinterpret_cast<const float*>(inputs[1]), rInput2,
+				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
 
-        channels_first<__half> <<<reshape_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<const __half*>(inputs[1]), reinterpret_cast<__half*>(m_rInput2),
-            m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2], m_pad_size);
+			correlation_forward<<<corr_grid, threadsPerBlock, 0, stream>>> (
+				reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
+				rInput1, inputDesc[0].dims.d[1], pInputHeight, pInputWidth, rInput2,
+				m_kernel_size, m_max_displacement, m_stride1, m_stride2);
+				
+			break;
+		}
+		case nvinfer1::DataType::kHALF:
+		{
+			__half* rInput1 = reinterpret_cast<__half*>(workspace);
+			__half* rInput2 = reinterpret_cast<__half*>(workspace + pInputVolume * sizeof(__half));
 
-        correlation_forward<__half> <<<corr_grid, threadsPerBlock, 0, stream>>> (
-            reinterpret_cast<__half*>(outputs[0]), m_output_dims.d[0], m_output_dims.d[1], m_output_dims.d[2],
-            reinterpret_cast<const __half*>(m_rInput1), m_input_dims.d[0], pInputHeight, pInputWidth,
-            reinterpret_cast<const __half*>(m_rInput2),
-            m_kernel_size, m_max_displacement, m_stride1, m_stride2);
-    }
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>>(
+				reinterpret_cast<const __half*>(inputs[0]), rInput1,
+				inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3], m_pad_size);
 
-    return cudaGetLastError();
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+				reinterpret_cast<const __half*>(inputs[1]), rInput2,
+				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
+
+			correlation_forward<<<corr_grid, threadsPerBlock, 0, stream>>> (
+				reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
+				rInput1, inputDesc[0].dims.d[1], pInputHeight, pInputWidth, rInput2,
+				m_kernel_size, m_max_displacement, m_stride1, m_stride2);
+
+			break;
+		}
+	}
+	
+	const auto error = cudaGetLastError();
+    if (error) { std::cout << error << std::endl; }
+	NV_CUDA_CHECK(error);
+    return error;
 }

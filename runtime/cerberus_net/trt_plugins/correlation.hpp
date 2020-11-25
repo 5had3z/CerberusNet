@@ -59,20 +59,12 @@ class CorrelationPlugin: public nvinfer1::IPluginV2DynamicExt
         void detachFromContext() override;
 
     private:
-        nvinfer1::DataType m_datatype;
-
         int m_pad_size;
         int m_kernel_size;
         int m_max_displacement;
         int m_stride1;
         int m_stride2;
         int m_corr_multiply;
-
-        nvinfer1::Dims m_input_dims;
-        nvinfer1::Dims m_output_dims;
-
-        void* m_rInput1;
-        void* m_rInput2;
 
         const char* mPluginNamespace;
 };

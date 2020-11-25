@@ -237,5 +237,8 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
     //         m_interpolation_mode, m_padding_mode, m_align_corners);
     // }
 
-    return cudaGetLastError();
+    const auto error = cudaGetLastError();
+    if (error) { std::cout << error << std::endl; }
+	NV_CUDA_CHECK(error);
+    return error;
 }

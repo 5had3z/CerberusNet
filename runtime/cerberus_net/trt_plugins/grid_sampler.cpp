@@ -51,7 +51,7 @@ void GridSamplerPlugin::serialize(void* buffer) const
 {
     char* d = static_cast<char*>(buffer), *a = d;
 
-    write(d, static_cast<int>(m_align_corners));
+    write(d, m_align_corners);
     write(d, static_cast<int>(m_interpolation_mode));
     write(d, static_cast<int>(m_padding_mode));
 
@@ -62,7 +62,7 @@ size_t GridSamplerPlugin::getSerializationSize() const
 {
     size_t serializationSize = 0;
 
-    serializationSize += sizeof(static_cast<int>(m_align_corners));
+    serializationSize += sizeof(m_align_corners);
     serializationSize += sizeof(static_cast<int>(m_interpolation_mode));
     serializationSize += sizeof(static_cast<int>(m_padding_mode));
 

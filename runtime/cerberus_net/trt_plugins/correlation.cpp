@@ -16,6 +16,7 @@ std::vector<nvinfer1::PluginField> CorrelationPluginCreator::mPluginAttributes;
 
 CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
 {
+    std::cout << "Using corr field collection?? with " << fc.nbFields << " attributes?" << std::endl;
     for (int i = 0; i < fc.nbFields; ++i)
     {
         const char* attrName = fc.fields[i].name;
@@ -51,27 +52,21 @@ CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
             m_corr_multiply = *(static_cast<const int*>(fc.fields[i].data));
         }
     }
+
+    if (!fc.nbFields){
+        m_pad_size = 4;
+        m_kernel_size = 1;
+        m_max_displacement = 4;
+        m_stride1 = 1;
+        m_stride2 = 1;
+        m_corr_multiply = 1;
+    }
 }
 
 CorrelationPlugin::CorrelationPlugin(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char *>(data), *a = d;
 
-    read(d, m_input_dims.nbDims);
-    assert(m_input_dims.nbDims <= m_input_dims.MAX_DIMS);
-    for (int i = 0; i < m_input_dims.nbDims; ++i)
-    {
-        read(d, m_input_dims.d[i]);
-    }
-
-    read(d, m_output_dims.nbDims);
-    assert(m_output_dims.nbDims <= m_output_dims.MAX_DIMS);
-    for (int i = 0; i < m_output_dims.nbDims; ++i)
-    {
-        read(d, m_output_dims.d[i]);
-    }
-
-    read(d, m_datatype);
     read(d, m_pad_size);
     read(d, m_kernel_size);
     read(d, m_max_displacement);
@@ -86,27 +81,12 @@ void CorrelationPlugin::serialize(void* buffer) const
 {
     char* d = static_cast<char*>(buffer), *a = d;
 
-    write(d, m_input_dims.nbDims);
-    assert(m_input_dims.nbDims <= m_input_dims.MAX_DIMS);
-    for (int i = 0; i < m_input_dims.nbDims; ++i)
-    {
-        write(d, m_input_dims.d[i]);
-    }
-
-    write(d, m_output_dims.nbDims);
-    assert(m_output_dims.nbDims <= m_output_dims.MAX_DIMS);
-    for (int i = 0; i < m_output_dims.nbDims; ++i)
-    {
-        write(d, m_output_dims.d[i]);
-    }
-
-    write(d, static_cast<int>(m_datatype));
-    write(d, static_cast<int>(m_pad_size));
-    write(d, static_cast<int>(m_kernel_size));
-    write(d, static_cast<int>(m_max_displacement));
-    write(d, static_cast<int>(m_stride1));
-    write(d, static_cast<int>(m_stride2));
-    write(d, static_cast<int>(m_corr_multiply));
+    write(d, m_pad_size);
+    write(d, m_kernel_size);
+    write(d, m_max_displacement);
+    write(d, m_stride1);
+    write(d, m_stride2);
+    write(d, m_corr_multiply);
 
     assert(d == a + getSerializationSize());
 }
@@ -115,34 +95,18 @@ size_t CorrelationPlugin::getSerializationSize() const
 {
     size_t serializationSize = 0;
 
-    serializationSize += sizeof(m_input_dims.nbDims);
-    serializationSize += sizeof(m_input_dims.d[0]) * m_input_dims.nbDims;
-    serializationSize += sizeof(m_output_dims.nbDims);
-    serializationSize += sizeof(m_output_dims.d[0]) * m_output_dims.nbDims;
-    serializationSize += sizeof(static_cast<int>(m_datatype));
-    serializationSize += sizeof(static_cast<int>(m_pad_size));
-    serializationSize += sizeof(static_cast<int>(m_kernel_size));
-    serializationSize += sizeof(static_cast<int>(m_max_displacement));
-    serializationSize += sizeof(static_cast<int>(m_stride1));
-    serializationSize += sizeof(static_cast<int>(m_stride2));
-    serializationSize += sizeof(static_cast<int>(m_corr_multiply));
+    serializationSize += sizeof(m_pad_size);
+    serializationSize += sizeof(m_kernel_size);
+    serializationSize += sizeof(m_max_displacement);
+    serializationSize += sizeof(m_stride1);
+    serializationSize += sizeof(m_stride2);
+    serializationSize += sizeof(m_corr_multiply);
 
     return serializationSize;
 }
 
 int CorrelationPlugin::initialize()
 {
-	const int paddedInputHeight = m_input_dims.d[1] + 2 * m_pad_size;
-    const int paddedInputWidth  = m_input_dims.d[2] + 2 * m_pad_size;
-    const int tensor_volume = paddedInputHeight * paddedInputWidth * m_input_dims.d[0];
-
-    size_t elem_size = 0;
-    if (m_datatype == nvinfer1::DataType::kFLOAT) { elem_size = sizeof(float); }
-    else if (m_datatype == nvinfer1::DataType::kHALF) { elem_size = sizeof(float) / 2; }
-
-    NV_CUDA_CHECK(cudaMalloc(&m_rInput1, tensor_volume * elem_size));
-    NV_CUDA_CHECK(cudaMalloc(&m_rInput2, tensor_volume * elem_size));
-
     return 0;
 }
 
@@ -156,21 +120,22 @@ size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inp
     }
 
     // Input descriptors [batch, channels, height, width]
-    const int paddedInputHeight = m_input_dims.d[2] + 2 * m_pad_size;
-    const int paddedInputWidth  = m_input_dims.d[3] + 2 * m_pad_size;
-    const int tensor_volume = inputs[0].dims.d[0] * inputs[0].dims.d[1] * paddedInputHeight * paddedInputWidth;
+    const size_t paddedInputHeight = inputs[0].dims.d[2] + 2 * m_pad_size;
+    const size_t paddedInputWidth  = inputs[0].dims.d[3] + 2 * m_pad_size;
+    size_t tensor_volume = inputs[0].dims.d[0] * inputs[0].dims.d[1] * paddedInputHeight * paddedInputWidth;
 
-    size_t elem_size = 0;
-    if (inputs[0].format == nvinfer1::TensorFormat::kCHW32) { elem_size = sizeof(float); }
-    else if (inputs[0].format == nvinfer1::TensorFormat::kCHW16) { elem_size = sizeof(float) / 2; }
+    switch (inputs[0].type)
+    {
+        case nvinfer1::DataType::kFLOAT: { tensor_volume *= sizeof(float); break; }
+        case nvinfer1::DataType::kHALF: { tensor_volume *= sizeof(float) / 2; break; }
+        default: { std::logic_error( "Invalid type used in correlation only float and half are supported" ); }
+    }
     
-    return  tensor_volume * elem_size;
+    return tensor_volume * 2;
 }
 
 void CorrelationPlugin::terminate()
 {
-    NV_CUDA_CHECK(cudaFree(&m_rInput1));
-    NV_CUDA_CHECK(cudaFree(&m_rInput2));
 }
 
 bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
@@ -201,23 +166,15 @@ nvinfer1::DimsExprs CorrelationPlugin::getOutputDimensions(int outputIndex,
     // Should be NCHW
     assert(inputs[0].nbDims == 4 && inputs[1].nbDims == 4);
 
-    if (inputs[0].d[1]->isConstant() && inputs[0].d[2]->isConstant() && inputs[0].d[3]->isConstant())
-    {
-        for (int i = 1; i < inputs[0].nbDims; ++i)
-        {
-            m_input_dims.d[i] = inputs[0].d[i]->getConstantValue();
-        }
-    }
+    const int kernel_radius = (m_kernel_size - 1) / 2;
+    const int border_radius = kernel_radius + m_max_displacement;
 
-    const int kernel_radius = (1 - 1) / 2;
-    const int border_radius = kernel_radius + 4;
+    const int paddedInputHeight = inputs[0].d[2]->getConstantValue() + 2 * m_pad_size;
+    const int paddedInputWidth  = inputs[0].d[3]->getConstantValue() + 2 * m_pad_size;
 
-    const int paddedInputHeight = m_input_dims.d[2] + 2 * 4;
-    const int paddedInputWidth  = m_input_dims.d[3] + 2 * 4;
-
-    const int nOutputChannels = ((4/1)*2+1) * ((4/1)*2+1);
-    const int outputHeight = std::ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(1));
-    const int outputwidth = std::ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(1));
+    const int nOutputChannels = ((m_max_displacement / m_stride2)*2+1) * ((m_max_displacement / m_stride2)*2+1);
+    const int outputHeight = std::ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(m_stride1));
+    const int outputwidth = std::ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(m_stride1));
 
     nvinfer1::DimsExprs outdims;
     outdims.nbDims = 4;
@@ -234,11 +191,6 @@ void CorrelationPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc*
 {
     // Only one output and there are eight inputs (two dimensions and six args)
     assert(nbInputs == 2 && nbOutputs == 1);
-
-    for (int i = 0; i < in[0].desc.dims.nbDims; ++i)
-    {
-        m_input_dims.d[i] = in[0].desc.dims.d[i];
-    }
 }
 
 void CorrelationPlugin::setPluginNamespace(const char* pluginNamespace)

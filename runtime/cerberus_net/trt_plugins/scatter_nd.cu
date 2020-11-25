@@ -25,12 +25,12 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     // return output
 
     // Temporariy not actually updating input lmoa
-    size_t mem_size = sizeof(float);
+    size_t mem_size = inputDesc[0].type == nvinfer1::DataType::kFLOAT ? sizeof(float) : sizeof(__half);
     for (size_t i=0; i<inputDesc[0].dims.nbDims; i++)
     {
         mem_size *= inputDesc[0].dims.d[i];
     }
-    cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice);
+    NV_CUDA_CHECK(cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice));
 
     // const size_t nBlocks = 1;
     // const size_t BLOCK_SIZE = 1024;
@@ -56,5 +56,8 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     //     }
     // }
 
-    return cudaGetLastError();
+    const auto error = cudaGetLastError();
+    if (error) { std::cout << error << std::endl; }
+	NV_CUDA_CHECK(error);
+    return error;
 }
