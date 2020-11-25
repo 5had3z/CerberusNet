@@ -21,6 +21,8 @@ void single_image_example(CERBERUS& nnet)
     cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
     cv::resize(image1, image1, net_input);
     cv::resize(image2, image2, net_input);
+    cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
+    cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
     std::cout << "Doing inference" << std::endl;
 
@@ -63,12 +65,32 @@ std::list<std::string> get_images(std::string_view base_path)
     // Optional printing to check
     // std::for_each(image_filenames.begin(), image_filenames.end(),
     //     [](const auto &filename){ std::cout << filename << std::endl; });
+
     return image_filenames;
 }
 void video_sequence_example(CERBERUS& nnet)
 {
     std::string_view folder{"/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_demoVideo/leftImg8bit/demoVideo/stuttgart_01"};
     auto image_filenames = get_images(folder);
+
+    const cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
+    for (const auto &filename : image_filenames)
+    {
+        cv::Mat image1 = cv::imread(std::string(folder)+"/"+filename);
+        assert(!image1.empty());
+        cv::resize(image1, image1, net_input);
+        cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
+        const cv::Mat image2(image1);
+        nnet.doInference(image1, image2);
+
+        cv::cvtColor(image1, image1, cv::COLOR_RGB2BGR);
+        cv::imshow("Sample Input", image1);
+        cv::imshow("Sample Depth", nnet.get_depth());
+        cv::Mat color_seg;
+        cv::cvtColor(nnet.get_seg_image(), color_seg, cv::COLOR_RGB2BGR);
+        cv::imshow("Sample Seg", color_seg);
+        cv::waitKey(0);
+    }
 }
 
 int main(int argc, char** argv)
