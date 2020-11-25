@@ -21,27 +21,18 @@ ScatterNDPlugin::ScatterNDPlugin(const nvinfer1::PluginFieldCollection& fc)
 ScatterNDPlugin::ScatterNDPlugin(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char *>(data), *a = d;
-
-    read(d, m_datatype);
-
     assert(d == a + length);
 }
 
 void ScatterNDPlugin::serialize(void* buffer) const
 {
     char* d = static_cast<char*>(buffer), *a = d;
-
-    write(d, static_cast<int>(m_datatype));
-
     assert(d == a + getSerializationSize());
 }
 
 size_t ScatterNDPlugin::getSerializationSize() const
 {
     size_t serializationSize = 0;
-
-    serializationSize += sizeof(static_cast<int>(m_datatype));
-
     return serializationSize;
 }
 
@@ -58,6 +49,17 @@ nvinfer1::DimsExprs ScatterNDPlugin::getOutputDimensions(int outputIndex, const 
     int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
 {
     // Should be the same as the input (we are just updating it).
+    // for (size_t i=0; i<nbInputs; i++)
+    // {
+    //     std::cout << "Input: " << i << " Dims: ";
+    //     for (size_t j=0; j<inputs[i].nbDims; j++)
+    //     {
+    //         if (inputs[i].d[j]->isConstant()){
+    //             std::cout << inputs[i].d[j]->getConstantValue() << ", ";
+    //         }
+    //     }
+    //     std::cout << std::endl;
+    // }
     return inputs[0];
 }
 
@@ -104,6 +106,8 @@ bool ScatterNDPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginT
     else {
         // Only kINT32 is supported for the updates
         condition &= (inOut[pos].type == nvinfer1::DataType::kINT32);
+        // Last dimension of indicies should be less or equal the number of dimensions of the input
+        condition &= inOut[0].dims.nbDims >= inOut[pos].dims.d[inOut[pos].dims.nbDims-1];
     }
 
     return condition;
@@ -118,8 +122,6 @@ void ScatterNDPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* i
     // # Check tensor shapes
     // assert indices.shape[-1] <= len(data.shape)
     // assert updates.shape == indices.shape[:-1] + data.shape[indices.shape[-1]:]
-
-    m_datatype = in[0].desc.type;
 }
 
 size_t ScatterNDPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,

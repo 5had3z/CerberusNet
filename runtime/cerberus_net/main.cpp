@@ -89,6 +89,9 @@ void video_sequence_example(CERBERUS& nnet)
         cv::Mat color_seg;
         cv::cvtColor(nnet.get_seg_image(), color_seg, cv::COLOR_RGB2BGR);
         cv::imshow("Sample Seg", color_seg);
+
+        cv::cvtColor(nnet.get_flow(), color_seg, cv::COLOR_RGB2BGR);
+        cv::imshow("Sample Flow", color_seg);
         cv::waitKey(0);
     }
 }

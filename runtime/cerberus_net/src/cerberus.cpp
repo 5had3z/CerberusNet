@@ -19,6 +19,10 @@ template<typename intergral_t, size_t n_classes>
 void seg_image(const intergral_t* input, u_char* output, const u_char* colour_map,
     size_t image_size, cudaStream_t Stream);
 
+template<typename scalar_t>
+void flow_image(const scalar_t* flow_image, u_char* rgb_image,
+    size_t image_size, cudaStream_t Stream);
+
 static Logger gLogger;
 #define MAX_WORKSPACE (1UL << 32)
 
@@ -280,7 +284,17 @@ cv::Mat CERBERUS::get_depth() const
 
 cv::Mat CERBERUS::get_flow() const
 {
+    const size_t n_px = m_InputW*m_InputH;
+    
+    void* dev_flow_image;
+    NV_CUDA_CHECK(cudaMalloc(&dev_flow_image, 3U*n_px*sizeof(uchar)));
 
+    flow_image((float*)m_DeviceBuffers.at(m_FlowTensor.bindingIndex), (uchar*)dev_flow_image, n_px, m_CudaStream);
+
+    cv::Mat flow_image(cv::Size(m_InputW, m_InputH), CV_8UC3);
+    NV_CUDA_CHECK(cudaMemcpy(flow_image.data, dev_flow_image, 3U*n_px*sizeof(uchar), cudaMemcpyDeviceToHost));
+    NV_CUDA_CHECK(cudaFree(dev_flow_image));
+    return flow_image;
 }
 
 void Logger::log(Severity severity, const char* msg)

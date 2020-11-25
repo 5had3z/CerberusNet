@@ -5,6 +5,13 @@
 #include <limits>
 #include <cassert>
 
+template<typename scalar_t, typename intergral_t>
+__global__ void ScatterND_Kernel(const scalar_t* __restrict__ source, scalar_t* __restrict__ output,
+    intergral_t* __restrict__ indicies, const scalar_t* __restrict__ updates)
+{
+
+}
+
 int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
 	const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
@@ -24,6 +31,30 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
         mem_size *= inputDesc[0].dims.d[i];
     }
     cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice);
+
+    // const size_t nBlocks = 1;
+    // const size_t BLOCK_SIZE = 1024;
+
+    // switch (inputDesc[0].type)
+    // {
+    //     case nvinfer1::DataType::kFLOAT:
+    //     {
+    //         ScatterND_Kernel<<<nBlocks, BLOCK_SIZE, 0, stream>>>(
+    //             reinterpret_cast<const float*>(inputs[0]),
+    //             reinterpret_cast<float*>(outputs[0]),
+    //             reinterpret_cast<const int32_t*>(inputs[1]),
+    //             reinterpret_cast<const float*>(inputs[2]));
+    //         break;
+    //     }
+    //     case nvinfer1::DataType::kHALF:
+    //     {
+    //         ScatterND_Kernel<<<nBlocks, BLOCK_SIZE, 0, stream>>>(
+    //             reinterpret_cast<const __half*>(inputs[0]),
+    //             reinterpret_cast<__half*>(outputs[0]),
+    //             reinterpret_cast<const int32_t*>(inputs[1]),
+    //             reinterpret_cast<const __half*>(inputs[2]));
+    //     }
+    // }
 
     return cudaGetLastError();
 }

@@ -119,12 +119,13 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
 {
     // Two inputs and one output, only kFLOAT and kHALF Supported
     assert(nbOutputs == 1 && nbInputs == 2);
-    // Should be a bog standard tensor
-    bool condition = 1; //inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    bool condition = 1;
+    // Should be a bog standard tensor however format doesn't really matter I guess?
+    // condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT); // || (inOut[pos].type == nvinfer1::DataType::kHALF);
-    // Input and output has same type
-    // condition &= inOut[pos].type == inOut[nbInputs].type;
+    // Input and output has same type except if the end is dynamic
+    condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
     return condition;
 }
 

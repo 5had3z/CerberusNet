@@ -3,6 +3,7 @@
 
 const int BLOCK_SIZE = 1024;
 #include <cuda_runtime.h>
+#include <math_constants.h>
 #include <array>
 
 __global__ void nhwc2nchwKernel(const unsigned char* __restrict__ source, float* __restrict__ dest,
@@ -121,3 +122,65 @@ void seg_image(const intergral_t* argmax_image, u_char* rgb_image, const u_char*
 
 template void seg_image<u_char, 19>(
     const u_char*, u_char*, const u_char*, size_t, cudaStream_t);
+
+template<typename scalar_t>
+__global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
+    u_char* __restrict__ rgb_image, size_t image_size)
+{
+    const int offset = threadIdx.x + blockIdx.x * blockDim.x;
+    const int scale_factor = 8;
+    const int max_flow = 256.f;
+
+    if (offset < image_size)
+    {
+        const scalar_t flow_x = flow_image[offset];
+        const scalar_t flow_y = flow_image[offset + image_size];
+
+        const scalar_t mag = sqrt(pow(flow_x, 2.f) + pow(flow_y, 2.f));
+
+        const scalar_t h = atan2f(flow_y, flow_x);; //fmodf(angle / (2.f * CUDART_PI_F) + 1.f, 1.f);
+        const scalar_t s = min(max(mag * scale_factor / max_flow, 0.f), 1.f);
+        const scalar_t v = min(max(scale_factor - s, 0.f), 1.f);
+
+        const scalar_t C = v*s;
+        const scalar_t X = C*(1-abs(fmodf(h/60.0, 2)-1));
+        const scalar_t m = v-C;
+
+        scalar_t r = 0;
+        scalar_t g = 0;
+        scalar_t b = 0;
+        if(h >= 0.f && h < CUDART_PI_F/3.f){
+            r = C,g = X,b = 0;
+        }
+        else if(h >= CUDART_PI_F/3.f && h < 2.f*CUDART_PI_F/3.f) {
+            r = X,g = C,b = 0;
+        }
+        else if(h >= 2.f*CUDART_PI_F/3.f && h < CUDART_PI_F) {
+            r = 0,g = C,b = X;
+        }
+        else if(h >= CUDART_PI_F && h < 4.f*CUDART_PI_F/3.f) {
+            r = 0,g = X,b = C;
+        }
+        else if(h >= 4.f*CUDART_PI_F/3.f && h < 5.f*CUDART_PI_F/3.f) {
+            r = X,g = 0,b = C;
+        }
+        else {
+            r = C,g = 0,b = X;
+        }
+
+        rgb_image[3U * offset] = (r+m)*255;
+        rgb_image[3U * offset + 1] = (g+m)*255;
+        rgb_image[3U * offset + 2] = (b+m)*255;
+    }
+}
+
+template<typename scalar_t>
+void flow_image(const scalar_t* flow_image, u_char* rgb_image,
+    size_t image_size, cudaStream_t Stream)
+{
+    const int nBlocks = image_size / BLOCK_SIZE;
+    flow_image_Kernel<scalar_t><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
+        flow_image, rgb_image, image_size);
+}
+
+template void flow_image<float>(const float*, u_char*, size_t, cudaStream_t);
