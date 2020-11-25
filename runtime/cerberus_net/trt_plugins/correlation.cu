@@ -146,9 +146,6 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 			break;
 		}
 	}
-	
-	const auto error = cudaGetLastError();
-    if (error) { std::cout << error << std::endl; }
-	NV_CUDA_CHECK(error);
-    return error;
+
+    return cudaGetLastError();
 }

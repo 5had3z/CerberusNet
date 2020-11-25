@@ -2,19 +2,15 @@
 #include "trt_utils.hpp"
 #include "cuda_fp16.h"
 
+#include <array>
+#include <algorithm>
 #include <limits>
 #include <cassert>
-
-template<typename scalar_t, typename intergral_t>
-__global__ void ScatterND_Kernel(const scalar_t* __restrict__ source, scalar_t* __restrict__ output,
-    intergral_t* __restrict__ indicies, const scalar_t* __restrict__ updates)
-{
-
-}
 
 int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
 	const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
+    // Source code from ONNX repo implementation
     // # Compute output
     // output = np.copy(data)
     // for i in np.ndindex(indices.shape[:-1]):
@@ -24,7 +20,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     //     output[indices[i]] = updates[i]
     // return output
 
-    // Temporariy not actually updating input lmoa
+    // Copy the entire input to the output before update
     size_t mem_size = inputDesc[0].type == nvinfer1::DataType::kFLOAT ? sizeof(float) : sizeof(__half);
     for (size_t i=0; i<inputDesc[0].dims.nbDims; i++)
     {
@@ -32,32 +28,31 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     }
     NV_CUDA_CHECK(cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice));
 
-    // const size_t nBlocks = 1;
-    // const size_t BLOCK_SIZE = 1024;
-
-    // switch (inputDesc[0].type)
+    // Checking what is actually being given as update indicies, its seems like the channel stays constant
+    // and the elements are being iterated over, therefore we should just be able to copy the entire channel.
+    // std::cout << "ScatterND\n";
+    // for (size_t i=0; i<130; i++)
     // {
-    //     case nvinfer1::DataType::kFLOAT:
-    //     {
-    //         ScatterND_Kernel<<<nBlocks, BLOCK_SIZE, 0, stream>>>(
-    //             reinterpret_cast<const float*>(inputs[0]),
-    //             reinterpret_cast<float*>(outputs[0]),
-    //             reinterpret_cast<const int32_t*>(inputs[1]),
-    //             reinterpret_cast<const float*>(inputs[2]));
-    //         break;
-    //     }
-    //     case nvinfer1::DataType::kHALF:
-    //     {
-    //         ScatterND_Kernel<<<nBlocks, BLOCK_SIZE, 0, stream>>>(
-    //             reinterpret_cast<const __half*>(inputs[0]),
-    //             reinterpret_cast<__half*>(outputs[0]),
-    //             reinterpret_cast<const int32_t*>(inputs[1]),
-    //             reinterpret_cast<const __half*>(inputs[2]));
-    //     }
+    //     std::array<int32_t, 4> data;
+    //     const size_t dim_stride = 4 * sizeof(int32_t);
+    //     NV_CUDA_CHECK(cudaMemcpy(data.data(), inputs[1] + i * dim_stride, dim_stride, cudaMemcpyDeviceToHost));
+    
+    //     std::for_each(data.begin(), data.end(), [](const auto& elem){ std::cout << elem << ", ";} );
+    //     std::cout << "\n";
     // }
+    // std::cout << std::endl;
 
-    const auto error = cudaGetLastError();
-    if (error) { std::cout << error << std::endl; }
-	NV_CUDA_CHECK(error);
-    return error;
+    std::array<int32_t, 4> indicies_element;
+    const size_t dim_stride = 4 * sizeof(int32_t);
+    NV_CUDA_CHECK(cudaMemcpy(indicies_element.data(), inputs[1], dim_stride, cudaMemcpyDeviceToHost));
+
+    const size_t elem_size = inputDesc[0].type == nvinfer1::DataType::kFLOAT ? sizeof(float) : sizeof(__half);
+    const size_t channel_stride = inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3] * elem_size;
+    
+    // indicies_element[1] contains the channel indx that is being copied to the output.
+    NV_CUDA_CHECK(cudaMemcpy(
+        outputs[0] + indicies_element[1] * elem_size * channel_stride, inputs[2],
+        elem_size * channel_stride, cudaMemcpyDeviceToDevice));
+
+    return cudaGetLastError();
 }
