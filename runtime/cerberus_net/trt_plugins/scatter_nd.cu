@@ -49,7 +49,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     const size_t elem_size = inputDesc[0].type == nvinfer1::DataType::kFLOAT ? sizeof(float) : sizeof(__half);
     const size_t channel_stride = inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3] * elem_size;
     
-    // indicies_element[1] contains the channel indx that is being copied to the output.
+    // indicies_element[1] contains the channel indx that is being updated.
     NV_CUDA_CHECK(cudaMemcpy(
         outputs[0] + indicies_element[1] * elem_size * channel_stride, inputs[2],
         elem_size * channel_stride, cudaMemcpyDeviceToDevice));

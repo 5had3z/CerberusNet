@@ -49,17 +49,6 @@ nvinfer1::DimsExprs ScatterNDPlugin::getOutputDimensions(int outputIndex, const 
     int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
 {
     // Should be the same as the input (we are just updating it).
-    // for (size_t i=0; i<nbInputs; i++)
-    // {
-    //     std::cout << "Input: " << i << " Dims: ";
-    //     for (size_t j=0; j<inputs[i].nbDims; j++)
-    //     {
-    //         if (inputs[i].d[j]->isConstant()){
-    //             std::cout << inputs[i].d[j]->getConstantValue() << ", ";
-    //         }
-    //     }
-    //     std::cout << std::endl;
-    // }
     return inputs[0];
 }
 
@@ -90,6 +79,10 @@ nvinfer1::DataType ScatterNDPlugin::getOutputDataType(int index, const nvinfer1:
 
 bool ScatterNDPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
 {
+    // # Check tensor shapes
+    // assert indices.shape[-1] <= len(data.shape)
+    // assert updates.shape == indices.shape[:-1] + data.shape[indices.shape[-1]:]
+
     // Two inputs and one output, only kFLOAT and kHALF Supported
     assert(nbOutputs == 1 && nbInputs == 3);
     // Should be a bog standard tensors
@@ -100,7 +93,7 @@ bool ScatterNDPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginT
     if (pos != 1) {
         // Only kFLOAT and kHALF supported as data inputs/updates/outputs
         condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
-        // Input and output has same type, output is sometimes -1
+        // Input and output has same type, output is sometimes -1 (dynamic/not defined yet)
         condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
     }
     else {
@@ -118,10 +111,6 @@ void ScatterNDPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* i
 {
     assert(in && nbInputs == 3);
     assert(out && nbOutputs == 1);
-
-    // # Check tensor shapes
-    // assert indices.shape[-1] <= len(data.shape)
-    // assert updates.shape == indices.shape[:-1] + data.shape[indices.shape[-1]:]
 }
 
 size_t ScatterNDPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,

@@ -34,6 +34,12 @@ GridSamplerPlugin::GridSamplerPlugin(const nvinfer1::PluginFieldCollection& fc)
             m_padding_mode = *(static_cast<const GridSampler::Padding*>(fc.fields[i].data));
         }
     }
+
+    if (!fc.nbFields) {
+        m_align_corners = false;
+        m_interpolation_mode = Interpolation::Bilinear;
+        m_padding_mode = Padding::Border;
+    }
 }
 
 GridSamplerPlugin::GridSamplerPlugin(const void* data, size_t length)

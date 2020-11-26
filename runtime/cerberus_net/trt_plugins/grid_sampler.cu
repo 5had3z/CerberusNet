@@ -222,7 +222,7 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 
     if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
     {
-        grid_sampler_kernel<float><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+        grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
             reinterpret_cast<const float*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
             reinterpret_cast<const float*>(inputs[1]),
             reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],

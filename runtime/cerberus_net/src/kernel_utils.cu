@@ -138,13 +138,13 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
 
         const scalar_t mag = sqrt(pow(flow_x, 2.f) + pow(flow_y, 2.f));
 
-        const scalar_t h = atan2f(flow_y, flow_x);; //fmodf(angle / (2.f * CUDART_PI_F) + 1.f, 1.f);
+        const scalar_t h = atan2f(flow_y, flow_x); //fmodf(angle / (2.f * CUDART_PI_F) + 1.f, 1.f);
         const scalar_t s = min(max(mag * scale_factor / max_flow, 0.f), 1.f);
         const scalar_t v = min(max(scale_factor - s, 0.f), 1.f);
 
-        const scalar_t C = v*s;
-        const scalar_t X = C*(1-abs(fmodf(h/60.0, 2)-1));
-        const scalar_t m = v-C;
+        const scalar_t C = v * s;
+        const scalar_t X = C * (1.f - abs(fmodf(h / (CUDART_PI_F/3.f), 2) - 1.f));
+        const scalar_t m = v - C;
 
         scalar_t r = 0;
         scalar_t g = 0;
@@ -179,7 +179,7 @@ void flow_image(const scalar_t* flow_image, u_char* rgb_image,
     size_t image_size, cudaStream_t Stream)
 {
     const int nBlocks = image_size / BLOCK_SIZE;
-    flow_image_Kernel<scalar_t><<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
+    flow_image_Kernel<<<nBlocks, BLOCK_SIZE, 0, Stream>>>(
         flow_image, rgb_image, image_size);
 }
 
