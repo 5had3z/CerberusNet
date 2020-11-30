@@ -18,9 +18,10 @@ void single_image_example(CERBERUS& nnet)
     assert(!image1.empty());
     assert(!image2.empty());
 
-    cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
+    const cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
     cv::resize(image1, image1, net_input);
     cv::resize(image2, image2, net_input);
+    cv::imshow("Sample Input", image1);
     cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
     cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
@@ -34,12 +35,14 @@ void single_image_example(CERBERUS& nnet)
     }
     std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 / 10. << " ms" << std::endl;
 
-    std::cout << "Showing Images" << std::endl;
-    cv::imshow("Sample Input", image1);
+    std::cout << "Showing Outputs" << std::endl;
     cv::imshow("Sample Depth", nnet.get_depth());
     cv::Mat color_seg;
     cv::cvtColor(nnet.get_seg_image(), color_seg, cv::COLOR_RGB2BGR);
     cv::imshow("Sample Seg", color_seg);
+
+    cv::cvtColor(nnet.get_flow(), color_seg, cv::COLOR_RGB2BGR);
+    cv::imshow("Sample Flow", color_seg);
 
     cv::waitKey(0);
 }
@@ -105,5 +108,5 @@ int main(int argc, char** argv)
     CERBERUS nnet;
     std::cout << "Init Success!" << std::endl;
 
-    video_sequence_example(nnet);
+    single_image_example(nnet);
 }
