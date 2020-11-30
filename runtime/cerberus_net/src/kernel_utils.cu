@@ -128,8 +128,8 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
     u_char* __restrict__ rgb_image, size_t image_size)
 {
     const int offset = threadIdx.x + blockIdx.x * blockDim.x;
-    const int scale_factor = 8;
-    const int max_flow = 256.f;
+    const float scale_factor = 8.f;
+    const float max_flow = 256.f;
 
     if (offset < image_size)
     {
@@ -138,7 +138,7 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
 
         const scalar_t mag = sqrt(pow(flow_x, 2.f) + pow(flow_y, 2.f));
 
-        const scalar_t h = atan2f(flow_y, flow_x); //fmodf(angle / (2.f * CUDART_PI_F) + 1.f, 1.f);
+        const scalar_t h = atan2f(flow_y, flow_x) + CUDART_PI_F;
         const scalar_t s = min(max(mag * scale_factor / max_flow, 0.f), 1.f);
         const scalar_t v = min(max(scale_factor - s, 0.f), 1.f);
 
@@ -168,9 +168,9 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
             r = C,g = 0,b = X;
         }
 
-        rgb_image[3U * offset] = (r+m)*255;
-        rgb_image[3U * offset + 1] = (g+m)*255;
-        rgb_image[3U * offset + 2] = (b+m)*255;
+        rgb_image[3U * offset] = (r+m)*255.f;
+        rgb_image[3U * offset + 1] = (g+m)*255.f;
+        rgb_image[3U * offset + 2] = (b+m)*255.f;
     }
 }
 
