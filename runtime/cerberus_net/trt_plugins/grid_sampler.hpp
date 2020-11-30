@@ -7,12 +7,13 @@
 
 #include <NvInfer.h>
 
+// The same enumeration as the pytorch functions, the arguments for pytorch are converted
+// to enumeration upon export, therefore we must also use this when parsing the parameters,
+// rather than string arguments.
 namespace GridSampler {
-
-  enum class Interpolation {Bilinear, Nearest};
-  enum class Padding {Zeros, Border, Reflection};
-
-}  // namespace detail
+    enum class Interpolation {Bilinear, Nearest};
+    enum class Padding {Zeros, Border, Reflection};
+}  // namespace GridSampler
 
 using GridSampler::Interpolation;
 using GridSampler::Padding;

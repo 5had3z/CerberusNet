@@ -31,7 +31,7 @@ __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rin
 }
 
 template <typename scalar_t>
-__global__ void correlation_forward(
+__global__ void Correlation_Kernel(
     scalar_t* output, const int outputChannels, const int outputHeight, const int outputWidth,
     const scalar_t* __restrict__ rInput1, const int inputChannels, const int inputHeight, const int inputWidth,
     const scalar_t* __restrict__ rInput2,
@@ -108,7 +108,9 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 		case nvinfer1::DataType::kFLOAT:
 		{
 			float* rInput1 = reinterpret_cast<float*>(workspace);
-			float* rInput2 = reinterpret_cast<float*>(workspace + pInputVolume * sizeof(float));
+			float* rInput2 = reinterpret_cast<float*>(workspace) + pInputVolume * sizeof(float);
+			NV_CUDA_CHECK(cudaMemset(rInput1, 0, pInputVolume * sizeof(float)));
+			NV_CUDA_CHECK(cudaMemset(rInput2, 0, pInputVolume * sizeof(float)));
 
 			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
 				reinterpret_cast<const float*>(inputs[0]), rInput1,
@@ -118,7 +120,7 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 				reinterpret_cast<const float*>(inputs[1]), rInput2,
 				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
 
-			correlation_forward<<<corr_grid, threadsPerBlock, 0, stream>>> (
+			Correlation_Kernel<<<corr_grid, threadsPerBlock, 0, stream>>> (
 				reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
 				rInput1, inputDesc[0].dims.d[1], pInputHeight, pInputWidth, rInput2,
 				m_kernel_size, m_max_displacement, m_stride1, m_stride2);
@@ -128,7 +130,9 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 		case nvinfer1::DataType::kHALF:
 		{
 			__half* rInput1 = reinterpret_cast<__half*>(workspace);
-			__half* rInput2 = reinterpret_cast<__half*>(workspace + pInputVolume * sizeof(__half));
+			__half* rInput2 = reinterpret_cast<__half*>(workspace) + pInputVolume * sizeof(__half);
+			NV_CUDA_CHECK(cudaMemset(rInput1, 0, pInputVolume * sizeof(__half)));
+			NV_CUDA_CHECK(cudaMemset(rInput2, 0, pInputVolume * sizeof(__half)));
 
 			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>>(
 				reinterpret_cast<const __half*>(inputs[0]), rInput1,
@@ -138,13 +142,16 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 				reinterpret_cast<const __half*>(inputs[1]), rInput2,
 				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
 
-			correlation_forward<<<corr_grid, threadsPerBlock, 0, stream>>> (
+			Correlation_Kernel<<<corr_grid, threadsPerBlock, 0, stream>>> (
 				reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
 				rInput1, inputDesc[0].dims.d[1], pInputHeight, pInputWidth, rInput2,
 				m_kernel_size, m_max_displacement, m_stride1, m_stride2);
 
 			break;
 		}
+		default:
+			std::cerr << "ScatterNDPlugin Unsupported Input Type";
+			abort();
 	}
 
     return cudaGetLastError();

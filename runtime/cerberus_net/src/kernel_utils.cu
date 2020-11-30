@@ -1,7 +1,7 @@
 // kernel to convert from OpenCV channel representation to channel-first
 // see: https://docs.opencv.org/2.4/doc/tutorials/core/how_to_scan_images/how_to_scan_images.html#how-the-image-matrix-is-stored-in-the-memory
 
-const int BLOCK_SIZE = 1024;
+constexpr size_t BLOCK_SIZE = 1024U;
 #include <cuda_runtime.h>
 #include <math_constants.h>
 #include <array>
@@ -128,8 +128,8 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
     u_char* __restrict__ rgb_image, size_t image_size)
 {
     const int offset = threadIdx.x + blockIdx.x * blockDim.x;
-    const float scale_factor = 8.f;
-    const float max_flow = 256.f;
+    constexpr float scale_factor = 8.f;
+    constexpr float max_flow = 256.f;
 
     if (offset < image_size)
     {

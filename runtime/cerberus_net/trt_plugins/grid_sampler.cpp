@@ -23,12 +23,12 @@ GridSamplerPlugin::GridSamplerPlugin(const nvinfer1::PluginFieldCollection& fc)
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
             m_align_corners = *(static_cast<const bool*>(fc.fields[i].data));
         }
-        if (!strcmp(attrName, "interpolation_mode"))
+        else if (!strcmp(attrName, "interpolation_mode"))
         {
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
             m_interpolation_mode = *(static_cast<const GridSampler::Interpolation*>(fc.fields[i].data));
         }
-        if (!strcmp(attrName, "padding_mode"))
+        else if (!strcmp(attrName, "padding_mode"))
         {
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
             m_padding_mode = *(static_cast<const GridSampler::Padding*>(fc.fields[i].data));
@@ -36,6 +36,7 @@ GridSamplerPlugin::GridSamplerPlugin(const nvinfer1::PluginFieldCollection& fc)
     }
 
     if (!fc.nbFields) {
+        std::cerr << "Grid_sampler Plugin: No fields detected, using default parameters";
         m_align_corners = false;
         m_interpolation_mode = Interpolation::Bilinear;
         m_padding_mode = Padding::Border;
@@ -132,6 +133,9 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT); // || (inOut[pos].type == nvinfer1::DataType::kHALF);
     // Input and output has same type except if the end is dynamic
     condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
+    condition &= (inOut[0].dims.d[2] == inOut[1].dims.d[1]);
+    condition &= (inOut[0].dims.d[3] == inOut[1].dims.d[2]);
+    condition &= (inOut[1].dims.d[3] == 2);
     return condition;
 }
 
@@ -186,6 +190,9 @@ nvinfer1::IPluginV2DynamicExt* GridSamplerPlugin::clone() const
 GridSamplerPluginCreator::GridSamplerPluginCreator()
 {
     mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("align_corners", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("interpolation_mode", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("padding_mode", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -211,7 +218,6 @@ nvinfer1::IPluginV2DynamicExt* GridSamplerPluginCreator::createPlugin(const char
     GridSamplerPlugin* obj = new GridSamplerPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
     mPluginName = name;
-    mFC = *fc;
     return obj;
 }
 

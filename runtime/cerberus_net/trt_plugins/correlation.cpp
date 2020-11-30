@@ -16,11 +16,9 @@ std::vector<nvinfer1::PluginField> CorrelationPluginCreator::mPluginAttributes;
 
 CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
 {
-    std::cout << "Using corr field collection?? with " << fc.nbFields << " attributes?" << std::endl;
     for (int i = 0; i < fc.nbFields; ++i)
     {
         const char* attrName = fc.fields[i].name;
-        std::cout << attrName << std::endl;
         if (!strcmp(attrName, "pad_size"))
         {
             assert(fc.fields[i].type == nvinfer1::PluginFieldType::kINT32);
@@ -54,6 +52,7 @@ CorrelationPlugin::CorrelationPlugin(const nvinfer1::PluginFieldCollection& fc)
     }
 
     if (!fc.nbFields){
+        std::cerr << "Correlation Plugin: No fields detected, using default parameters";
         m_pad_size = 4;
         m_kernel_size = 1;
         m_max_displacement = 4;
@@ -131,7 +130,7 @@ size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inp
         default: { std::logic_error( "Invalid type used in correlation only float and half are supported" ); }
     }
     
-    return tensor_volume * 2;
+    return 2 * tensor_volume;
 }
 
 void CorrelationPlugin::terminate()
@@ -247,6 +246,12 @@ nvinfer1::IPluginV2DynamicExt* CorrelationPlugin::clone() const
 CorrelationPluginCreator::CorrelationPluginCreator()
 {
     mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("pad_size", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("kernel_size", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("max_displacement", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("stride1", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("stride2", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("corr_multiply", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -273,7 +278,6 @@ nvinfer1::IPluginV2DynamicExt* CorrelationPluginCreator::createPlugin(
     CorrelationPlugin* obj = new CorrelationPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
     mPluginName = name;
-    mFC = *fc;
     return obj;
 }
 

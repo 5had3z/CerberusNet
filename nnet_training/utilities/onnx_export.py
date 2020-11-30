@@ -22,10 +22,10 @@ def correlation_op(g, input1, input2, pad_size, kernel_size,
                 kernel_size_i=kernel_size, max_displacement_i=max_displacement,
                 stride1_i=stride1, stride2_i=stride2, corr_multiply_i=corr_multiply)
 
-@parse_args('v', 'v', 's', 's', 'b')
+@parse_args('v', 'v', 'i', 'i', 'b')
 def grid_sample_op(g, input1, input2, mode, padding_mode, align_corners):
-    return g.op("torch::grid_sampler", input1, input2, mode_s=mode,
-                padding_mode_s=padding_mode, align_corners_i=align_corners)
+    return g.op("torch::grid_sampler", input1, input2, interpolation_mode_i=mode,
+                padding_mode_i=padding_mode, align_corners_i=align_corners)
 
 def export_model(config: EasyDict, exp_path: Path) -> None:
     """

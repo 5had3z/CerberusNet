@@ -114,7 +114,7 @@ void ScatterNDPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* i
 }
 
 size_t ScatterNDPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-            const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
+    const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
 {
     // Everything is done inplace, no additional space requried
     return 0;
@@ -181,7 +181,6 @@ nvinfer1::IPluginV2DynamicExt* ScatterNDPluginCreator::createPlugin(const char* 
     ScatterNDPlugin* obj = new ScatterNDPlugin(*fc);
     obj->setPluginNamespace(mNamespace.c_str());
     mPluginName = name;
-    mFC = *fc;
     return obj;
 }
 

@@ -220,22 +220,33 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 {
     const int64_t count = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3];
 
-    if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
-    {
-        grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-            reinterpret_cast<const float*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
-            reinterpret_cast<const float*>(inputs[1]),
-            reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
-            m_interpolation_mode, m_padding_mode, m_align_corners);
+	switch(inputDesc[0].type)
+	{
+		case nvinfer1::DataType::kFLOAT:
+		{
+            grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+                reinterpret_cast<const float*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
+                reinterpret_cast<const float*>(inputs[1]),
+                reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
+                m_interpolation_mode, m_padding_mode, m_align_corners);
+            break;
+        }
+        // case nvinfer1::DataType::kHALF
+        // {
+        //     grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+        //         reinterpret_cast<const __half*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
+        //         reinterpret_cast<const __half*>(inputs[1]),
+        //         reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
+        //         m_interpolation_mode, m_padding_mode, m_align_corners);
+        //     break;
+        // }
+        default:
+        {
+            std::cerr << "Grid Sampler Unsupported Input Type";
+            abort();
+        }
     }
-    // else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
-    // {
-    //     grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-    //         reinterpret_cast<const __half*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
-    //         reinterpret_cast<const __half*>(inputs[1]),
-    //         reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
-    //         m_interpolation_mode, m_padding_mode, m_align_corners);
-    // }
+
 
     return cudaGetLastError();
 }

@@ -101,7 +101,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
             break;
         }
         default:
-            std::cerr << "ScatterNDPlugin Unsupported input type";
+            std::cerr << "ScatterNDPlugin Unsupported Input Type";
             abort();
     }
 
