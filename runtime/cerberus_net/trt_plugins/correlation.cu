@@ -47,7 +47,7 @@ __global__ void Correlation_Kernel(
 	const int pdimxc = inputWidth * inputChannels;
 	const int pdimc = inputChannels;
 
-	const int tdimcyx = inputChannels * outputHeight * outputWidth;
+	const int tdimcyx = outputChannels * outputHeight * outputWidth;
 	const int tdimyx = outputHeight * outputWidth;
     const int tdimx = outputWidth;
 
@@ -103,22 +103,27 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 	const size_t pInputWidth = inputDesc[0].dims.d[3] + 2 * m_pad_size;
 	const size_t pInputVolume = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[1] * pInputHeight * pInputWidth;
 
+	NV_CUDA_CHECK(cudaStreamSynchronize(stream));
+
 	switch(inputDesc[0].type)
 	{
 		case nvinfer1::DataType::kFLOAT:
 		{
 			float* rInput1 = reinterpret_cast<float*>(workspace);
 			float* rInput2 = reinterpret_cast<float*>(workspace) + pInputVolume * sizeof(float);
-			NV_CUDA_CHECK(cudaMemset(rInput1, 0, pInputVolume * sizeof(float)));
-			NV_CUDA_CHECK(cudaMemset(rInput2, 0, pInputVolume * sizeof(float)));
+			NV_CUDA_CHECK(cudaMemsetAsync(rInput1, 0, pInputVolume * sizeof(float), stream_a));
+			NV_CUDA_CHECK(cudaMemsetAsync(rInput2, 0, pInputVolume * sizeof(float), stream_b));
 
-			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream_a>>> (
 				reinterpret_cast<const float*>(inputs[0]), rInput1,
 				inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3], m_pad_size);
 
-			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream_b>>> (
 				reinterpret_cast<const float*>(inputs[1]), rInput2,
 				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
+
+			NV_CUDA_CHECK(cudaStreamSynchronize(stream_a));
+			NV_CUDA_CHECK(cudaStreamSynchronize(stream_b));
 
 			Correlation_Kernel<<<corr_grid, threadsPerBlock, 0, stream>>> (
 				reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
@@ -131,17 +136,20 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 		{
 			__half* rInput1 = reinterpret_cast<__half*>(workspace);
 			__half* rInput2 = reinterpret_cast<__half*>(workspace) + pInputVolume * sizeof(__half);
-			NV_CUDA_CHECK(cudaMemset(rInput1, 0, pInputVolume * sizeof(__half)));
-			NV_CUDA_CHECK(cudaMemset(rInput2, 0, pInputVolume * sizeof(__half)));
+			NV_CUDA_CHECK(cudaMemsetAsync(rInput1, 0, pInputVolume * sizeof(__half), stream_a));
+			NV_CUDA_CHECK(cudaMemsetAsync(rInput2, 0, pInputVolume * sizeof(__half), stream_b));
 
-			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>>(
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream_a>>>(
 				reinterpret_cast<const __half*>(inputs[0]), rInput1,
 				inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3], m_pad_size);
 
-			channels_first<<<reshape_grid, threadsPerBlock, 0, stream>>> (
+			channels_first<<<reshape_grid, threadsPerBlock, 0, stream_b>>> (
 				reinterpret_cast<const __half*>(inputs[1]), rInput2,
 				inputDesc[1].dims.d[1], inputDesc[1].dims.d[2], inputDesc[1].dims.d[3], m_pad_size);
 
+			NV_CUDA_CHECK(cudaStreamSynchronize(stream_a));
+			NV_CUDA_CHECK(cudaStreamSynchronize(stream_b));
+			
 			Correlation_Kernel<<<corr_grid, threadsPerBlock, 0, stream>>> (
 				reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[1], outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
 				rInput1, inputDesc[0].dims.d[1], pInputHeight, pInputWidth, rInput2,

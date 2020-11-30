@@ -67,6 +67,8 @@ class CorrelationPlugin: public nvinfer1::IPluginV2DynamicExt
         int m_corr_multiply;
 
         const char* mPluginNamespace;
+        cudaStream_t stream_a;
+	    cudaStream_t stream_b;
 };
 
 class CorrelationPluginCreator : public nvinfer1::IPluginCreator

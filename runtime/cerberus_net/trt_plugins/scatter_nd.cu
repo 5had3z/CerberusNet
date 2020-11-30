@@ -46,7 +46,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     {
         mem_size *= inputDesc[0].dims.d[i];
     }
-    NV_CUDA_CHECK(cudaMemcpy(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice));
+    NV_CUDA_CHECK(cudaMemcpyAsync(outputs[0], inputs[0], mem_size, cudaMemcpyDeviceToDevice, stream));
 
     // Checking what is actually being given as update indicies, its seems like the channel stays constant
     // and the elements are being iterated over, therefore we should just be able to copy the entire channel.

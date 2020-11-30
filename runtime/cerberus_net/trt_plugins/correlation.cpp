@@ -106,6 +106,8 @@ size_t CorrelationPlugin::getSerializationSize() const
 
 int CorrelationPlugin::initialize()
 {
+    NV_CUDA_CHECK(cudaStreamCreate(&stream_a));
+	NV_CUDA_CHECK(cudaStreamCreate(&stream_b));
     return 0;
 }
 
@@ -135,6 +137,8 @@ size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inp
 
 void CorrelationPlugin::terminate()
 {
+    NV_CUDA_CHECK(cudaStreamDestroy(stream_a));
+	NV_CUDA_CHECK(cudaStreamDestroy(stream_b));
 }
 
 bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)

@@ -138,12 +138,12 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
 
         const scalar_t mag = sqrt(pow(flow_x, 2.f) + pow(flow_y, 2.f));
 
-        const scalar_t h = atan2f(flow_y, flow_x) + CUDART_PI_F;
+        const scalar_t h = atan2(flow_y, flow_x) + CUDART_PI_F;
         const scalar_t s = min(max(mag * scale_factor / max_flow, 0.f), 1.f);
         const scalar_t v = min(max(scale_factor - s, 0.f), 1.f);
 
         const scalar_t C = v * s;
-        const scalar_t X = C * (1.f - abs(fmodf(h / (CUDART_PI_F/3.f), 2) - 1.f));
+        const scalar_t X = C * (1.f - abs(fmodf(h / (CUDART_PI_F/3.f), 2.f) - 1.f));
         const scalar_t m = v - C;
 
         scalar_t r = 0;
@@ -168,9 +168,9 @@ __global__ void flow_image_Kernel(const scalar_t* __restrict__ flow_image,
             r = C,g = 0,b = X;
         }
 
-        rgb_image[3U * offset] = (r+m)*255.f;
-        rgb_image[3U * offset + 1] = (g+m)*255.f;
-        rgb_image[3U * offset + 2] = (b+m)*255.f;
+        rgb_image[3U * offset] = static_cast<u_char>((r+m)*255.f);
+        rgb_image[3U * offset + 1] = static_cast<u_char>((g+m)*255.f);
+        rgb_image[3U * offset + 2] = static_cast<u_char>((b+m)*255.f);
     }
 }
 
