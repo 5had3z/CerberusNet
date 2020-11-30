@@ -228,12 +228,12 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
             reinterpret_cast<float*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
             m_interpolation_mode, m_padding_mode, m_align_corners);
     }
-    // else if (m_datatype == nvinfer1::DataType::kHALF)
+    // else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
     // {
-    //     grid_sampler_kernel<__half><<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-    //         reinterpret_cast<const __half*>(inputs[0]), m_input_dims.d[0], m_input_dims.d[1], m_input_dims.d[2],
+    //     grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+    //         reinterpret_cast<const __half*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
     //         reinterpret_cast<const __half*>(inputs[1]),
-    //         reinterpret_cast<__half*>(outputs[0]), m_output_dims.d[1], m_output_dims.d[2],
+    //         reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
     //         m_interpolation_mode, m_padding_mode, m_align_corners);
     // }
 

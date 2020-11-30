@@ -74,17 +74,21 @@ void video_sequence_example(CERBERUS& nnet)
     auto image_filenames = get_images(folder);
 
     const cv::Size net_input { nnet.getInputW(), nnet.getInputH() };
-    for (const auto &filename : image_filenames)
+    for (auto filename = image_filenames.begin(); filename != --image_filenames.end(); /*no-op*/)
     {
-        cv::Mat image1 = cv::imread(std::string(folder)+"/"+filename);
+        cv::Mat image1 = cv::imread(std::string(folder)+"/"+*filename);
         assert(!image1.empty());
         cv::resize(image1, image1, net_input);
-        cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
-        const cv::Mat image2(image1);
-        nnet.doInference(image1, image2);
-
-        cv::cvtColor(image1, image1, cv::COLOR_RGB2BGR);
         cv::imshow("Sample Input", image1);
+        cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
+
+        cv::Mat image2 = cv::imread(std::string(folder)+"/"+*(++filename));
+        assert(!image2.empty());
+        cv::resize(image2, image2, net_input);
+        cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
+
+        nnet.doInference(image1, image2);
+        
         cv::imshow("Sample Depth", nnet.get_depth());
         cv::Mat color_seg;
         cv::cvtColor(nnet.get_seg_image(), color_seg, cv::COLOR_RGB2BGR);
