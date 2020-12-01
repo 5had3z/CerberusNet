@@ -88,19 +88,36 @@ bool ScatterNDPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginT
     // Should be a bog standard tensors
     bool condition = 1;
     // Like it doesn't really matter I guess?
-    // condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
 
     if (pos != 1) {
         // Only kFLOAT and kHALF supported as data inputs/updates/outputs
-        condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
-        // Input and output has same type, output is sometimes -1 (dynamic/not defined yet)
-        condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
+        condition &= inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF;
+        condition &= inOut[pos].dims.nbDims == 4;
     }
-    else {
+
+    switch (pos)
+    {
+    case 0:
+        // Nothing in particular
+        break;
+    case 1:
         // Only kINT32 is supported for the updates
-        condition &= (inOut[pos].type == nvinfer1::DataType::kINT32);
+        condition &= inOut[pos].type == nvinfer1::DataType::kINT32;
         // Last dimension of indicies should be less or equal the number of dimensions of the input
         condition &= inOut[0].dims.nbDims >= inOut[pos].dims.d[inOut[pos].dims.nbDims-1];
+        condition &= inOut[pos].dims.nbDims == 5;
+        break;
+    case 2:
+        // Update type should match the input type
+        condition &= inOut[pos].type == inOut[0].type;
+        break;
+    case 3:
+        // Output type should match the input and update types
+        condition &= inOut[pos].type == inOut[0].type && inOut[pos].type == inOut[2].type;
+        break;
+    default:
+        break;
     }
 
     return condition;

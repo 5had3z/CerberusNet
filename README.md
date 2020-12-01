@@ -4,7 +4,7 @@ The aim of this project is to generate a pointcloud with motion vectors and sema
 
 This is Public Repository for my Final Year Project since all my other projects/work is under the private Monash Motorsport git, so others don't have to take my word for it that I'm somewhat experienced and have some actual code to show publicly.
 
-Model performs well in all categories against current state-of-the-art implementations which only focus on one task. Current TensorRT inference runtime is ~80ms (batch size 1) on an RTX 3090 at 1024x512 without optimising the redundant passes through HRNetV2 encoder.
+Model performs well in all categories against current state-of-the-art implementations which only focus on one task. Current TensorRT inference runtime is ~80ms with FP32 and ~30ms with FP16 on an RTX 3090 at 1024x512 (batchsize 1) without optimising the redundant passes through HRNetV2 encoder.
 
 ## Cityscapes Segmentation + Flow + Depth
 ![Cityscapes HrnetV2 Segmentation + Flow + Depth](misc/E40_2.png)

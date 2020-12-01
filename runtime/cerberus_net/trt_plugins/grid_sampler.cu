@@ -59,31 +59,51 @@ scalar_t grid_sampler_unnormalize(scalar_t coord, int size, bool align_corners)
 }
 
 // Clips coordinates to between 0 and clip_limit - 1
-template <typename scalar_t>
 static __forceinline__ __device__
-scalar_t clip_coordinates(scalar_t in, int clip_limit) {
-    return ::min(static_cast<scalar_t>(clip_limit - 1), ::max(in, static_cast<scalar_t>(0)));
+float clip_coordinates(float in, int clip_limit) {
+    return fminf(static_cast<float>(clip_limit - 1.f), fmaxf(in, 0.f));
+}
+
+static __forceinline__ __device__
+__half clip_coordinates(__half in, int clip_limit) {
+    return __hmin(static_cast<__half>(clip_limit - 1), __hmax(in, static_cast<__half>(0.f)));
 }
 
 // Reflects coordinates until they fall between low and high (inclusive).
 // The bounds are passed as twice their value so that half-integer values
 // can be represented as ints.
-template <typename scalar_t>
 static __forceinline__ __device__
-scalar_t reflect_coordinates(scalar_t in, int twice_low, int twice_high)
+float reflect_coordinates(float in, int twice_low, int twice_high)
 {
-    if (twice_low == twice_high) { return static_cast<scalar_t>(0); }
+    if (twice_low == twice_high) { return static_cast<float>(0); }
 
-    scalar_t min = static_cast<scalar_t>(twice_low) / 2;
-    scalar_t span = static_cast<scalar_t>(twice_high - twice_low) / 2;
+    float min = static_cast<float>(twice_low) / 2.f;
+    float span = static_cast<float>(twice_high - twice_low) / 2.f;
     in = ::fabs(in - min);
 
     // `fmod` returns same sign as `in`, which is positive after the `fabs` above.
-    scalar_t extra = ::fmod(in, span);
-    int flips = static_cast<int>(::floor(in / span));
+    float extra = fmodf(in, span);
+    int flips = static_cast<int>(floorf(in / span));
 
     return flips % 2 == 0 ? extra + min : span - extra + min;
 }
+
+static __forceinline__ __device__
+__half reflect_coordinates(__half in, int twice_low, int twice_high)
+{
+    if (twice_low == twice_high) { return static_cast<__half>(0); }
+
+    __half min = __hdiv(static_cast<__half>(twice_low), 2);
+    __half span = __hdiv(static_cast<__half>(twice_high - twice_low), 2);
+    in = __habs(in - min);
+
+    // `fmod` returns same sign as `in`, which is positive after the `fabs` above.
+    __half extra = 	__float2half(fmodf(__half2float(in), __half2float(span)));
+    int flips = static_cast<int>(hfloor(in / span));
+
+    return flips % 2 == 0 ? extra + min : span - extra + min;
+}
+
 
 template<typename scalar_t> 
 static __forceinline__ __device__ 
@@ -91,7 +111,7 @@ scalar_t safe_downgrade_to_int_range(scalar_t x){
     // -100.0 does not have special meaning. This is just to make sure 
     // it's not within_bounds_2d or within_bounds_3d, and does not cause 
     // undefined behavior. See #35506.  
-    if (x > INT_MAX-1 || x < INT_MIN || !::isfinite(static_cast<double>(x))) 
+    if (x > static_cast<scalar_t>(INT_MAX-1) || x < static_cast<scalar_t>(INT_MIN) || !::isfinite(static_cast<double>(x))) 
         return static_cast<scalar_t>(-100.0); 
     return x;
 }
@@ -163,20 +183,20 @@ __global__ void grid_sampler_kernel(const size_t nthreads,
   
         if (interpolation_mode == Interpolation::Bilinear) {
             // get NE, NW, SE, SW pixel values from (x, y)
-            size_t ix_nw = static_cast<size_t>(::floor(ix));
-            size_t iy_nw = static_cast<size_t>(::floor(iy));
-            size_t ix_ne = ix_nw + 1;
-            size_t iy_ne = iy_nw;
-            size_t ix_sw = ix_nw;
-            size_t iy_sw = iy_nw + 1;
-            size_t ix_se = ix_nw + 1;
-            size_t iy_se = iy_nw + 1;
+            int32_t ix_nw = static_cast<size_t>(floorf(ix));
+            int32_t iy_nw = static_cast<size_t>(floorf(iy));
+            int32_t ix_ne = ix_nw + 1;
+            int32_t iy_ne = iy_nw;
+            int32_t ix_sw = ix_nw;
+            int32_t iy_sw = iy_nw + 1;
+            int32_t ix_se = ix_nw + 1;
+            int32_t iy_se = iy_nw + 1;
     
             // get surfaces to each neighbor:
-            scalar_t nw = (ix_se - ix)    * (iy_se - iy);
-            scalar_t ne = (ix    - ix_sw) * (iy_sw - iy);
-            scalar_t sw = (ix_ne - ix)    * (iy    - iy_ne);
-            scalar_t se = (ix    - ix_nw) * (iy    - iy_nw);
+            scalar_t nw = (static_cast<scalar_t>(ix_se) - ix) * (static_cast<scalar_t>(iy_se) - iy);
+            scalar_t ne = (ix - static_cast<scalar_t>(ix_sw)) * (static_cast<scalar_t>(iy_sw) - iy);
+            scalar_t sw = (static_cast<scalar_t>(ix_ne) - ix) * (iy - static_cast<scalar_t>(iy_ne));
+            scalar_t se = (ix - static_cast<scalar_t>(ix_nw)) * (iy - static_cast<scalar_t>(iy_nw));
     
             // calculate bilinear weighted pixel value and set output pixel
             auto inp_ptr_NC = input + n * inp_sN;
@@ -198,8 +218,8 @@ __global__ void grid_sampler_kernel(const size_t nthreads,
             }
         } 
         else if (interpolation_mode == Interpolation::Nearest) {
-            size_t ix_nearest = static_cast<size_t>(::round(ix));
-            size_t iy_nearest = static_cast<size_t>(::round(iy));
+            size_t ix_nearest = static_cast<size_t>(roundf(ix));
+            size_t iy_nearest = static_cast<size_t>(roundf(iy));
     
             // assign nearest neighor pixel value to output pixel
             auto inp_ptr_NC = input + n * inp_sN;
@@ -231,15 +251,15 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
                 m_interpolation_mode, m_padding_mode, m_align_corners);
             break;
         }
-        // case nvinfer1::DataType::kHALF
-        // {
-        //     grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
-        //         reinterpret_cast<const __half*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
-        //         reinterpret_cast<const __half*>(inputs[1]),
-        //         reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
-        //         m_interpolation_mode, m_padding_mode, m_align_corners);
-        //     break;
-        // }
+        case nvinfer1::DataType::kHALF:
+        {
+            grid_sampler_kernel<<<GET_BLOCKS(count), CUDA_NUM_THREADS, 0, stream>>>(count,
+                reinterpret_cast<const __half*>(inputs[0]), inputDesc[0].dims.d[1], inputDesc[0].dims.d[2], inputDesc[0].dims.d[3],
+                reinterpret_cast<const __half*>(inputs[1]),
+                reinterpret_cast<__half*>(outputs[0]), outputDesc[0].dims.d[2], outputDesc[0].dims.d[3],
+                m_interpolation_mode, m_padding_mode, m_align_corners);
+            break;
+        }
         default:
         {
             std::cerr << "Grid Sampler Unsupported Input Type";

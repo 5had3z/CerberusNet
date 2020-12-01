@@ -117,7 +117,7 @@ nvinfer1::DataType GridSamplerPlugin::getOutputDataType(int index, const nvinfer
     assert(index == 0 && nbInputs == 2);
     for (int i = 0; i < nbInputs; ++i)
     {
-        assert(inputTypes[i] == nvinfer1::DataType::kFLOAT); // || inputTypes[i] == nvinfer1::DataType::kHALF);
+        assert(inputTypes[i] == nvinfer1::DataType::kFLOAT || inputTypes[i] == nvinfer1::DataType::kHALF);
     }
     return inputTypes[index];
 }
@@ -128,14 +128,17 @@ bool GridSamplerPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     assert(nbOutputs == 1 && nbInputs == 2);
     bool condition = 1;
     // Should be a bog standard tensor however format doesn't really matter I guess?
-    // condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
+    condition &= inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
-    condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT); // || (inOut[pos].type == nvinfer1::DataType::kHALF);
+    condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
     // Input and output has same type except if the end is dynamic
     condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
     condition &= (inOut[0].dims.d[2] == inOut[1].dims.d[1]);
     condition &= (inOut[0].dims.d[3] == inOut[1].dims.d[2]);
     condition &= (inOut[1].dims.d[3] == 2);
+    if (pos == 2) {
+        condition &= inOut[0].type == inOut[2].type && inOut[0].type == inOut[1].type;
+    }
     return condition;
 }
 

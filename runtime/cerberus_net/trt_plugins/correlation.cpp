@@ -149,13 +149,28 @@ bool CorrelationPlugin::supportsFormatCombination(int pos, const nvinfer1::Plugi
     bool condition = inOut[pos].format == nvinfer1::TensorFormat::kLINEAR;
     // Only kFLOAT and kHALF supported
     condition &= (inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF);
-    // Input and output has same type unless output is now dynamic
-    condition &= (inOut[pos].type == inOut[nbInputs].type || (int32_t)inOut[nbInputs].type == -1);
 
     // Both inputs have same dimensions
     for (int i=0; i<inOut[0].dims.nbDims; i++)
     {
         condition &= inOut[0].dims.d[i] == inOut[1].dims.d[i];
+    }
+
+    switch (pos)
+    {
+    case 0:
+        // Nothing in particular
+        break;
+    case 1:
+        // Both inputs should have the same type
+        condition &= inOut[pos].type == inOut[0].type;
+        break;
+    case 2:
+        // Output should have same type as inputs
+        condition &= inOut[pos].type == inOut[0].type && inOut[pos].type == inOut[1].type;
+        break;   
+    default:
+        break;
     }
     return condition;
 }

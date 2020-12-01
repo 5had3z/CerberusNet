@@ -154,6 +154,18 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path)
     netcfg->setMaxWorkspaceSize(MAX_WORKSPACE);
     m_Builder->setMaxBatchSize(m_maxBatchSize);
 
+    if (m_Precision == "FP16"){
+        assert((m_Builder->platformHasFastFp16()) && "Platform does not support FP16");
+        netcfg->setFlag(nvinfer1::BuilderFlag::kFP16);
+        std::cout << "Precision mode: FP16" << std::endl;
+    }
+    else if(m_Precision =="FP32") {
+        std::cout << "Precision mode: FP32" << std::endl;
+    }
+    else {
+        assert((false) && "Unsupported precision type");
+    }
+
     m_Engine = m_Builder->buildEngineWithConfig(*m_Network, *netcfg);
     assert(m_Engine);
 
