@@ -131,7 +131,7 @@ size_t CorrelationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inp
         case nvinfer1::DataType::kHALF: { tensor_volume *= sizeof(float) / 2; break; }
         default: { std::logic_error( "Invalid type used in correlation only float and half are supported" ); }
     }
-    
+
     return 2 * tensor_volume;
 }
 
@@ -169,23 +169,23 @@ nvinfer1::DimsExprs CorrelationPlugin::getOutputDimensions(int outputIndex,
     // Should be NCHW
     assert(inputs[0].nbDims == 4 && inputs[1].nbDims == 4);
 
-    const int kernel_radius = (m_kernel_size - 1) / 2;
-    const int border_radius = kernel_radius + m_max_displacement;
-
-    const int paddedInputHeight = inputs[0].d[2]->getConstantValue() + 2 * m_pad_size;
-    const int paddedInputWidth  = inputs[0].d[3]->getConstantValue() + 2 * m_pad_size;
-
-    const int nOutputChannels = ((m_max_displacement / m_stride2)*2+1) * ((m_max_displacement / m_stride2)*2+1);
-    const int outputHeight = std::ceil(static_cast<float>(paddedInputHeight - 2 * border_radius) / static_cast<float>(m_stride1));
-    const int outputwidth = std::ceil(static_cast<float>(paddedInputWidth - 2 * border_radius) / static_cast<float>(m_stride1));
+    const int32_t kernel_radius = (m_kernel_size - 1) / 2;
+    const int32_t border_radius = kernel_radius + m_max_displacement;
 
     nvinfer1::DimsExprs outdims;
     outdims.nbDims = 4;
-    outdims.d[0] = inputs[0].d[0];
-    outdims.d[1] = exprBuilder.constant(nOutputChannels);
-    outdims.d[2] = exprBuilder.constant(outputHeight);
-    outdims.d[3] = exprBuilder.constant(outputwidth);
-
+    outdims.d[0] =  inputs[0].d[0];
+    outdims.d[1] =  exprBuilder.constant(((m_max_displacement / m_stride2)*2+1) * ((m_max_displacement / m_stride2)*2+1));
+    outdims.d[2] =  exprBuilder.operation(nvinfer1::DimensionOperation::kCEIL_DIV,
+                        *exprBuilder.operation(nvinfer1::DimensionOperation::kSUB,
+                            *exprBuilder.operation(nvinfer1::DimensionOperation::kSUM, *inputs[0].d[2], *exprBuilder.constant(2 * m_pad_size)),
+                        *exprBuilder.constant(2 * border_radius)),
+                    *exprBuilder.constant(m_stride1));
+    outdims.d[3] = exprBuilder.operation(nvinfer1::DimensionOperation::kCEIL_DIV,
+                        *exprBuilder.operation(nvinfer1::DimensionOperation::kSUB,
+                            *exprBuilder.operation(nvinfer1::DimensionOperation::kSUM, *inputs[0].d[3], *exprBuilder.constant(2 * m_pad_size)),
+                        *exprBuilder.constant(2 * border_radius)),
+                    *exprBuilder.constant(m_stride1));
     return outdims;
 }
 

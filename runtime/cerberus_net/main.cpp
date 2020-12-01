@@ -26,6 +26,7 @@ void single_image_example(CERBERUS& nnet)
     cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
     std::cout << "Doing inference" << std::endl;
+    nnet.doInference(image1, image2);
 
     std::chrono::high_resolution_clock timer;
     auto begin = timer.now();

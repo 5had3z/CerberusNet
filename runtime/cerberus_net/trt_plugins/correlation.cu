@@ -84,7 +84,7 @@ __global__ void Correlation_Kernel(
 				}
                 const int tc = (tj + displacement_rad) * displacement_size + (ti + displacement_rad);
                 const int tindx = n * tdimcyx + tc * tdimyx + blockIdx.y * tdimx + blockIdx.z;
-				const scalar_t nelems = kernel_size * kernel_size * inputChannels;
+				const scalar_t nelems = kernel_size * kernel_size * pdimc;
 
 				output[tindx] = reduce_sum / nelems;
 			}
@@ -158,8 +158,10 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 			break;
 		}
 		default:
-			std::cerr << "ScatterNDPlugin Unsupported Input Type";
+		{
+			std::cerr << "Correlation Plugin Unsupported Input Type";
 			abort();
+		}
 	}
 
     return cudaGetLastError();
