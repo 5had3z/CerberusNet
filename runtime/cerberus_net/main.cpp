@@ -11,9 +11,8 @@
 
 void single_image_example(CERBERUS& nnet)
 {
-    const std::string base_path = "/home/bryce/Documents/Cityscapes Data/leftImg8bit_sequence/train/aachen/";
-    cv::Mat image1 = cv::imread(base_path+"aachen_000000_000020_leftImg8bit.png");
-    cv::Mat image2 = cv::imread(base_path+"aachen_000001_000020_leftImg8bit.png");
+    cv::Mat image1 = cv::imread("/home/bryce/Documents/Cityscapes Data/leftImg8bit/train/aachen/aachen_000000_000019_leftImg8bit.png");
+    cv::Mat image2 = cv::imread("/home/bryce/Documents/Cityscapes Data/leftImg8bit_sequence/train/aachen/aachen_000000_000020_leftImg8bit.png");
 
     assert(!image1.empty());
     assert(!image2.empty());
@@ -109,5 +108,5 @@ int main(int argc, char** argv)
     CERBERUS nnet;
     std::cout << "Init Success!" << std::endl;
 
-    video_sequence_example(nnet);
+    single_image_example(nnet);
 }
