@@ -17,11 +17,11 @@ __global__ void ScatterND_Kernel(scalar_t* output, const intergral_t* __restrict
         const size_t h_stride = width;
         for (size_t ch=0; ch<channels; ++ch)
         {
-            const intergral_t output_n = indicies[ch * c_stride + tid];
-            const intergral_t output_c = indicies[ch * c_stride + tid + 1];
-            const intergral_t output_h = indicies[ch * c_stride + tid + 2];
-            const intergral_t output_w = indicies[ch * c_stride + tid + 3];
-            output[n_stride*output_n + c_stride*output_c + output_h*h_stride * output_w] = 
+            const intergral_t output_n = indicies[4 * (ch * c_stride + tid)];
+            const intergral_t output_c = indicies[4 * (ch * c_stride + tid) + 1];
+            const intergral_t output_h = indicies[4 * (ch * c_stride + tid) + 2];
+            const intergral_t output_w = indicies[4 * (ch * c_stride + tid) + 3];
+            output[n_stride*output_n + c_stride*output_c + h_stride*output_h + output_w] = 
                 updates[ch * c_stride + tid];
         }
     }
@@ -55,8 +55,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     // {
     //     std::array<int32_t, 4> data;
     //     const size_t dim_stride = 4 * sizeof(int32_t);
-    //     NV_CUDA_CHECK(cudaMemcpy(data.data(), inputs[1] + i * dim_stride, dim_stride, cudaMemcpyDeviceToHost));
-    
+    //     NV_CUDA_CHECK(cudaMemcpyAsync(data.data(), inputs[1] + i * dim_stride, dim_stride, cudaMemcpyDeviceToHost, stream));
     //     std::for_each(data.begin(), data.end(), [](const auto& elem){ std::cout << elem << ", ";} );
     //     std::cout << "\n";
     // }
@@ -84,9 +83,9 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
                 reinterpret_cast<float*>(outputs[0]),
                 reinterpret_cast<const int32_t*>(inputs[1]),
                 reinterpret_cast<const float*>(inputs[2]),
-                inputDesc[0].dims.d[1],
-                inputDesc[0].dims.d[2],
-                inputDesc[0].dims.d[3]);
+                inputDesc[1].dims.d[1],
+                inputDesc[1].dims.d[2],
+                inputDesc[1].dims.d[3]);
             break;
         }
 		case nvinfer1::DataType::kHALF:
@@ -95,9 +94,9 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
                 reinterpret_cast<__half*>(outputs[0]),
                 reinterpret_cast<const int32_t*>(inputs[1]),
                 reinterpret_cast<const __half*>(inputs[2]),
-                inputDesc[0].dims.d[1],
-                inputDesc[0].dims.d[2],
-                inputDesc[0].dims.d[3]);
+                inputDesc[1].dims.d[1],
+                inputDesc[1].dims.d[2],
+                inputDesc[1].dims.d[3]);
             break;
         }
         default:

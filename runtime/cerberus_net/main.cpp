@@ -109,5 +109,5 @@ int main(int argc, char** argv)
     CERBERUS nnet;
     std::cout << "Init Success!" << std::endl;
 
-    single_image_example(nnet);
+    video_sequence_example(nnet);
 }
