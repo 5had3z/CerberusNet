@@ -7,7 +7,7 @@
 
 #include <list>
 #include <chrono>
-#include <experimental/filesystem>
+#include <filesystem>
 
 void single_image_example(CERBERUS& nnet)
 {
@@ -52,7 +52,7 @@ std::list<std::string> get_images(std::string_view base_path)
     std::list<std::string> image_filenames;
 
     // Get all the png images from the folder
-    for (const auto & entry : std::experimental::filesystem::directory_iterator(base_path))
+    for (const auto & entry : std::filesystem::directory_iterator(base_path))
     {
         if (entry.path().extension() == ".png") {
             image_filenames.emplace_back(entry.path().filename());
@@ -108,6 +108,6 @@ int main(int argc, char** argv)
     CERBERUS nnet;
     std::cout << "Init Success!" << std::endl;
 
-    // video_sequence_example(nnet);
-    single_image_example(nnet);
+    video_sequence_example(nnet);
+    // single_image_example(nnet);
 }

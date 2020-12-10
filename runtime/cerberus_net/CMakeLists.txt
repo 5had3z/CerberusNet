@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
 include_directories(
     ${CUDA_INCLUDE_DIRS}
+    ${TRT_INCLUDE_DIR}
     ${OpenCV_INCLUDE_DIRS} 
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/trt_plugins

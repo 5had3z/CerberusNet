@@ -3,7 +3,7 @@ project(monash_fyp LANGUAGES CXX VERSION 0.01)
 
 # MANUALLY SET PATHS IF REQUIRED, example: "$ENV{HOME}/OpenCV-3.4.6"
 # set(OPENCV_ROOT "")
-# set(TRT_SDK_ROOT "")
+set(TRT_SDK_ROOT "$ENV{HOME}/TensorRT-7.2.1.6")
 set(CUDA_ARCH "8.6") #Check yours here: https://developer.nvidia.com/cuda-gpus
 # add_definitions(-DOPENCV_CUDA) # Flag for CUDA Operations with OpenCV have been compiled
 # add_definitions(-DUNIFIED) # Flag for unified memory
@@ -11,7 +11,7 @@ set(CUDA_ARCH "8.6") #Check yours here: https://developer.nvidia.com/cuda-gpus
 set(CMAKE_CXX_FLAGS "-std=c++17 -march=native -Og -Wall -Wfatal-errors")
 
 # Cuda Architecture and Version Management
-find_package(CUDA 10 REQUIRED cudart cublas curand)
+find_package(CUDA 10 REQUIRED cudart curand)
 
 string(REGEX REPLACE "\\." "" CUDA_COMPUTE "${CUDA_ARCH}")
 set(GENCODES "${GENCODES} -gencode arch=compute_${CUDA_COMPUTE},code=compute_${CUDA_COMPUTE}")

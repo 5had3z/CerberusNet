@@ -3,11 +3,11 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <experimental/filesystem>
+#include <filesystem>
 
 bool fileExists(const std::string_view fileName, bool verbose)
 {
-    if (!std::experimental::filesystem::exists(std::experimental::filesystem::path(fileName)))
+    if (!std::filesystem::exists(std::filesystem::path(fileName)))
     {
         if (verbose) std::cout << "File does not exist : " << fileName << std::endl;
         return false;
