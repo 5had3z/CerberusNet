@@ -262,8 +262,8 @@ int GridSamplerPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
         }
         default:
         {
-            std::cerr << "Grid Sampler Unsupported Input Type";
-            abort();
+            throw( std::runtime_error{"Grid Sampler Unsupported Input Type"} );
+            break;
         }
     }
 

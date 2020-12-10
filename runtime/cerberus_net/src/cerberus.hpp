@@ -63,7 +63,7 @@ public:
         // CUDA kernel to reshape the non-continuous GPU Mat structure and make it channel-first continuous
         if constexpr(std::is_same<MatType, cv::Mat>::value) {
             if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize())); }
-            cudaMemcpy(m_InputBuffer, img.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice);
+            cudaMemcpyAsync(m_InputBuffer, img.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice, m_CudaStream);
         }
         else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
             m_InputBuffer = img.data;
@@ -81,7 +81,7 @@ public:
         if (m_InputTensors.size() == 2) {
             if constexpr(std::is_same<MatType, cv::Mat>::value) {
                 if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize())); }
-                cudaMemcpy(m_InputBuffer, img_seq.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice);  
+                cudaMemcpyAsync(m_InputBuffer, img_seq.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice, m_CudaStream);  
             }
             else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
                 m_InputBuffer = img_seq.data;

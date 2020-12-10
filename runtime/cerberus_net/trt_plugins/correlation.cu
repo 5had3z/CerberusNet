@@ -159,8 +159,8 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 		}
 		default:
 		{
-			std::cerr << "Correlation Plugin Unsupported Input Type";
-			abort();
+			throw( std::runtime_error{"Correlation Plugin Unsupported Input Type"} );
+            break;
 		}
 	}
 

@@ -2,27 +2,26 @@
 #include "trt_utils.hpp"
 #include "cuda_fp16.h"
 
-#include <array>
-#include <algorithm>
-#include <limits>
-
 template <typename scalar_t, typename intergral_t>
 __global__ void ScatterND_Kernel(scalar_t* output, const intergral_t* __restrict__ indicies,
-    const scalar_t* __restrict__ updates, size_t channels, size_t height, size_t width)
+    const scalar_t* __restrict__ updates, size_t out_channels, size_t out_height, size_t out_width, size_t ind_channels)
 {
     const size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    if (tid < height * width) {
-        const size_t n_stride = channels * height * width;
-        const size_t c_stride = height * width;
-        const size_t h_stride = width;
-        for (size_t ch=0; ch<channels; ++ch)
+    if (tid < out_height * out_width) {
+        const size_t out_n_stride = out_channels * out_height * out_width;
+        const size_t out_c_stride = out_height * out_width;
+        const size_t out_h_stride = out_width;
+
+        const size_t ind_batch_offset = blockIdx.y * 4 * ind_channels * out_height * out_width;
+        for (size_t ch=0; ch<ind_channels; ++ch)
         {
-            const intergral_t output_n = indicies[4 * (ch * c_stride + tid)];
-            const intergral_t output_c = indicies[4 * (ch * c_stride + tid) + 1];
-            const intergral_t output_h = indicies[4 * (ch * c_stride + tid) + 2];
-            const intergral_t output_w = indicies[4 * (ch * c_stride + tid) + 3];
-            output[n_stride*output_n + c_stride*output_c + h_stride*output_h + output_w] = 
-                updates[ch * c_stride + tid];
+            size_t indicies_indx = ind_batch_offset + 4 * (ch * out_c_stride + tid);
+            const intergral_t output_n = indicies[indicies_indx];
+            const intergral_t output_c = indicies[++indicies_indx];
+            const intergral_t output_h = indicies[++indicies_indx];
+            const intergral_t output_w = indicies[++indicies_indx];
+            output[out_n_stride*output_n + out_c_stride*output_c + out_h_stride*output_h + output_w] = 
+                updates[ch * out_c_stride + tid];
         }
     }
 }
@@ -60,7 +59,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
     //     outputs[0] + indicies_element[1] * elem_size * channel_stride, inputs[2],
     //     elem_size * channel_stride, cudaMemcpyDeviceToDevice));
 
-    const size_t nBlocks = inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3] / CUDA_NUM_THREADS;
+    const dim3 nBlocks{ inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3] / CUDA_NUM_THREADS, inputDesc[0].dims.d[0], 1 };
 
     switch(inputDesc[0].type)
 	{
@@ -70,9 +69,8 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
                 reinterpret_cast<float*>(outputs[0]),
                 reinterpret_cast<const int32_t*>(inputs[1]),
                 reinterpret_cast<const float*>(inputs[2]),
-                inputDesc[1].dims.d[1],
-                inputDesc[1].dims.d[2],
-                inputDesc[1].dims.d[3]);
+                inputDesc[0].dims.d[1], inputDesc[0].dims.d[2],
+                inputDesc[0].dims.d[3], inputDesc[1].dims.d[1]);
             break;
         }
 		case nvinfer1::DataType::kHALF:
@@ -81,14 +79,13 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
                 reinterpret_cast<__half*>(outputs[0]),
                 reinterpret_cast<const int32_t*>(inputs[1]),
                 reinterpret_cast<const __half*>(inputs[2]),
-                inputDesc[1].dims.d[1],
-                inputDesc[1].dims.d[2],
-                inputDesc[1].dims.d[3]);
+                inputDesc[0].dims.d[1], inputDesc[0].dims.d[2],
+                inputDesc[0].dims.d[3], inputDesc[1].dims.d[1]);
             break;
         }
         default:
-            std::cerr << "ScatterNDPlugin Unsupported Input Type";
-            abort();
+            throw( std::runtime_error{"ScatterNDPlugin Unsupported Input Type"} );
+            break;
     }
 
     return cudaGetLastError();
