@@ -37,7 +37,7 @@ CERBERUS::CERBERUS() :
     m_InputBuffer(nullptr)
 {
     constexpr std::string_view labels_path { "/home/bryce/cs_labels.txt" };
-    constexpr std::string_view ONNX_path { "/home/bryce/OCRNetSFD.onnx" };
+    constexpr std::string_view ONNX_path { "/home/bryce/OCRNetSFD_dyn.onnx" };
 
     m_class_names = loadListFromTextFile(std::string{labels_path});
 
@@ -53,6 +53,7 @@ CERBERUS::CERBERUS() :
     }
 
     m_Context = m_Engine->createExecutionContext();
+    m_Context->setOptimizationProfile(0);
     m_max_batchsize = m_Engine->getMaxBatchSize();
     assert(m_Context != nullptr);
 
@@ -62,7 +63,8 @@ CERBERUS::CERBERUS() :
 
     for (int b = 0; b < m_Engine->getNbBindings(); ++b)
     {
-        const nvinfer1::Dims binding_dims = m_Engine->getBindingDimensions(b);
+        nvinfer1::Dims binding_dims = m_Engine->getBindingDimensions(b);
+        binding_dims.d[0] = m_max_batchsize;
         if (m_Engine->bindingIsInput(b)){ 
             TensorInfo new_tensor;
             new_tensor.volume = volume(binding_dims);
@@ -124,7 +126,7 @@ CERBERUS::~CERBERUS()
     }
 }
 
-void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path, size_t batchsize)
+void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path, size_t max_batchsize)
 {
     m_Builder = nvinfer1::createInferBuilder(gLogger);
     const auto netflags = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
@@ -142,7 +144,7 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path, size_t batc
 
     nvinfer1::IBuilderConfig* netcfg = m_Builder->createBuilderConfig();
     netcfg->setMaxWorkspaceSize(MAX_WORKSPACE);
-    m_Builder->setMaxBatchSize(batchsize);
+    m_Builder->setMaxBatchSize(max_batchsize);
 
     if (m_Precision == "FP16"){
         assert((m_Builder->platformHasFastFp16()) && "Platform does not support FP16");
@@ -155,6 +157,20 @@ void CERBERUS::buildEngineFromONNX(const std::string_view onnx_path, size_t batc
     else {
         assert((false) && "Unsupported precision type");
     }
+
+    // Add optimisation profiles for Network
+    auto profile = m_Builder->createOptimizationProfile();
+    for (int b = 0; b < m_Network->getNbInputs(); ++b)
+    {
+        auto binding_dims = m_Network->getInput(b)->getDimensions();
+        auto binding_name = m_Network->getInput(b)->getName();
+        binding_dims.d[0] = 1;
+        profile->setDimensions(binding_name, nvinfer1::OptProfileSelector::kMIN, binding_dims);
+        profile->setDimensions(binding_name, nvinfer1::OptProfileSelector::kOPT, binding_dims);
+        binding_dims.d[0] = max_batchsize;
+        profile->setDimensions(binding_name, nvinfer1::OptProfileSelector::kMAX, binding_dims);
+    }
+    netcfg->addOptimizationProfile(profile);
 
     m_Engine = m_Builder->buildEngineWithConfig(*m_Network, *netcfg);
     assert(m_Engine);
@@ -224,22 +240,22 @@ void CERBERUS::allocateBuffers()
         for (auto& tensor : m_InputTensors)
         {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                tensor.bindingIndex, m_max_batchsize * tensor.volume * sizeof(float)));
+                tensor.bindingIndex, tensor.volume * sizeof(float)));
         }
 
         if (m_SegmentationTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_SegmentationTensor.bindingIndex, m_max_batchsize * m_SegmentationTensor.volume * sizeof(float)));
+                m_SegmentationTensor.bindingIndex, m_SegmentationTensor.volume * sizeof(float)));
         }
 
         if (m_FlowTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_FlowTensor.bindingIndex, m_max_batchsize * m_FlowTensor.volume * sizeof(float)));
+                m_FlowTensor.bindingIndex, m_FlowTensor.volume * sizeof(float)));
         }
 
         if (m_DepthTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_DepthTensor.bindingIndex, m_max_batchsize * m_DepthTensor.volume * sizeof(float)));
+                m_DepthTensor.bindingIndex, m_DepthTensor.volume * sizeof(float)));
         }
 
         m_TRT_buffers.emplace_back(std::move(trt_buffer));
@@ -320,7 +336,7 @@ cv::Mat CERBERUS::get_depth(size_t batch_indx) const
 
     cv::Mat depth_image(cv::Size(m_InputW, m_InputH), CV_32FC1);
     cudaMemcpy(depth_image.data, m_TRT_buffers[batch_indx].at(m_DepthTensor.bindingIndex),
-        m_DepthTensor.volume * sizeof(float), cudaMemcpyDeviceToHost);
+        m_DepthTensor.volume / m_max_batchsize * sizeof(float), cudaMemcpyDeviceToHost);
     return depth_image / 80.f;
 }
 
@@ -382,8 +398,7 @@ template <typename MatType>
 void CERBERUS::allocate_image_pair(const std::pair<MatType, MatType> &img_sequence)
 {
     auto available_buffer = std::find_if(m_TRT_buffers.begin(), m_TRT_buffers.end(),
-        [](const TRT_Buffer& buffer){ std::cout << cudaEventQuery(buffer.infer_status) << std::endl;
-        return cudaEventQuery(buffer.infer_status) == cudaSuccess; });
+        [](const TRT_Buffer& buffer){ return cudaEventQuery(buffer.infer_status) == cudaSuccess; });
 
     if (available_buffer != m_TRT_buffers.end()) {
         cvmat_to_input_buffer(img_sequence.first, 0, *available_buffer);
