@@ -103,8 +103,6 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 	const size_t pInputWidth = inputDesc[0].dims.d[3] + 2 * m_pad_size;
 	const size_t pInputVolume = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[1] * pInputHeight * pInputWidth;
 
-	NV_CUDA_CHECK(cudaStreamSynchronize(stream));
-
 	switch(inputDesc[0].type)
 	{
 		case nvinfer1::DataType::kFLOAT:
