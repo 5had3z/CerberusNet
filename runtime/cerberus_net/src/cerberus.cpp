@@ -48,7 +48,7 @@ CERBERUS::CERBERUS() :
     if (fileExists(engine_path, true)) {
         loadSerializedEngine(engine_path);
     } else {
-        buildEngineFromONNX(ONNX_path, 1);
+        buildEngineFromONNX(ONNX_path, 2);
         writeSerializedEngine(engine_path);
     }
 
@@ -96,11 +96,12 @@ CERBERUS::CERBERUS() :
         }
     }
 
-    cudaStreamCreate(&m_CudaStream);
-    allocateBuffers();
+    NV_CUDA_CHECK(cudaStreamCreate(&m_CudaStream));
+    this->allocateBuffers();
 
-    cudaMalloc(&m_dev_class_colourmap, m_class_colourmap.size());
-    cudaMemcpy(m_dev_class_colourmap, m_class_colourmap.data(), m_class_colourmap.size(), cudaMemcpyHostToDevice);
+    NV_CUDA_CHECK(cudaMalloc(&m_dev_class_colourmap, m_class_colourmap.size()));
+    NV_CUDA_CHECK(cudaMemcpy(m_dev_class_colourmap, m_class_colourmap.data(),
+        m_class_colourmap.size(), cudaMemcpyHostToDevice));
 }
 
 CERBERUS::~CERBERUS()
@@ -223,22 +224,22 @@ void CERBERUS::allocateBuffers()
         for (auto& tensor : m_InputTensors)
         {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                tensor.bindingIndex, tensor.volume * sizeof(float)));
+                tensor.bindingIndex, m_max_batchsize * tensor.volume * sizeof(float)));
         }
 
         if (m_SegmentationTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_SegmentationTensor.bindingIndex, m_SegmentationTensor.volume * sizeof(float)));
+                m_SegmentationTensor.bindingIndex, m_max_batchsize * m_SegmentationTensor.volume * sizeof(float)));
         }
 
         if (m_FlowTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_FlowTensor.bindingIndex, m_FlowTensor.volume * sizeof(float)));
+                m_FlowTensor.bindingIndex, m_max_batchsize * m_FlowTensor.volume * sizeof(float)));
         }
 
         if (m_DepthTensor.bindingIndex != -1) {
             NV_CUDA_CHECK(trt_buffer.allocate_memory(
-                m_DepthTensor.bindingIndex, m_DepthTensor.volume * sizeof(float)));
+                m_DepthTensor.bindingIndex, m_max_batchsize * m_DepthTensor.volume * sizeof(float)));
         }
 
         m_TRT_buffers.emplace_back(std::move(trt_buffer));
@@ -331,6 +332,7 @@ cv::Mat CERBERUS::get_flow(size_t batch_indx) const
     else if (batch_indx > m_last_batchsize) {
         std::cerr << "Batch indx requested exceeds last batchsize\n";
     }
+    NV_CUDA_CHECK(cudaEventSynchronize(m_TRT_buffers[batch_indx].infer_status));
 
     const size_t n_px = m_InputW*m_InputH;
     
@@ -340,12 +342,12 @@ cv::Mat CERBERUS::get_flow(size_t batch_indx) const
     cudaStream_t stream;
     NV_CUDA_CHECK(cudaStreamCreate(&stream));
     flow_image((float*)m_TRT_buffers[batch_indx].at(m_FlowTensor.bindingIndex), (uchar*)dev_flow_image, n_px, stream);
+    NV_CUDA_CHECK(cudaStreamSynchronize(stream));
+    NV_CUDA_CHECK(cudaStreamDestroy(stream));
 
     cv::Mat flow_image(cv::Size(m_InputW, m_InputH), CV_8UC3);
-    NV_CUDA_CHECK(cudaMemcpyAsync(flow_image.data, dev_flow_image, 3U*n_px*sizeof(uchar), cudaMemcpyDeviceToHost, stream));
-    NV_CUDA_CHECK(cudaStreamSynchronize(stream));
+    NV_CUDA_CHECK(cudaMemcpy(flow_image.data, dev_flow_image, 3U*n_px*sizeof(uchar), cudaMemcpyDeviceToHost));
     NV_CUDA_CHECK(cudaFree(dev_flow_image));
-    NV_CUDA_CHECK(cudaStreamDestroy(stream));
     return flow_image;
 }
 
@@ -353,19 +355,7 @@ template <typename MatType>
 void CERBERUS::image_pair_inference(const std::pair<MatType, MatType> &img_sequence)
 {
     m_last_batchsize = 1;
-
-    for (auto& buffer : m_TRT_buffers)
-    {
-        if (cudaEventQuery(buffer.infer_status) == cudaSuccess ) {
-            cvmat_to_input_buffer(img_sequence.first, 0, buffer);
-            cvmat_to_input_buffer(img_sequence.second, 1, buffer);
-            if(!m_Context->enqueueV2(buffer.data(), buffer.stream, &buffer.infer_status)) {
-                std::cerr << "TRT Enqueue Fail\n";
-            }
-            return;
-        }
-    }
-    std::cerr << "All buffers occupied\n";
+    this->allocate_image_pair(img_sequence);
 }
 
 template void CERBERUS::image_pair_inference(const std::pair<cv::Mat, cv::Mat> &img_sequence);
@@ -376,30 +366,37 @@ void CERBERUS::image_pair_inference(const std::vector<std::pair<MatType, MatType
 {
     if (img_sequence_vector.empty()) {
         std::cerr << "Vector of images for inference is empty\n"; return;
-    }
-    else {
+    } else {
         m_last_batchsize = img_sequence_vector.size();
     }
 
-    for (auto [img_a, img_b] : img_sequence_vector)
-    {
-        for (auto& buffer : m_TRT_buffers)
-        {
-            if (cudaEventQuery(buffer.infer_status) == cudaSuccess ) {
-                cvmat_to_input_buffer(img_a, 0, buffer);
-                cvmat_to_input_buffer(img_b, 1, buffer);
-                if(!m_Context->enqueueV2(buffer.data(), buffer.stream, &buffer.infer_status)) {
-                    std::cerr << "TRT Enqueue Fail\n";
-                }
-                break;
-            }
-        } 
+    for (const auto& img_sequence : img_sequence_vector) {
+        this->allocate_image_pair(img_sequence);
     }
-    std::cerr << "All buffers occupied\n";
 }
 
 template void CERBERUS::image_pair_inference(const std::vector<std::pair<cv::Mat, cv::Mat>> &img_sequence_vector);
 template void CERBERUS::image_pair_inference(const std::vector<std::pair<cv::cuda::GpuMat, cv::cuda::GpuMat>> &img_sequence_vector);
+
+template <typename MatType>
+void CERBERUS::allocate_image_pair(const std::pair<MatType, MatType> &img_sequence)
+{
+    auto available_buffer = std::find_if(m_TRT_buffers.begin(), m_TRT_buffers.end(),
+        [](const TRT_Buffer& buffer){ std::cout << cudaEventQuery(buffer.infer_status) << std::endl;
+        return cudaEventQuery(buffer.infer_status) == cudaSuccess; });
+
+    if (available_buffer != m_TRT_buffers.end()) {
+        cvmat_to_input_buffer(img_sequence.first, 0, *available_buffer);
+        cvmat_to_input_buffer(img_sequence.second, 1, *available_buffer);
+        if(!m_Context->enqueueV2(available_buffer->data(), available_buffer->stream, &available_buffer->infer_status)) {
+            std::cerr << "TRT Enqueue Fail\n";
+        }
+        std::cout << cudaEventQuery(available_buffer->infer_status) << std::endl;
+    }
+    else {
+        std::cerr << "All buffers occupied\n";
+    }
+}
 
 template<typename MatType>
 void CERBERUS::cvmat_to_input_buffer(const MatType &img, size_t input_indx, TRT_Buffer& trt_buffer)
@@ -419,13 +416,13 @@ void CERBERUS::cvmat_to_input_buffer(const MatType &img, size_t input_indx, TRT_
         throw std::runtime_error{"INCOMPATIBLE INPUT FORMAT"};
     }
 
-    nhwc2nchw((unsigned char*)m_InputBuffer,
-        (float*)trt_buffer.at(m_InputTensors[input_indx].bindingIndex), 
+    float* trt_input = (float*)trt_buffer.at(m_InputTensors[input_indx].bindingIndex);
+
+    nhwc2nchw((unsigned char*)m_InputBuffer, trt_input, 
         m_InputH*m_InputW, m_InputC, m_InputC*m_InputW,
         static_cast<int>(img.step / img.elemSize1()), trt_buffer.stream);
     
-    normalize_image_chw((float*)trt_buffer.at(m_InputTensors[input_indx].bindingIndex),
-        m_InputH * m_InputW, mean, std, trt_buffer.stream);
+    normalize_image_chw(trt_input, m_InputH * m_InputW, mean, std, trt_buffer.stream);
 
     NV_CUDA_CHECK(cudaGetLastError());
 }

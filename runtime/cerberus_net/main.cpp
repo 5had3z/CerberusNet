@@ -25,7 +25,7 @@ void single_image_example(CERBERUS& nnet)
     cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
     std::cout << "Doing inference" << std::endl;
-    nnet.image_pair_inference(std::make_pair(image1, image2));
+    nnet.image_pair_inference(std::vector{std::make_pair(image1, image2), std::make_pair(image2, image1)});
 
     std::chrono::high_resolution_clock timer;
     auto begin = timer.now();
@@ -36,14 +36,17 @@ void single_image_example(CERBERUS& nnet)
     }
     std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 / 10. << " ms" << std::endl;
 
-    std::cout << "Showing Outputs" << std::endl;
-    cv::imshow("Sample Depth", nnet.get_depth());
-    cv::Mat color_seg;
-    cv::cvtColor(nnet.get_seg_image(), color_seg, cv::COLOR_RGB2BGR);
-    cv::imshow("Sample Seg", color_seg);
+    for (int i=0; i<2; i++)
+    {
+        std::cout << "Showing Outputs Batch: " << i << std::endl;
+        cv::imshow("Sample Depth "+std::to_string(i), nnet.get_depth(i));
+        cv::Mat color_seg;
+        cv::cvtColor(nnet.get_seg_image(i), color_seg, cv::COLOR_RGB2BGR);
+        cv::imshow("Sample Seg "+std::to_string(i), color_seg);
 
-    cv::cvtColor(nnet.get_flow(), color_seg, cv::COLOR_RGB2BGR);
-    cv::imshow("Sample Flow", color_seg);
+        cv::cvtColor(nnet.get_flow(i), color_seg, cv::COLOR_RGB2BGR);
+        cv::imshow("Sample Flow "+std::to_string(i), color_seg);
+    }
 
     cv::waitKey(0);
 }

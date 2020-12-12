@@ -204,4 +204,7 @@ private:
 
     template<typename MatType>
     void cvmat_to_input_buffer(const MatType &img, size_t input_indx, TRT_Buffer& trt_buffer);
+
+    template<typename MatType>
+    void allocate_image_pair(const std::pair<MatType, MatType> &img_sequence);
 };
