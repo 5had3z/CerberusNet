@@ -51,10 +51,16 @@ def export_model(config: EasyDict, exp_path: Path) -> None:
     dummy_input_2 = torch.randn(1, 3, dim_h, dim_w, device=device)
 
     print("Exporting ONNX Engine")
+    dynamic_axes = {"input_1":{0:"batch_size"},"input_2":{0:"batch_size"},
+                    "segmentation":{0:"batch_size"},"depth":{0:"batch_size"},
+                    "flow":{0:"batch_size"}}
+
     torch.onnx.export(
         model, (dummy_input_1, dummy_input_2),
         f"onnx_models/{onnx_name}.onnx",
-        opset_version=11)
+        input_names=["input_1", "input_2"],
+        output_names=["segmentation", "depth", "flow"],
+        dynamic_axes=dynamic_axes, opset_version=11)
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
