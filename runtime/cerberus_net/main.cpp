@@ -11,8 +11,8 @@
 
 void single_image_example(CERBERUS& nnet)
 {
-    cv::Mat image1 = cv::imread("/home/bryce/Documents/Cityscapes Data/leftImg8bit/train/aachen/aachen_000000_000019_leftImg8bit.png");
-    cv::Mat image2 = cv::imread("/home/bryce/Documents/Cityscapes Data/leftImg8bit_sequence/train/aachen/aachen_000000_000020_leftImg8bit.png");
+    cv::Mat image1 = cv::imread("/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/val/frankfurt/frankfurt_000000_000275_leftImg8bit.png");
+    cv::Mat image2 = cv::imread("/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/leftImg8bit_sequence/val/frankfurt/frankfurt_000000_000276_leftImg8bit.png");
 
     assert(!image1.empty());
     assert(!image2.empty());
@@ -25,13 +25,13 @@ void single_image_example(CERBERUS& nnet)
     cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
     std::cout << "Doing inference" << std::endl;
-    nnet.doInference(image1, image2);
+    nnet.image_pair_inference(image1, image2);
 
     std::chrono::high_resolution_clock timer;
     auto begin = timer.now();
     for (size_t i=0; i<10; i++)
     {
-        nnet.doInference(image1, image2);
+        nnet.image_pair_inference(image1, image2);
     }
     std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 / 10. << " ms" << std::endl;
 
@@ -90,7 +90,7 @@ void video_sequence_example(CERBERUS& nnet)
         cv::resize(image2, image2, net_input);
         cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
-        nnet.doInference(image1, image2);
+        nnet.image_pair_inference(image1, image2);
         
         cv::imshow("Sample Depth", nnet.get_depth());
         cv::Mat color_seg;
@@ -108,6 +108,6 @@ int main(int argc, char** argv)
     CERBERUS nnet;
     std::cout << "Init Success!" << std::endl;
 
-    video_sequence_example(nnet);
-    // single_image_example(nnet);
+    // video_sequence_example(nnet);
+    single_image_example(nnet);
 }

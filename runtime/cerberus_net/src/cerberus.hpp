@@ -56,48 +56,7 @@ public:
     virtual ~CERBERUS();
 
     template <typename MatType>
-    void doInference(const MatType &img, const MatType &img_seq)
-    {
-        // we treat the memory as if it's a one-channel, one row image
-        const int rowSize = (int) img.step / (int) img.elemSize1();
-        // CUDA kernel to reshape the non-continuous GPU Mat structure and make it channel-first continuous
-        if constexpr(std::is_same<MatType, cv::Mat>::value) {
-            if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize())); }
-            cudaMemcpyAsync(m_InputBuffer, img.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice, m_CudaStream);
-        }
-        else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
-            m_InputBuffer = img.data;
-        }
-        else {
-            std::cerr << "INCOMPATIBLE INPUT FORMAT";
-        }
-
-        nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex), 
-            m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
-        
-        normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[0].bindingIndex),
-            m_InputH * m_InputW, mean, std, m_CudaStream);
-
-        if (m_InputTensors.size() == 2) {
-            if constexpr(std::is_same<MatType, cv::Mat>::value) {
-                if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, img.total()*img.elemSize())); }
-                cudaMemcpyAsync(m_InputBuffer, img_seq.data, img.total()*img.elemSize(), cudaMemcpyHostToDevice, m_CudaStream);  
-            }
-            else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
-                m_InputBuffer = img_seq.data;
-            }
-            else {
-                std::cerr << "INCOMPATIBLE INPUT FORMAT";
-            }
-
-            nhwc2nchw((unsigned char*)m_InputBuffer, (float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex), 
-                m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
-
-            normalize_image_chw((float*)m_DeviceBuffers.at(m_InputTensors[1].bindingIndex),
-                m_InputH * m_InputW, mean, std, m_CudaStream);
-        }
-        m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
-    }
+    void image_pair_inference(const MatType &img, const MatType &img_seq);
 
     [[nodiscard]] cv::Mat get_seg_class() const;
     [[nodiscard]] cv::Mat get_seg_image() const;
@@ -110,6 +69,7 @@ public:
     [[nodiscard]] std::size_t getInputC() const noexcept { return m_InputC; }
     [[nodiscard]] std::size_t getInputH() const noexcept { return m_InputH; }
     [[nodiscard]] std::size_t getInputW() const noexcept { return m_InputW; }
+    [[nodiscard]] std::size_t getInputVolume() const noexcept { return m_InputC * m_InputH * m_InputW; }
 
 private:
     static constexpr uint m_maxBatchSize = 1;
@@ -165,4 +125,6 @@ private:
     void writeSerializedEngine();
     void loadSerializedEngine();
     void allocateBuffers();
+    template<typename MatType>
+    void cvmat_to_input_buffer(const std::vector<MatType> &img, size_t binding_indx);
 };

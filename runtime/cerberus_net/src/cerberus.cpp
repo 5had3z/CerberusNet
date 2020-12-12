@@ -123,6 +123,10 @@ CERBERUS::~CERBERUS()
     NV_CUDA_CHECK(cudaStreamDestroy(m_CudaStream));
     NV_CUDA_CHECK(cudaFree(m_dev_class_colourmap));
 
+    if(m_InputBuffer) {
+        NV_CUDA_CHECK(cudaFree(m_InputBuffer));
+    }
+
     if (m_Context) {
         m_Context->destroy();
         m_Context = nullptr;
@@ -307,6 +311,58 @@ cv::Mat CERBERUS::get_flow() const
     NV_CUDA_CHECK(cudaMemcpy(flow_image.data, dev_flow_image, 3U*n_px*sizeof(uchar), cudaMemcpyDeviceToHost));
     NV_CUDA_CHECK(cudaFree(dev_flow_image));
     return flow_image;
+}
+
+template <typename MatType>
+void CERBERUS::image_pair_inference(const MatType &img, const MatType &img_seq)
+{
+    cvmat_to_input_buffer(std::vector{img}, 0);
+    cvmat_to_input_buffer(std::vector{img_seq}, 1);
+
+    m_Context->enqueueV2(m_DeviceBuffers.data(), m_CudaStream, nullptr);
+}
+
+template void CERBERUS::image_pair_inference(const cv::Mat &img, const cv::Mat &img_seq);
+template void CERBERUS::image_pair_inference(const cv::cuda::GpuMat &img, const cv::cuda::GpuMat &img_seq);
+
+template<typename MatType>
+void CERBERUS::cvmat_to_input_buffer(const std::vector<MatType> &img_vector, size_t input_indx)
+{
+    if (img_vector.empty()) { std::cerr << "No images given to input\n"; return; }
+    if (img_vector.size() > m_maxBatchSize) {
+        throw std::runtime_error{ "Input exceeds maximum batchsize configured for TRT Engine" };
+    }
+
+    int batch_offset = 0;
+
+    for (const auto &img : img_vector)
+    {
+        if (img.rows != m_InputH || img.cols != m_InputW) {
+            throw std::runtime_error{ "Input image dimensions are different from engine input" };
+        }
+        // CUDA kernel to reshape the non-continuous GPU Mat structure and make it channel-first continuous
+        if constexpr(std::is_same<MatType, cv::Mat>::value) {
+            if (!m_InputBuffer) { NV_CUDA_CHECK(cudaMalloc(&m_InputBuffer, this->getInputVolume())); }
+            cudaMemcpyAsync(m_InputBuffer, img.data, this->getInputVolume(), cudaMemcpyHostToDevice, m_CudaStream);
+        }
+        else if constexpr(std::is_same<MatType, cv::cuda::GpuMat>::value) {
+            m_InputBuffer = img.data;
+        }
+        else {
+            throw std::runtime_error{"INCOMPATIBLE INPUT FORMAT"};
+        }
+
+        float* trt_buffer = (float*)m_DeviceBuffers.at(m_InputTensors[input_indx].bindingIndex) + batch_offset;
+
+        const int rowSize = static_cast<int>(img_vector[0].step / img_vector[0].elemSize1());
+
+        nhwc2nchw((unsigned char*)m_InputBuffer, trt_buffer, 
+            m_InputH*m_InputW, m_InputC, m_InputC*m_InputW, rowSize, m_CudaStream);
+        
+        normalize_image_chw(trt_buffer, m_InputH * m_InputW, mean, std, m_CudaStream);
+
+        batch_offset += this->getInputVolume() * sizeof(float);
+    }
 }
 
 void Logger::log(Severity severity, const char* msg)
