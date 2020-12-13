@@ -129,10 +129,7 @@ public:
     virtual ~CERBERUS();
 
     template <typename MatType>
-    void image_pair_inference(const std::pair<MatType, MatType> &img_sequence);
-
-    template <typename MatType>
-    void image_pair_inference(const std::vector<std::pair<MatType, MatType>> &img_sequence_vector);
+    void image_pair_inference(const std::vector<MatType> &img_vector, const std::vector<MatType> &img_next_vector);
 
     [[nodiscard]] cv::Mat get_seg_class(size_t batch_indx = 0) const;
     [[nodiscard]] cv::Mat get_seg_image(size_t batch_indx = 0) const;
@@ -191,7 +188,8 @@ private:
     TensorInfo m_FlowTensor;
     TensorInfo m_SegmentationTensor;
     TensorInfo m_DepthTensor;
-    std::vector<TRT_Buffer> m_TRT_buffers;
+    // std::vector<TRT_Buffer> m_TRT_buffers;
+    std::vector<void*> m_DeviceBuffers;
     void* m_InputBuffer;
 
     static constexpr auto mean = std::array{0.485f, 0.456f, 0.406f};
@@ -203,8 +201,11 @@ private:
     void allocateBuffers();
 
     template<typename MatType>
-    void cvmat_to_input_buffer(const MatType &img, size_t input_indx, TRT_Buffer& trt_buffer);
+    void cvmat_to_input_buffer(const std::vector<MatType> &img_vector, size_t input_indx, const TRT_Buffer& trt_buffer);
 
     template<typename MatType>
-    void allocate_image_pair(const std::pair<MatType, MatType> &img_sequence);
+    void cvmat_to_input_buffer(const std::vector<MatType> &img_vector, size_t input_indx);
+
+    template<typename MatType>
+    void allocate_image_pair(const std::vector<MatType> &img_vector, const std::vector<MatType> &img_next_vector);
 };

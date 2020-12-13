@@ -25,14 +25,15 @@ void single_image_example(CERBERUS& nnet)
     cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
     std::cout << "Doing inference" << std::endl;
-    nnet.image_pair_inference(std::vector{std::make_pair(image1, image2), std::make_pair(image2, image1)});
+    nnet.image_pair_inference(std::vector{image1}, std::vector{image2});
+    std::cout << "Batchsize 1 Complete" << std::endl;
 
     std::chrono::high_resolution_clock timer;
     auto begin = timer.now();
     for (size_t i=0; i<10; i++)
     {
         // nnet.image_pair_inference(std::make_pair(image1, image2));
-        nnet.image_pair_inference(std::vector{std::make_pair(image1, image2), std::make_pair(image2, image1)});
+        nnet.image_pair_inference(std::vector{image1, image2}, std::vector{image2, image1});
     }
     std::cout << "End Time: " << (timer.now() - begin).count() / 1e6 / 10. << " ms" << std::endl;
 
@@ -94,7 +95,7 @@ void video_sequence_example(CERBERUS& nnet)
         cv::resize(image2, image2, net_input);
         cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
 
-        nnet.image_pair_inference(std::make_pair(image1, image2));
+        nnet.image_pair_inference(std::vector{image1}, std::vector{image2});
         
         cv::imshow("Sample Depth", nnet.get_depth());
         cv::Mat color_seg;
