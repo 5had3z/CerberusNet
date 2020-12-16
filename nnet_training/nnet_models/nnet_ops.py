@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['_ConvBNReLU', '_DSConv', '_DWConv', 'LinearBottleneck', 'PyramidPooling', 'initialize_weights']
+__all__ = ['_ConvBNReLU', '_DSConv', '_DWConv', 'LinearBottleneck', 'PyramidPooling',
+           'initialize_weights']
 
 def initialize_weights(*models):
     """
