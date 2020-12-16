@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.evaluate_model import data_to_gpu
 from nnet_training.nnet_models import get_model
-from nnet_training.utilities.CityScapes import CityScapesDataset
+from nnet_training.utilities.cityscapes_dataset import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, CITYSPALLETTE
 from nnet_training.utilities.cityscapes_labels import labels
 

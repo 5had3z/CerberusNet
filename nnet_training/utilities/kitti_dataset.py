@@ -21,7 +21,7 @@ import numpy as np
 
 from torch.utils.data import RandomSampler
 from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
-from nnet_training.utilities.CustomSampler import BatchSamplerRandScale
+from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
 
 __all__ = ['Kitti2015Dataset', 'get_kitti_dataset']
 

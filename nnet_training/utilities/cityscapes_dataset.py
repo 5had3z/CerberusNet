@@ -20,7 +20,7 @@ from PIL import Image
 
 import numpy as np
 
-from nnet_training.utilities.CustomSampler import BatchSamplerRandScale
+from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 
@@ -418,7 +418,7 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     return dataloaders
 
-def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
+def copy_cityscapes(src_dir: Path, subsets: Dict[str, Path], dst_dir: Path):
     """
     Tool for copying over a subset of data to a new place i.e. HDD mass storage to SSD\n
     Requires you at least have l_img in the dictionary to act as a base for checking
@@ -426,7 +426,7 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
     """
     assert 'l_img' in subsets
 
-    print("Copying ", subsets.keys(), " from ", base_dir, " to ", dest_dir)
+    print("Copying ", subsets.keys(), " from ", src_dir, " to ", dst_dir)
 
     regex_map = {
         'l_img' : ['leftImg8bit', 'leftImg8bit'],
@@ -439,7 +439,7 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
         'pose' : ['leftImg8bit.png', 'vehicle.json']
     }
 
-    for dir_name, _, file_list in os.walk(os.path.join(base_dir, subsets['l_img'])):
+    for dir_name, _, file_list in os.walk(os.path.join(src_dir, subsets['l_img'])):
         for filename in file_list:
             if filename.endswith(IMG_EXT):
                 l_imgpath = os.path.join(dir_name, filename)
@@ -453,8 +453,8 @@ def copy_cityscapes(base_dir: Path, subsets: Dict[str, Path], dest_dir: Path):
                             str(frame_n+1).zfill(6)+"_"+regex_map[datatype][1])
                     else:
                         img_name = filename.replace(regex_map[datatype][0], regex_map[datatype][1])
-                    src_path = os.path.join(base_dir, directory, foldername, img_name)
-                    dst_path = os.path.join(dest_dir, directory, foldername, img_name)
+                    src_path = os.path.join(src_dir, directory, foldername, img_name)
+                    dst_path = os.path.join(dst_dir, directory, foldername, img_name)
                     if not os.path.isfile(src_path):
                         print("Error finding corresponding data to ", l_imgpath)
                         continue
@@ -470,22 +470,22 @@ def some_test_idk():
 
     print("Testing Folder Traversal and Image Extraction!")
 
-    HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
-    SSD_DIR = '/home/bryce/Documents/Cityscapes Data'
+    hdd_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
+    # ssd_dir = '/home/bryce/Documents/Cityscapes Data'
 
-    mono_training_data = {
-        'images': HDD_DIR + 'leftImg8bit/train',
-        'labels': HDD_DIR + 'gtFine/train'
-    }
+    # mono_training_data = {
+    #     'images': hdd_dir + 'leftImg8bit/train',
+    #     'labels': hdd_dir + 'gtFine/train'
+    # }
 
     full_training_data = {
-        'left_images': HDD_DIR + 'leftImg8bit/train',
-        'right_images': HDD_DIR + 'rightImg8bit/train',
-        'seg': HDD_DIR + 'gtFine/train',
-        'disparity': HDD_DIR + 'disparity/train',
-        'cam': HDD_DIR + 'camera/train',
-        'left_seq': HDD_DIR + 'leftImg8bit_sequence/train',
-        'pose': HDD_DIR + 'vehicle/train'
+        'left_images': hdd_dir + 'leftImg8bit/train',
+        'right_images': hdd_dir + 'rightImg8bit/train',
+        'seg': hdd_dir + 'gtFine/train',
+        'disparity': hdd_dir + 'disparity/train',
+        'cam': hdd_dir + 'camera/train',
+        'left_seq': hdd_dir + 'leftImg8bit_sequence/train',
+        'pose': hdd_dir + 'vehicle/train'
     }
 
     test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
@@ -530,19 +530,25 @@ def some_test_idk():
     # print(classes)
 
 def move_hdd_to_ssd():
-    HDD_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
-    SSD_DIR = '/home/bryce/Documents/Cityscapes Data'
+    """
+    Copies cityscapes data from one directory to another
+    """
+    hdd_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
+    ssd_dir = '/home/bryce/Documents/Cityscapes Data'
 
-    SUBSETS = {
+    subsets = {
         'l_img': 'leftImg8bit/train',
         'r_img': 'rightImg8bit/train',
         'l_seq': 'leftImg8bit_sequence/train',
         'seg': 'gtFine/train',
     }
 
-    copy_cityscapes(HDD_DIR, SUBSETS, SSD_DIR)
+    copy_cityscapes(hdd_dir, subsets, ssd_dir)
 
 def regex_rep_test():
+    """
+    Testing incrementing correctly with regex
+    """
     testsrc = 'frankfurt_000001_000099_leftImg8bit'
     testseq = 'frankfurt_000001_000100_leftImg8bit'
     testrseq = 'frankfurt_000001_000100_rightImg8bit'

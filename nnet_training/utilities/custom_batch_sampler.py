@@ -1,3 +1,7 @@
+r"""
+Extension to pytorch batch sampler to also yield a random scalar between a given range.
+"""
+
 import random
 
 from torch.utils.data import Sampler
@@ -17,14 +21,19 @@ class BatchSamplerRandScale(Sampler):
         scale_range (List): The range in which will be the sample will be randomly scaled
 
     Example:
-        >>> list(BatchSamplerRandScale(SequentialSampler(range(10)), batch_size=3, drop_last=False, scale_range=[0.5,1]))
-        [[(0, 0.65), (1, 0.65), (2, 0.65)], [(3, 0.8), (4, 0.8), (5, 0.8)], [(6, 0.93), (7, 0.93), (8, 0.93)], [(9, 0.54)]]
+        >>> list(BatchSamplerRandScale(SequentialSampler(range(10)),
+                batch_size=3, drop_last=False, scale_range=[0.5,1]))
+        [[(0, 0.65), (1, 0.65), (2, 0.65)],
+         [(3, 0.8), (4, 0.8), (5, 0.8)],
+         [(6, 0.93), (7, 0.93), (8, 0.93)],
+         [(9, 0.54)]]
     """
 
     def __init__(self, sampler, batch_size, drop_last, scale_range):
         # Since collections.abc.Iterable does not check for `__getitem__`, which
         # is one way for an object to be an iterable, we don't do an `isinstance`
         # check here.
+        super().__init__(None)
         if not isinstance(batch_size, _int_classes) or isinstance(batch_size, bool) or \
                 batch_size <= 0:
             raise ValueError("batch_size should be a positive integer value, "
@@ -58,5 +67,6 @@ class BatchSamplerRandScale(Sampler):
         return (len(self.sampler) + self.batch_size - 1) // self.batch_size
 
 if __name__ == "__main__":
-    test = list(BatchSamplerRandScale(SequentialSampler(range(10)), batch_size=3, drop_last=False, scale_range=[0.5, 1]))
+    test = list(BatchSamplerRandScale(SequentialSampler(range(10)),
+        batch_size=3, drop_last=False, scale_range=[0.5, 1]))
     print(test)

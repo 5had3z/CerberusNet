@@ -24,8 +24,8 @@ import torchvision
 from nnet_training.nnet_models import get_model
 
 from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
-from nnet_training.utilities.KITTI import Kitti2015Dataset
-from nnet_training.utilities.CityScapes import CityScapesDataset
+from nnet_training.utilities.kitti_dataset import Kitti2015Dataset
+from nnet_training.utilities.cityscapes_dataset import CityScapesDataset
 from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric, OpticFlowMetric
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
