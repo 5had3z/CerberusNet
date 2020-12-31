@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Dataloader and misc utilities related to the cityscapes dataset
+"""
+
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
@@ -11,7 +15,7 @@ import json
 import multiprocessing
 from shutil import copy
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import torch
 import torchvision
@@ -418,20 +422,22 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     return dataloaders
 
-def copy_cityscapes(src_dir: Path, subsets: Dict[str, Path], dst_dir: Path):
+def copy_cityscapes(src_dir: Path, datasets: Dict[str, Path], subsets: List[str], dst_dir: Path):
     """
     Tool for copying over a subset of data to a new place i.e. HDD mass storage to SSD\n
     Requires you at least have l_img in the dictionary to act as a base for checking
-    correct corresponding subsets are being copied.
+    correct corresponding datasets are being copied.
     """
-    assert 'l_img' in subsets
+    assert 'l_img' in datasets
 
-    print("Copying ", subsets.keys(), " from ", src_dir, " to ", dst_dir)
+    print("Copying", datasets.keys(), "from", src_dir, "to", dst_dir)
 
     regex_map = {
         'l_img' : ['leftImg8bit', 'leftImg8bit'],
         'r_img' : ['leftImg8bit', 'rightImg8bit'],
         'seg' : ['leftImg8bit', 'gtFine_labelIds'],
+        'inst' : ['leftImg8bit', 'gtFine_instanceIds'],
+        'bbox' : ['leftImg8bit.png', 'gtFine_bbox.json'],
         'disp' : ['leftImg8bit', 'disparity'],
         'l_seq' : ['leftImg8bit', 'leftImg8bit'],
         'r_seq' : ['leftImg8bit', 'rightImg8bit'],
@@ -439,31 +445,38 @@ def copy_cityscapes(src_dir: Path, subsets: Dict[str, Path], dst_dir: Path):
         'pose' : ['leftImg8bit.png', 'vehicle.json']
     }
 
-    for dir_name, _, file_list in os.walk(os.path.join(src_dir, subsets['l_img'])):
-        for filename in file_list:
-            if filename.endswith(IMG_EXT):
-                l_imgpath = os.path.join(dir_name, filename)
+    for subset in subsets:
+        for dirpath, _, filenames in os.walk(os.path.join(src_dir, datasets['l_img'], subset)):
+            for filename in filenames:
+                if not filename.endswith(IMG_EXT):
+                    continue
+
+                l_imgpath = os.path.join(dirpath, filename)
                 foldername = os.path.basename(os.path.dirname(l_imgpath))
 
-                for datatype, directory in subsets.items():
+                for datatype, directory in datasets.items():
                     if datatype in ['l_seq', 'r_seq']:
                         frame_n = int(re.split("_", filename)[2])
                         img_name = filename.replace(
                             str(frame_n).zfill(6)+"_"+regex_map[datatype][0],
                             str(frame_n+1).zfill(6)+"_"+regex_map[datatype][1])
                     else:
-                        img_name = filename.replace(regex_map[datatype][0], regex_map[datatype][1])
-                    src_path = os.path.join(src_dir, directory, foldername, img_name)
-                    dst_path = os.path.join(dst_dir, directory, foldername, img_name)
+                        img_name = filename.replace(
+                            regex_map[datatype][0], regex_map[datatype][1])
+
+                    src_path = os.path.join(src_dir, directory, subset, foldername, img_name)
+                    dst_path = os.path.join(dst_dir, directory, subset, foldername, img_name)
+
                     if not os.path.isfile(src_path):
                         print("Error finding corresponding data to ", l_imgpath)
                         continue
                     if os.path.isfile(dst_path):
                         continue
+
                     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                     copy(src_path, dst_path)
 
-    print("success copying: ", subsets.keys())
+    print("success copying: ", datasets.keys())
 
 def some_test_idk():
     import matplotlib.pyplot as plt
@@ -534,16 +547,19 @@ def move_hdd_to_ssd():
     Copies cityscapes data from one directory to another
     """
     hdd_dir = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data'
-    ssd_dir = '/home/bryce/Documents/Cityscapes Data'
+    ssd_dir = '/media/bryce/1TB Samsung/ml_datasets/cityscapes_data'
 
-    subsets = {
-        'l_img': 'leftImg8bit/train',
-        'r_img': 'rightImg8bit/train',
-        'l_seq': 'leftImg8bit_sequence/train',
-        'seg': 'gtFine/train',
+    datasets = {
+        'l_img': 'leftImg8bit',
+        'disp': 'disparity',
+        'l_seq': 'leftImg8bit_sequence',
+        'seg': 'gtFine',
+        'inst': 'gtFine'
     }
 
-    copy_cityscapes(hdd_dir, subsets, ssd_dir)
+    subsets = ['train', 'val']
+
+    copy_cityscapes(hdd_dir, datasets, subsets, ssd_dir)
 
 def regex_rep_test():
     """

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3.8
 
+"""
+Generates a demonstration for qualitative analysis of nnet model performance in each task.
+"""
+
 import os
 import re
 import sys
@@ -256,7 +260,7 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
         batch_flow = forward['flow'][0].detach().cpu().numpy()
 
         for i in range(batch_seg.shape[0]):
-            seg_frame = np.empty(shape=(resolution[1], resolution[0], 3), dtype=np.uint8)
+            seg_frame = np.empty(shape=(y_res, x_res, 3), dtype=np.uint8)
             for j in range(3):
                 seg_frame[..., j] = cv2.LUT(batch_seg[i].astype(np.uint8), color_lut[:, j])
             cv2.cvtColor(seg_frame, cv2.COLOR_RGB2BGR, dst=seg_frame)

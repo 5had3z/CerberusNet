@@ -1,4 +1,4 @@
-r"""
+"""
 Extension to pytorch batch sampler to also yield a random scalar between a given range.
 """
 
