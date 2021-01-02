@@ -112,7 +112,7 @@ def write_info_json(inst_path: str, bbox_info: List[Dict[str, Union[int, np.ndar
     with open(json_path, 'w') as bbox_file:
         json.dump(bbox_info, bbox_file)
 
-def test_image():
+def test_image_processing():
     """
     Tests algo on single image and shows output.
     """

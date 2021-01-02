@@ -50,7 +50,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         @param rand_rotation randomly rotates an image a maximum number of degrees.\n
         @param rand_brightness, the maximum random increase or decrease as a percentage.
         '''
-        super(CityScapesDataset, self).__init__()
+        super().__init__()
         l_img_key = None
 
         for key in directories.keys():
@@ -71,13 +71,14 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.cam = []
             elif key == 'pose':
                 self.pose = []
+            elif key == 'bbox':
+                self.bbox = []
 
-        if not hasattr(self, 'seg') and not hasattr(self, 'l_disp') and \
-                not (hasattr(self, 'l_seq') or hasattr(self, 'r_seq')):
-            print("Neither Segmentation, Disparity or Img Sequence Keys are defined")
+        if not any(hasattr(self, key_) for key_ in ['seg', 'l_disp', 'l_seq', 'bbox']):
+            Warning("Neither Segmentation, Disparity, Img Sequence or Boundary Box Keys are used")
 
         if l_img_key is None:
-            print("Empty dataset given to base cityscapes dataset")
+            Warning("Empty dataset given to base cityscapes dataset")
         else:
             self._initialize_dataset(directories, l_img_key, **kwargs)
 
@@ -117,91 +118,101 @@ class CityScapesDataset(torch.utils.data.Dataset):
         """
         Gets all the filenames
         """
-        for dir_name, _, file_list in os.walk(directories[l_img_key]):
-            for filename in file_list:
-                if filename.endswith(IMG_EXT):
-                    read_check = True
-                    l_imgpath = os.path.join(dir_name, filename)
-                    foldername = os.path.basename(os.path.dirname(l_imgpath))
+        for dirpath, _, filenames in os.walk(directories[l_img_key]):
+            for filename in filenames:
+                if not filename.endswith(IMG_EXT):
+                    continue
 
-                    if hasattr(self, 'r_img'):
-                        r_imgname = filename.replace('leftImg8bit', 'rightImg8bit')
-                        r_imgpath = os.path.join(
-                            directories['right_images'], foldername, r_imgname)
-                        if not os.path.isfile(r_imgpath):
-                            read_check = False
-                            print("Error finding corresponding right image to ", l_imgpath)
+                read_check = True
+                l_imgpath = os.path.join(dirpath, filename)
+                foldername = os.path.basename(os.path.dirname(l_imgpath))
+                frame_n = int(re.split("_", filename)[2])
 
-                    if hasattr(self, 'seg'):
-                        seg_name = filename.replace('leftImg8bit', 'gtFine_labelIds')
-                        seg_path = os.path.join(
-                            directories['seg'], foldername, seg_name)
-                        if not os.path.isfile(seg_path):
-                            read_check = False
-                            print("Error finding corresponding segmentation image to ", l_imgpath)
+                if hasattr(self, 'r_img'):
+                    r_imgpath = os.path.join(
+                        directories['right_images'], foldername,
+                        filename.replace('leftImg8bit', 'rightImg8bit'))
+                    if not os.path.isfile(r_imgpath):
+                        read_check = False
+                        print("Error finding corresponding right image to ", l_imgpath)
 
-                    if hasattr(self, 'l_disp'):
-                        disp_name = filename.replace('leftImg8bit', 'disparity')
-                        disp_path = os.path.join(
-                            directories['disparity'], foldername, disp_name)
-                        if not os.path.isfile(disp_path):
-                            read_check = False
-                            print("Error finding corresponding disparity image to ", l_imgpath)
+                if hasattr(self, 'seg'):
+                    seg_path = os.path.join(
+                        directories['seg'], foldername,
+                        filename.replace('leftImg8bit', 'gtFine_labelIds'))
+                    if not os.path.isfile(seg_path):
+                        read_check = False
+                        print("Error finding corresponding segmentation image to ", l_imgpath)
 
-                    if hasattr(self, 'l_seq'):
-                        frame_n = int(re.split("_", filename)[2])
-                        left_seq_name = filename.replace(
-                            str(frame_n).zfill(6), str(frame_n+1).zfill(6))
-                        left_seq_path = os.path.join(
-                            directories['left_seq'], foldername, left_seq_name)
-                        if not os.path.isfile(left_seq_path):
-                            read_check = False
-                            print("Error finding corresponding left sequence image to ", l_imgpath)
+                if hasattr(self, 'l_disp'):
+                    disp_path = os.path.join(
+                        directories['disparity'], foldername,
+                        filename.replace('leftImg8bit', 'disparity'))
+                    if not os.path.isfile(disp_path):
+                        read_check = False
+                        print("Error finding corresponding disparity image to ", l_imgpath)
 
-                    if hasattr(self, 'r_seq'):
-                        frame_n = int(re.split("_", filename)[2])
-                        right_seq_name = filename.replace(
+                if hasattr(self, 'l_seq'):
+                    left_seq_path = os.path.join(
+                        directories['left_seq'], foldername,
+                        filename.replace(
+                            str(frame_n).zfill(6), str(frame_n+1).zfill(6)))
+                    if not os.path.isfile(left_seq_path):
+                        read_check = False
+                        print("Error finding corresponding left sequence image to ", l_imgpath)
+
+                if hasattr(self, 'r_seq'):
+                    right_seq_path = os.path.join(
+                        directories['right_seq'], foldername,
+                        filename.replace(
                             str(frame_n).zfill(6)+"_leftImg8bit",
-                            str(frame_n+1).zfill(6)+"_rightImg8bit"
-                        )
-                        right_seq_path = os.path.join(
-                            directories['right_seq'], foldername, right_seq_name)
-                        if not os.path.isfile(right_seq_path):
-                            read_check = False
-                            print("Error finding corresponding right sequence image to ", l_imgpath)
+                            str(frame_n+1).zfill(6)+"_rightImg8bit"))
+                    if not os.path.isfile(right_seq_path):
+                        read_check = False
+                        print("Error finding corresponding right sequence image to ", l_imgpath)
 
+                if hasattr(self, 'cam'):
+                    cam_path = os.path.join(
+                        directories['cam'], foldername,
+                        filename.replace('leftImg8bit.png', 'camera.json'))
+                    if not os.path.isfile(cam_path):
+                        read_check = False
+                        print("Error finding corresponding camera parameters to ", l_imgpath)
+
+                if hasattr(self, 'pose'):
+                    pose_path = os.path.join(
+                        directories['pose'], foldername,
+                        filename.replace('leftImg8bit.png', 'vehicle.json'))
+                    if not os.path.isfile(pose_path):
+                        read_check = False
+                        print("Error finding corresponding GPS/Pose information to ", l_imgpath)
+
+                if hasattr(self, 'bbox'):
+                    bbox_path = os.path.join(
+                        directories['bbox'], foldername,
+                        filename.replace('leftImg8bit.png', 'gtFine_bbox.json'))
+                    if not os.path.isfile(bbox_path):
+                        read_check = False
+                        print("Error finding corresponding bbox information to ", l_imgpath)
+
+                if read_check:
+                    self.l_img.append(l_imgpath)
+                    if hasattr(self, 'r_img'):
+                        self.r_img.append(r_imgpath)
+                    if hasattr(self, 'seg'):
+                        self.seg.append(seg_path)
+                    if hasattr(self, 'l_disp'):
+                        self.l_disp.append(disp_path)
+                    if hasattr(self, 'l_seq'):
+                        self.l_seq.append(left_seq_path)
+                    if hasattr(self, 'r_seq'):
+                        self.r_seq.append(right_seq_path)
                     if hasattr(self, 'cam'):
-                        cam_name = filename.replace('leftImg8bit.png', 'camera.json')
-                        cam_path = os.path.join(
-                            directories['cam'], foldername, cam_name)
-                        if not os.path.isfile(cam_path):
-                            read_check = False
-                            print("Error finding corresponding camera parameters to ", l_imgpath)
-
+                        self.cam.append(cam_path)
                     if hasattr(self, 'pose'):
-                        pose_name = filename.replace('leftImg8bit.png', 'vehicle.json')
-                        pose_path = os.path.join(
-                            directories['pose'], foldername, pose_name)
-                        if not os.path.isfile(pose_path):
-                            read_check = False
-                            print("Error finding corresponding GPS/Pose information to ", l_imgpath)
-
-                    if read_check:
-                        self.l_img.append(l_imgpath)
-                        if hasattr(self, 'r_img'):
-                            self.r_img.append(r_imgpath)
-                        if hasattr(self, 'seg'):
-                            self.seg.append(seg_path)
-                        if hasattr(self, 'l_disp'):
-                            self.l_disp.append(disp_path)
-                        if hasattr(self, 'l_seq'):
-                            self.l_seq.append(left_seq_path)
-                        if hasattr(self, 'r_seq'):
-                            self.r_seq.append(right_seq_path)
-                        if hasattr(self, 'cam'):
-                            self.cam.append(cam_path)
-                        if hasattr(self, 'pose'):
-                            self.pose.append(pose_path)
+                        self.pose.append(pose_path)
+                    if hasattr(self, 'bbox'):
+                        self.pose.append(bbox_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if 'id_vector' in kwargs:
@@ -220,6 +231,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.cam = [self.cam[i] for i in kwargs['id_vector']]
             if hasattr(self, 'pose'):
                 self.pose = [self.pose[i] for i in kwargs['id_vector']]
+            if hasattr(self, 'bbox'):
+                self.bbox = [self.bbox[i] for i in kwargs['id_vector']]
 
     def __len__(self):
         return len(self.l_img)
@@ -245,18 +258,23 @@ class CityScapesDataset(torch.utils.data.Dataset):
             epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
         if hasattr(self, 'r_seq'):
             epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
+        if hasattr(self, 'bbox'):
+            epoch_data['bbox'] = self.bbox_json(self.bbox[idx])
 
         self._sync_transform(epoch_data)
 
         if hasattr(self, 'cam'):
-            epoch_data["cam"] = self.json_to_intrinsics(self.cam[idx])
+            epoch_data["cam"] = self.intrinsics_json(self.cam[idx])
 
         # if hasattr(self, 'pose'):
-        #     epoch_data["pose"] = self.json_to_pose(self.pose[idx])
+        #     epoch_data["pose"] = self.pose_json(self.pose[idx])
 
         return epoch_data
 
     def _sync_transform(self, epoch_data):
+        """
+        Augments and formats all the batch data in a synchronised manner
+        """
         scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
         self.output_shape = [scale_func(x) for x in self.base_size]
 
@@ -338,24 +356,41 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         return torch.FloatTensor(disparity)
 
-    def json_to_intrinsics(self, json_path):
+    @staticmethod
+    def intrinsics_json(json_path):
+        """
+        Parses camera instrics json and returns intrinsics and baseline transform matricies.
+        """
         with open(json_path) as json_file:
             #   Camera Intrinsic Matrix
-            K = np.eye(4, dtype=np.float32) #Idk why size 4? (To match translation?)
+            k_mat = np.eye(4, dtype=np.float32) #Idk why size 4? (To match translation?)
             json_data = json.load(json_file)
-            K[0, 0] = json_data["intrinsic"]["fx"]
-            K[1, 1] = json_data["intrinsic"]["fy"]
-            K[0, 2] = json_data["intrinsic"]["u0"]
-            K[1, 2] = json_data["intrinsic"]["v0"]
+            k_mat[0, 0] = json_data["intrinsic"]["fx"]
+            k_mat[1, 1] = json_data["intrinsic"]["fy"]
+            k_mat[0, 2] = json_data["intrinsic"]["u0"]
+            k_mat[1, 2] = json_data["intrinsic"]["v0"]
 
             #   Transformation Mat between cameras
             stereo_t = np.eye(4, dtype=np.float32)
             stereo_t[0, 3] = json_data["extrinsic"]["baseline"]
 
-        return {"K":K, "inv_K":np.linalg.pinv(K), "baseline_T":stereo_t}
+        return {"K":k_mat, "inv_K":np.linalg.pinv(k_mat), "baseline_T":stereo_t}
 
-    def json_to_pose(self, json_path):
+    @staticmethod
+    def pose_json(json_path: str):
+        """
+        Parse json with gps pose information and return dictionary of information.
+        """
         raise NotImplementedError
+
+    @staticmethod
+    def bbox_json(json_path: str):
+        """
+        Parse json with bbox information and return list of information.
+        """
+        with open(json_path) as json_file:
+            json_data = json.load(json_file)
+        return json_data
 
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     """
