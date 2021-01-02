@@ -9,7 +9,8 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
-from typing import List
+import json
+from typing import List, Dict, Union
 
 import cv2
 import numpy as np
@@ -18,7 +19,17 @@ from PIL import Image
 from nnet_training.utilities.visualisation import CITYSPALLETTE
 from nnet_training.utilities.cityscapes_labels import label2trainid, trainId2name
 
-def visualise_output(base_img: np.ndarray, bbox_list: List[np.ndarray]):
+def cs_seg_gen(path_: str) -> str:
+    """
+    Generator that yields all relevant image paths in the dataset
+    """
+    for dirpath, _, filenames in os.walk(path_):
+        for filename in filenames:
+            if filename.endswith('gtFine_instanceIds.png'):
+                yield os.path.join(dirpath, filename)
+
+def visualise_output(base_img: np.ndarray,
+    bbox_list: List[Dict[str, Union[int, np.ndarray]]]) -> None:
     """
     Shows overlay of bboxes generated and semantic segmentation gt.
     """
@@ -37,13 +48,11 @@ def visualise_output(base_img: np.ndarray, bbox_list: List[np.ndarray]):
     cv2.imshow("bbox test", overlay_img)
     cv2.waitKey(0)
 
-def seg_cv2_bgr(src_path: str) -> np.ndarray:
+def seg_cv2_bgr(path_: str) -> np.ndarray:
     """
     Returns RGB image for gt labeled image segmentation
     """
-    seg_img = np.array(Image.open(
-        os.path.join(src_path, 'aachen_000000_000019_gtFine_labelIds.png')
-        ))
+    seg_img = np.array(Image.open(path_), dtype=np.int16)
 
     keys = np.array([255, 255, 255, 255, 255, 255,
                      255, 255, 0, 1, 255, 255,
@@ -71,7 +80,7 @@ def seg_cv2_bgr(src_path: str) -> np.ndarray:
 
     return seg_frame
 
-def bbox_info_from_instance(inst_img: np.ndarray)->List[np.ndarray]:
+def bbox_info_from_instance(inst_img: np.ndarray) -> List[Dict[str, Union[int, np.ndarray]]]:
     """
     Given a pixel-wise instance label of image, generate a list of bboxes.\n
     Non instance-wise labels are id'd as 0-23. Instanced labels are labeled as xxyyy, \
@@ -80,33 +89,43 @@ def bbox_info_from_instance(inst_img: np.ndarray)->List[np.ndarray]:
     bbox_dict = {}
     for x_idx in range(0, inst_img.shape[1]):
         for y_idx in range(0, inst_img.shape[0]):
-            inst_id = inst_img[y_idx, x_idx]
+            inst_id = int(inst_img[y_idx, x_idx])
             if inst_id in bbox_dict.keys():
                 bbox_dict[inst_id][0] = min(bbox_dict[inst_id][0], x_idx)
                 bbox_dict[inst_id][1] = min(bbox_dict[inst_id][1], y_idx)
                 bbox_dict[inst_id][2] = max(bbox_dict[inst_id][2], x_idx)
                 bbox_dict[inst_id][3] = max(bbox_dict[inst_id][3], y_idx)
             elif inst_id > 23:
-                bbox_dict[inst_id] = np.asarray([x_idx, y_idx, x_idx, y_idx])
+                bbox_dict[inst_id] = [x_idx, y_idx, x_idx, y_idx]
 
     return [{'id': inst_id // 1000,
             'train_id' : label2trainid[inst_id // 1000],
             'bbox' : bbox}
             for inst_id, bbox in bbox_dict.items()]
 
+def write_info_json(inst_path: str, bbox_info: List[Dict[str, Union[int, np.ndarray]]]) -> None:
+    """
+    Writes bbox info to json file
+    """
+    json_path = inst_path.replace('instanceIds.png','bbox.json')
+    with open(json_path, 'w') as bbox_file:
+        json.dump(bbox_info, bbox_file)
+
 def test_image():
     """
     Tests algo on single image and shows output.
     """
     src_path = '/media/bryce/1TB Samsung/ml_datasets/cityscapes_data/gtFine/train/aachen'
+    inst_path = os.path.join(src_path, 'aachen_000000_000019_gtFine_instanceIds.png')
+    seg_path = os.path.join(src_path, 'aachen_000000_000019_gtFine_labelIds.png')
 
-    inst_img = np.array(Image.open(
-        os.path.join(src_path, 'aachen_000000_000019_gtFine_instanceIds.png')
-        ))
+    inst_img = np.array(Image.open(inst_path), dtype=np.int16)
 
-    base_img = seg_cv2_bgr(src_path)
+    base_img = seg_cv2_bgr(seg_path)
 
     bboxes = bbox_info_from_instance(inst_img)
+
+    write_info_json(inst_path, bboxes)
 
     visualise_output(base_img, bboxes)
 
