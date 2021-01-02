@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image
 
 from nnet_training.utilities.visualisation import CITYSPALLETTE
+from nnet_training.utilities.cityscapes_labels import label2trainid, trainId2name
 
 def visualise_output(base_img: np.ndarray, bbox_list: List[np.ndarray]):
     """
@@ -23,8 +24,13 @@ def visualise_output(base_img: np.ndarray, bbox_list: List[np.ndarray]):
     """
     overlay_img = np.zeros_like(base_img)
 
-    for bbox in bbox_list:
-        overlay_img = cv2.rectangle(overlay_img, tuple(bbox[:2]), tuple(bbox[2:]), (255, 0, 0))
+    for bbox_info in bbox_list:
+        bbox = bbox_info['bbox']
+        overlay_img = cv2.rectangle(
+            overlay_img, tuple(bbox[:2]), tuple(bbox[2:]), (255, 0, 0), thickness=2)
+        cv2.putText(
+            overlay_img, trainId2name[bbox_info['train_id']], tuple(bbox[:2]),
+            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     cv2.add(overlay_img, base_img, dst=overlay_img)
 
@@ -65,9 +71,11 @@ def seg_cv2_bgr(src_path: str) -> np.ndarray:
 
     return seg_frame
 
-def generate_bboxs_from_instance(inst_img: np.ndarray)->List[np.ndarray]:
+def bbox_info_from_instance(inst_img: np.ndarray)->List[np.ndarray]:
     """
-    Given a pixel-wise instance label of image, generate a list of bboxes.
+    Given a pixel-wise instance label of image, generate a list of bboxes.\n
+    Non instance-wise labels are id'd as 0-23. Instanced labels are labeled as xxyyy, \
+    where xx is the class id and yyy is the unique number for that instance.
     """
     bbox_dict = {}
     for x_idx in range(0, inst_img.shape[1]):
@@ -78,14 +86,17 @@ def generate_bboxs_from_instance(inst_img: np.ndarray)->List[np.ndarray]:
                 bbox_dict[inst_id][1] = min(bbox_dict[inst_id][1], y_idx)
                 bbox_dict[inst_id][2] = max(bbox_dict[inst_id][2], x_idx)
                 bbox_dict[inst_id][3] = max(bbox_dict[inst_id][3], y_idx)
-            elif inst_id > 1000:
+            elif inst_id > 23:
                 bbox_dict[inst_id] = np.asarray([x_idx, y_idx, x_idx, y_idx])
 
-    return bbox_dict.values()
+    return [{'id': inst_id // 1000,
+            'train_id' : label2trainid[inst_id // 1000],
+            'bbox' : bbox}
+            for inst_id, bbox in bbox_dict.items()]
 
 def test_image():
     """
-    Tests algo on single image and shows output
+    Tests algo on single image and shows output.
     """
     src_path = '/media/bryce/1TB Samsung/ml_datasets/cityscapes_data/gtFine/train/aachen'
 
@@ -95,7 +106,7 @@ def test_image():
 
     base_img = seg_cv2_bgr(src_path)
 
-    bboxes = generate_bboxs_from_instance(inst_img)
+    bboxes = bbox_info_from_instance(inst_img)
 
     visualise_output(base_img, bboxes)
 
