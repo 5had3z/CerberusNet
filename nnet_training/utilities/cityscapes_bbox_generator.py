@@ -10,6 +10,7 @@ __email__ = "bryce.ferenczi@monashmotorsport.com"
 
 import os
 import json
+import multiprocessing
 from typing import List, Dict, Union
 
 import cv2
@@ -129,6 +130,22 @@ def test_image():
 
     visualise_output(base_img, bboxes)
 
+def generate_bbox_json(path_: str) -> None:
+    """
+    Given a path to the instance segmentation, creates and writes the bbox info json.
+    """
+    inst_img = np.array(Image.open(path_), dtype=np.int16)
+    bboxes = bbox_info_from_instance(inst_img)
+    write_info_json(path_, bboxes)
+
+def main(path_: str) -> None:
+    """
+    Traverses segmentation ground truth folder and generates the bbox info json file for each.
+    """
+    print(f"Parsing {path_}")
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.map(generate_bbox_json, cs_seg_gen(path_))
+    print("Done!")
 
 if __name__ == "__main__":
-    test_image()
+    main('/media/bryce/1TB Samsung/ml_datasets/cityscapes_data/gtFine')
