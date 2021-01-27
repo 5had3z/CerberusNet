@@ -84,8 +84,7 @@ int ScatterNDPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const 
             break;
         }
         default:
-            throw( std::runtime_error{"ScatterNDPlugin Unsupported Input Type"} );
-            break;
+            throw std::runtime_error{"ScatterNDPlugin Unsupported Input Type"};
     }
 
     return cudaGetLastError();
