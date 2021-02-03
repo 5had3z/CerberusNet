@@ -2,8 +2,7 @@
 #include "trt_utils.hpp"
 #include "cuda_fp16.h"
 
-#define CUDA_NUM_THREADS 1024
-#define THREADS_PER_BLOCK 32
+static constexpr int THREADS_PER_BLOCK = 32;
 
 template <typename scalar_t>
 __global__ void channels_first(const scalar_t* __restrict__ input, scalar_t* rinput,
@@ -159,8 +158,7 @@ int CorrelationPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, cons
 		}
 		default:
 		{
-			throw( std::runtime_error{"Correlation Plugin Unsupported Input Type"} );
-            break;
+			throw std::runtime_error{"Correlation Plugin Unsupported Input Type"};
 		}
 	}
 

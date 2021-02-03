@@ -24,7 +24,7 @@ void flow_image(const scalar_t* flow_image, u_char* rgb_image,
     size_t image_size, cudaStream_t Stream);
 
 static Logger gLogger;
-#define MAX_WORKSPACE (1UL << 32)
+static constexpr auto MAX_WORKSPACE = 1UL << 32;
 
 CERBERUS::CERBERUS() :
     m_Network(nullptr),
