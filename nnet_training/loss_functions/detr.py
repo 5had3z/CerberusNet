@@ -12,6 +12,8 @@ import nnet_training.nnet_models.detr.box_ops as box_ops
 from nnet_training.nnet_models.detr.segmentation import sigmoid_focal_loss
 from nnet_training.nnet_models.detr.segmentation import dice_loss
 
+from nnet_training.nnet_models.detr.matcher import HungarianMatcher
+
 from nnet_training.nnet_models.detr.misc import accuracy
 from nnet_training.nnet_models.detr.misc import nested_tensor_from_tensor_list
 from nnet_training.nnet_models.detr.misc import interpolate
@@ -24,7 +26,7 @@ class DetrLoss(torch.nn.Module):
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
-    def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses):
+    def __init__(self, num_classes, weight_dict, eos_coef, losses, weight=1.0, **kwargs):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -36,7 +38,8 @@ class DetrLoss(torch.nn.Module):
         """
         super().__init__()
         self.num_classes = num_classes
-        self.matcher = matcher
+        self.matcher = HungarianMatcher(**kwargs['matcher_cfg'])
+        self.weight = weight
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = losses
@@ -48,8 +51,8 @@ class DetrLoss(torch.nn.Module):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
-        assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits']
+        assert 'logits' in outputs
+        src_logits = outputs['logits']
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -73,7 +76,7 @@ class DetrLoss(torch.nn.Module):
             This is not really a loss, it is intended for logging purposes only, it doesn't
             propagate gradients.
         """
-        pred_logits = outputs['pred_logits']
+        pred_logits = outputs['logits']
         device = pred_logits.device
         tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
@@ -89,9 +92,9 @@ class DetrLoss(torch.nn.Module):
             The target boxes are expected in format (center_x, center_y, w, h),
             normalized by the image size.
         """
-        assert 'pred_boxes' in outputs
+        assert 'bboxes' in outputs
         idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs['pred_boxes'][idx]
+        src_boxes = outputs['bboxes'][idx]
         target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
@@ -110,11 +113,11 @@ class DetrLoss(torch.nn.Module):
            targets dicts must contain the key "masks" containing a tensor of dim
            [nb_target_boxes, h, w]
         """
-        assert "pred_masks" in outputs
+        assert "masks" in outputs
 
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
+        src_masks = outputs["masks"]
         src_masks = src_masks[src_idx]
         masks = [t["masks"] for t in targets]
         # TODO use valid to mask invalid areas due to padding in loss
@@ -135,13 +138,15 @@ class DetrLoss(torch.nn.Module):
         }
         return losses
 
-    def _get_src_permutation_idx(self, indices):
+    @staticmethod
+    def _get_src_permutation_idx(indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
-    def _get_tgt_permutation_idx(self, indices):
+    @staticmethod
+    def _get_tgt_permutation_idx(indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
         tgt_idx = torch.cat([tgt for (_, tgt) in indices])
@@ -165,10 +170,10 @@ class DetrLoss(torch.nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see docs
         """
-        outputs_without_aux = {k: v for k, v in predictions.items() if k != 'aux_outputs'}
+        detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes', 'masks']}
 
         # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
+        indices = self.matcher(detr_outputs, targets)
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -199,4 +204,4 @@ class DetrLoss(torch.nn.Module):
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        return losses
+        return self.weight * sum([losses[k] * self.weight_dict[k] for k in losses])

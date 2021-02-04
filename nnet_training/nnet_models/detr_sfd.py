@@ -116,15 +116,16 @@ class DetrSegmHead(nn.Module):
                                     padded pixels
 
             It returns a dict with the following elements:
-               - "pred_logits": the classification logits (including no-object) for all queries.
+               - "logits": the classification logits (including no-object) for all queries.
                                 Shape= [batch_size x num_queries x (num_classes + 1)]
-               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
+               - "bboxes": The normalized boxes coordinates for all queries, represented as
                                (center_x, center_y, height, width). These values are normalized in
                                [0, 1], relative to the size of each individual image (disregarding
                                possible padding).
                                See PostProcess for information on how to retrieve the unnormalized
                                bounding box.
-               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a
+               - "masks": Segmentation masks for the predicted bboxes
+               - "detr_aux": Optional, only returned when auxilary losses are activated. It is a
                                 list of dictionnaries containing the two above keys for each decoder
                                 layer.
         """
@@ -136,15 +137,15 @@ class DetrSegmHead(nn.Module):
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
+        out = {'logits': outputs_class[-1], 'bboxes': outputs_coord[-1]}
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+            out['detr_aux'] = self._set_aux_loss(outputs_class, outputs_coord)
 
         if hasattr(self, 'bbox_attention') and hasattr(self, 'mask_head'):
             bbox_mask = self.bbox_attention(hs[-1], memory, mask=mask)
             seg_masks = self.mask_head(
                 src_proj, bbox_mask, [features[2], features[1], features[0]])
-            out["pred_masks"] = seg_masks.view(
+            out["masks"] = seg_masks.view(
                 features[-1].shape[0], self.detr.num_queries,
                 seg_masks.shape[-2], seg_masks.shape[-1])
 
