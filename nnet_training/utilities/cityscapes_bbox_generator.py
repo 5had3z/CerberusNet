@@ -6,7 +6,7 @@ dataset.
 """
 
 __author__ = "Bryce Ferenczi"
-__email__ = "bryce.ferenczi@monashmotorsport.com"
+__email__ = "bryce.ferenczi@monash.edu"
 
 import os
 import json
