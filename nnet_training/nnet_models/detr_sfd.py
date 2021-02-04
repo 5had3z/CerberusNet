@@ -2,11 +2,16 @@
 Example Config Structure
 
 "model" : {
-    "name" : "OCRNetSFD",
+    "name" : "DetrNetSFD",
     "args" : {
-        "ocr_config" : {
-            "mid_channels" : 512, "key_channels" : 256, "classes" : 19
+        "detr_config" : {
+            "num_channels" : 512, "num_classes" : 19, "num_queries" : 100,
+            "aux_loss" : False
         },
+        "transformer_config" : {
+            "dropout" : 0.1, "enc_layers" : 6, "dec_layers" : 6,
+            "dim_feedforward" : 2048, "hidden_dim" : 256, "n_heads" : 8
+        }
         "hrnetv2_config" : {
             "pretrained" : "hrnetv2_w48_imagenet_pretrained.pth",
             "STAGE1" : {
@@ -29,10 +34,6 @@ Example Config Structure
                 "NUM_BLOCKS" : [4, 4, 4, 4], "NUM_CHANNELS" : [48, 96, 192, 384],
                 "FUSE_METHOD" : "SUM"
             }
-        },
-        "depth_est_network" : {
-            "type" : "DepthEstimator1",
-            "args" : { "pre_out_ch" : 32 }
         },
         "correlation_args" : {
             "pad_size" : 4, "max_displacement" : 4,
@@ -57,7 +58,6 @@ Example Config Structure
 
 """
 
-from collections import OrderedDict
 from typing import List, Dict
 
 import torch
@@ -68,44 +68,22 @@ from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
 from .hrnetv2 import get_seg_model
-from .ocrnet import OCR_block, scale_as
 from .pwcnet_modules import FlowEstimatorDense, FlowEstimatorLite, ContextNetwork, pwc_conv
+from .ocrnet_sfd import DepthHeadV1, scale_as
+from .detr.detr import DetrHead
+from .detr.transformer import Transformer
 
-class DepthHeadV1(nn.Module):
+class DetrNetSFD(nn.Module):
     """
-    Ultra basic to get things started
-    """
-    def __init__(self, in_ch, inter_ch: List[int], **kwargs):
-        super().__init__()
-        mod_list = OrderedDict({"conv0": nn.Conv2d(in_ch, inter_ch[0], 1)})
-        mod_list["relu0"] = nn.ReLU(True)
-
-        for idx in range(1, len(inter_ch)):
-            mod_list[f"conv{idx}"] = nn.Conv2d(inter_ch[idx-1], inter_ch[idx], 3)
-            mod_list[f"relu{idx}"] = nn.ReLU(True)
-
-        mod_list[f"conv{len(inter_ch)}"] = nn.Conv2d(inter_ch[-1], 1, 3)
-        mod_list[f"relu{len(inter_ch)}"] = nn.ReLU(True)
-
-        self.net = nn.Sequential(mod_list)
-
-    def forward(self, x):
-        out = self.net(x)
-        out = nn.functional.interpolate(
-            out, size=tuple(x.size()[2:]), mode="bilinear", align_corners=True)
-        return out
-
-
-class OCRNetSFD(nn.Module):
-    """
-    OCRNet with Segmentation + Optic Flow Output
+    HRNetV2 with Segmentation + Optic Flow Output
     """
     def __init__(self, **kwargs):
         super().__init__()
-        self.modelname = "OCRNetSFD"
+        self.modelname = "DetrNetSFD"
 
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
-        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs['ocr_config'])
+        self.detr = DetrHead(
+            transformer=Transformer(**kwargs['transformer_config']), **kwargs['detr_config'])
 
         if 'correlation_args' in kwargs:
             search_range = kwargs['correlation_args']['max_displacement']
@@ -196,9 +174,9 @@ class OCRNetSFD(nn.Module):
 
     def forward(self, l_img: torch.Tensor, consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         """
-        Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs.
-        \nDuring onnx export, consistency becomes the sequential image argument because onnx\
-        export is not compatible with keyword aruments.
+        Forward method for HRNetV2 with segmentation, flow and depth, returns dictionary \
+        of outputs.\n During onnx export, consistency becomes the sequential image argument \
+        because onnx export is not compatible with keyword aruments.
         """
         forward = {}
 
@@ -206,7 +184,7 @@ class OCRNetSFD(nn.Module):
         high_level_features, im1_pyr = self.backbone(l_img)
 
         # Segmentation pass with image 1
-        forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
+        forward['seg'], forward['seg_aux'], _ = self.detr(high_level_features)
         forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
 
         # Depth pass with image 1

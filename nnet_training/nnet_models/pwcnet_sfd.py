@@ -58,7 +58,7 @@ class SegmentationNet1(nn.Module):
     Module for extracting semantic segmentation from encoding pyramid
     '''
     def __init__(self, input_ch: List[int], classes=19, interm_ch=32, **kwargs):
-        super(SegmentationNet1, self).__init__()
+        super().__init__()
         self.classifier = Classifer(interm_ch, classes)
 
         if 'g_noise' in kwargs and kwargs['g_noise'] != 0.0:
@@ -95,7 +95,7 @@ class DepthEstimator1(nn.Module):
     Simple Prototype Depth Estimation Module
     """
     def __init__(self, in_channels: int, pre_out_ch: 32, **kwargs):
-        super(DepthEstimator1, self).__init__()
+        super().__init__()
         in_int_mean = (in_channels + pre_out_ch) // 2
         self.network = nn.Sequential(
             nn.Conv2d(in_channels, in_int_mean, 3),
@@ -114,7 +114,7 @@ class MonoSFDNet(nn.Module):
     Monocular image sequence to segmentation, depth and optic flow
     '''
     def __init__(self, upsample=True, **kwargs):
-        super(MonoSFDNet, self).__init__()
+        super().__init__()
         self.upsample = upsample
         self.output_level = 4
         self.modelname = "MonoSFDNet"

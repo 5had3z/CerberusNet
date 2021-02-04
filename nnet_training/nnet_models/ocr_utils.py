@@ -16,6 +16,16 @@ def BNReLU(ch):
     """
     return nn.Sequential(nn.BatchNorm2d(ch), nn.ReLU())
 
+def scale_as(x, y):
+    '''
+    scale x to the same size as y
+    '''
+    y_size = y.size(2), y.size(3)
+    x_scaled = nn.functional.interpolate(x, size=y_size, mode='bilinear',
+                                         align_corners=True)
+
+    return x_scaled
+
 class SpatialGather_Module(nn.Module):
     """
         Aggregate the context features according to the initial
