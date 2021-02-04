@@ -1,6 +1,6 @@
 """Various Depth losses."""
 
-from typing import List
+from typing import List, Dict
 
 import numpy as np
 
@@ -15,10 +15,15 @@ __all__ = ['DepthAwareLoss', 'ScaleInvariantError', 'InvHuberLoss',
 
 class DepthAwareLoss(nn.Module):
     def __init__(self, weight=1.0, **kwargs):
-        super(DepthAwareLoss, self).__init__()
+        super().__init__(**kwargs)
         self.weight = weight
 
-    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        disp_pred = predictions['depth']
+        disp_gt = targets['l_disp']
+
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
         mask = disp_gt > 0
@@ -36,11 +41,16 @@ class DepthAwareLoss(nn.Module):
 
 class ScaleInvariantError(nn.Module):
     def __init__(self, weight=1.0, lmda=1, **kwargs):
-        super(ScaleInvariantError, self).__init__()
+        super().__init__(**kwargs)
         self.lmda = lmda
         self.weight = weight
 
-    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        disp_pred = predictions['depth']
+        disp_gt = targets['l_disp']
+
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
         mask = disp_gt > 0
@@ -56,10 +66,15 @@ class InvHuberLoss(nn.Module):
     Inverse Huber (berHu) Loss for Depth/Disparity Training
     """
     def __init__(self, weight=1.0, **kwargs):
-        super(InvHuberLoss, self).__init__()
+        super().__init__(**kwargs)
         self.weight = weight
 
-    def forward(self, disp_pred: torch.Tensor, disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        disp_pred = predictions['depth']
+        disp_gt = targets['l_disp']
+
         pred_relu = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - disp_gt
         mask = disp_gt > 0
@@ -74,13 +89,17 @@ class InvHuberLoss(nn.Module):
 
 class InvHuberLossPyr(nn.Module):
     def __init__(self, lvl_weights: List[int], weight=1.0, **kwargs):
-        super(InvHuberLossPyr, self).__init__()
+        super().__init__(**kwargs)
         self.lvl_weights = lvl_weights
         self.weight = weight
         self.inv_huber = InvHuberLoss()
 
-    def forward(self, disp_pred: List[torch.Tensor],
-                disp_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        disp_pred = predictions['depth']
+        disp_gt = targets['l_disp']
+
         loss = 0
         for lvl, pred in enumerate(disp_pred):
             disp_gt_scaled = F.interpolate(
@@ -94,7 +113,7 @@ class BackprojectDepth(nn.Module):
     """Layer to transform a depth image into a point cloud
     """
     def __init__(self, batch_size, height, width):
-        super(BackprojectDepth, self).__init__()
+        super().__init__()
 
         self.batch_size = batch_size
         self.height = height
@@ -125,7 +144,7 @@ class Project3D(nn.Module):
     """Layer which projects 3D points into a camera with intrinsics K and at position T
     """
     def __init__(self, batch_size, height, width, eps=1e-7):
-        super(Project3D, self).__init__()
+        super().__init__()
 
         self.batch_size = batch_size
         self.height = height
@@ -149,35 +168,39 @@ class DepthReconstructionLossV1(nn.Module):
     """Generate the warped (reprojected) color images for a minibatch.
     """
     def __init__(self, batch_size, height, width, pred_type="disparity", ssim=True):
-        super(DepthReconstructionLossV1, self).__init__()
+        super().__init__()
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         self.pred_type = pred_type
-        self.BackprojDepth = BackprojectDepth(batch_size, height, width)\
-                                .to("cuda" if torch.cuda.is_available() else "cpu")
-        self.Project3D = Project3D(batch_size, height, width)\
-                                .to("cuda" if torch.cuda.is_available() else "cpu")
+        self.back_proj_depth = BackprojectDepth(batch_size, height, width).to(device)
+        self.project_3d = Project3D(batch_size, height, width).to(device)
         if ssim:
-            self.SSIM = SSIM().to("cuda" if torch.cuda.is_available() else "cpu")
+            self.ssim = SSIM().to(device)
 
-    def depth_from_disparity(self, disparity):
+    @staticmethod
+    def depth_from_disparity(disparity):
         return (0.209313 * 2262.52) / ((disparity - 1) / 256)
 
-    def forward(self, disp_pred, source_img, target_img, telemetry, camera):
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert all(key in targets.keys() for key in ['camera', 'l_img', 'r_img'])
+
         if self.pred_type == "depth":
-            depth = disp_pred
+            depth = predictions['depth']
         elif self.pred_type == "disparity":
-            depth = self.depth_from_disparity(disp_pred)
+            depth = self.depth_from_disparity(predictions['depth'])
         else:
             raise NotImplementedError(self.pred_type)
 
-        cam_points = self.BackprojDepth(depth, camera["inv_K"])
-        pix_coords = self.Project3D(cam_points, camera["K"], telemetry)
+        cam_points = self.back_proj_depth(depth, targets['camera']["inv_K"])
+        pix_coords = self.project_3d(
+            cam_points, targets['camera']["K"], targets['camera']["baseline_T"])
 
-        source_img = F.grid_sample(source_img, pix_coords, padding_mode="border")
+        source_img = F.grid_sample(targets['l_img'], pix_coords, padding_mode="border")
 
-        abs_diff = (target_img - source_img).abs()
-        if hasattr(self, 'SSIM'):
-            loss = 0.15*abs_diff.mean(1, True) +\
-                0.85*self.SSIM(source_img, target_img).mean(1, True)
+        abs_diff = (targets['r_img'] - source_img).abs()
+        if hasattr(self, 'ssim'):
+            loss = 0.15*abs_diff.mean(1, True) + \
+                0.85*self.ssim(source_img, targets['r_img']).mean(1, True)
         else:
             loss = abs_diff.mean(1, True)
         return loss.mean()
@@ -189,10 +212,13 @@ if __name__ == '__main__':
     BASE_DIR = '/media/bryce/4TB Seagate/Autonomous Vehicles Data/Cityscapes Data/'
     transform = torchvision.transforms.ToTensor()
 
-    img1 = Image.open(BASE_DIR+'leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
-    img2 = Image.open(BASE_DIR+'leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
+    img1 = Image.open(BASE_DIR +
+        'leftImg8bit/test/berlin/berlin_000000_000019_leftImg8bit.png')
+    img2 = Image.open(BASE_DIR +
+        'leftImg8bit_sequence/test/berlin/berlin_000000_000020_leftImg8bit.png')
 
     loss_func = DepthReconstructionLossV1(1, img1.size[1], img1.size[0])
     uniform = torch.zeros([1, img1.size[1], img1.size[0], 2])
 
-    print(loss_func(transform(img1).unsqueeze(0), uniform, transform(img1).unsqueeze(0)))
+    print(loss_func(transform(img1).unsqueeze(0),
+        uniform, transform(img1).unsqueeze(0)))

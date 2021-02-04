@@ -6,12 +6,15 @@ Example Config Structure
     "args" : {
         "detr_config" : {
             "num_channels" : 512, "num_classes" : 19, "num_queries" : 100,
-            "aux_loss" : False
+            "aux_loss" : false
         },
         "transformer_config" : {
             "dropout" : 0.1, "enc_layers" : 6, "dec_layers" : 6,
             "dim_feedforward" : 2048, "hidden_dim" : 256, "n_heads" : 8
-        }
+        },
+        "position_embedding_config" : {
+            "type" : "sine"
+        },
         "hrnetv2_config" : {
             "pretrained" : "hrnetv2_w48_imagenet_pretrained.pth",
             "STAGE1" : {
@@ -70,8 +73,91 @@ from nnet_training.correlation_package.correlation import Correlation
 from .hrnetv2 import get_seg_model
 from .pwcnet_modules import FlowEstimatorDense, FlowEstimatorLite, ContextNetwork, pwc_conv
 from .ocrnet_sfd import DepthHeadV1, scale_as
-from .detr.detr import DetrHead
+
+from .detr.detr import MLP
 from .detr.transformer import Transformer
+from .detr.segmentation import MaskHeadSmallConv, MHAttentionMap
+from .detr.position_encoding import build_position_encoding
+
+class DetrSegmHead(nn.Module):
+    """ This is the DETR module that performs object detection """
+    def __init__(self, num_channels, transformer, num_classes, num_queries,
+                 aux_loss:bool=False, seg_enable:bool=False):
+        """ Initializes the model.
+        Parameters:
+            num_channels: the number of channels from the backbone. See backbone.py
+            transformer: torch module of the transformer architecture. See transformer.py
+            num_classes: number of object classes
+            num_queries: number of object queries, ie detection slot. This is the maximal number of
+                         objects DETR can detect in a single image.
+                         For COCO, we recommend 100 queries.
+            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+        """
+        super().__init__()
+        self.num_queries = num_queries
+        self.transformer = transformer
+        hidden_dim = transformer.d_model
+        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
+        self.aux_loss = aux_loss
+
+        if seg_enable:
+            self.bbox_attention = MHAttentionMap(
+                hidden_dim, hidden_dim, self.transformer.nhead, dropout=0.0)
+            self.mask_head = MaskHeadSmallConv(
+                hidden_dim + self.transformer.nhead, [1024, 512, 256], hidden_dim)
+
+    def forward(self, features: torch.Tensor, pos_embeddings: torch.Tensor):
+        """ The forward expects a NestedTensor, which consists of:
+               - samples.tensor:    batched images, of shape [batch_size x 3 x H x W]
+               - samples.mask:      a binary mask of shape [batch_size x H x W], containing 1 on
+                                    padded pixels
+
+            It returns a dict with the following elements:
+               - "pred_logits": the classification logits (including no-object) for all queries.
+                                Shape= [batch_size x num_queries x (num_classes + 1)]
+               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
+                               (center_x, center_y, height, width). These values are normalized in
+                               [0, 1], relative to the size of each individual image (disregarding
+                               possible padding).
+                               See PostProcess for information on how to retrieve the unnormalized
+                               bounding box.
+               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a
+                                list of dictionnaries containing the two above keys for each decoder
+                                layer.
+        """
+
+        src, mask = features[-1].decompose()
+        assert mask is not None
+        src_proj = self.input_proj(src)
+        hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos_embeddings[-1])
+
+        outputs_class = self.class_embed(hs)
+        outputs_coord = self.bbox_embed(hs).sigmoid()
+        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
+        if self.aux_loss:
+            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+
+        if hasattr(self, 'bbox_attention') and hasattr(self, 'mask_head'):
+            bbox_mask = self.bbox_attention(hs[-1], memory, mask=mask)
+            seg_masks = self.mask_head(
+                src_proj, bbox_mask, [features[2], features[1], features[0]])
+            out["pred_masks"] = seg_masks.view(
+                features[-1].shape[0], self.detr.num_queries,
+                seg_masks.shape[-2], seg_masks.shape[-1])
+
+        return out
+
+    @staticmethod
+    @torch.jit.unused
+    def _set_aux_loss(outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{'pred_logits': a, 'pred_boxes': b}
+                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 class DetrNetSFD(nn.Module):
     """
@@ -82,7 +168,9 @@ class DetrNetSFD(nn.Module):
         self.modelname = "DetrNetSFD"
 
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
-        self.detr = DetrHead(
+        self.pos_embed = build_position_encoding(**kwargs['position_embedding_config'])
+
+        self.detr = DetrSegmHead(
             transformer=Transformer(**kwargs['transformer_config']), **kwargs['detr_config'])
 
         if 'correlation_args' in kwargs:
@@ -182,9 +270,10 @@ class DetrNetSFD(nn.Module):
 
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(l_img)
+        positional_embeddings = self.pos_embed(high_level_features)
 
         # Segmentation pass with image 1
-        forward['seg'], forward['seg_aux'], _ = self.detr(high_level_features)
+        forward['bbox'], forward['seg_aux'], _ = self.detr(high_level_features, positional_embeddings)
         forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
 
         # Depth pass with image 1

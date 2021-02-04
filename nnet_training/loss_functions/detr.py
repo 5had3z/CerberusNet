@@ -2,6 +2,8 @@
 """
 DETR model and criterion classes.
 """
+from typing import Dict
+
 import torch
 import torch.nn.functional as F
 
@@ -155,14 +157,15 @@ class DetrLoss(torch.nn.Module):
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
 
-    def forward(self, outputs, targets):
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
         """ This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see docs
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
+        outputs_without_aux = {k: v for k, v in predictions.items() if k != 'aux_outputs'}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
@@ -170,7 +173,7 @@ class DetrLoss(torch.nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float,
-                                    device=next(iter(outputs.values())).device)
+                                    device=next(iter(predictions.values())).device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_boxes)
         num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
@@ -178,11 +181,11 @@ class DetrLoss(torch.nn.Module):
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+            losses.update(self.get_loss(loss, predictions, targets, indices, num_boxes))
 
         # For auxiliary losses, repeat this process with the output of each intermediate layer.
-        if 'aux_outputs' in outputs:
-            for i, aux_outputs in enumerate(outputs['aux_outputs']):
+        if 'aux_outputs' in predictions:
+            for i, aux_outputs in enumerate(predictions['aux_outputs']):
                 indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
                     if loss == 'masks':

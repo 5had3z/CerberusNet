@@ -7,7 +7,7 @@ import os
 import time
 import sys
 from pathlib import Path
-from typing import Dict, Union, List
+from typing import Dict, Union
 
 import numpy as np
 import torch
@@ -237,15 +237,8 @@ class ModelTrainer(object):
                 sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
                                  f'Iter: [{batch_idx+1:4d}/{len(self._validation_loader):4d}]')
 
-                if 'seg' in self.metric_loggers.keys():
-                    sys.stdout.write(f" || {self.metric_loggers['seg'].main_metric}: "\
-                                     f"{self.metric_loggers['seg'].get_last_batch():.4f}")
-                if 'depth' in self.metric_loggers.keys():
-                    sys.stdout.write(f" || {self.metric_loggers['depth'].main_metric}: "\
-                                     f"{self.metric_loggers['depth'].get_last_batch():.4f}")
-                if 'flow' in self.metric_loggers.keys():
-                    sys.stdout.write(f" || {self.metric_loggers['flow'].main_metric}: "\
-                                     f"{self.metric_loggers['flow'].get_last_batch():.4f}")
+                for logger in self.metric_loggers.values():
+                    sys.stdout.write(f" || {logger.main_metric}: {logger.get_last_batch():.4f}")
 
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed/(batch_idx+1)*\
@@ -304,18 +297,8 @@ class ModelTrainer(object):
         """
         losses = {}
 
-        if 'flow' in self._loss_fn:
-            losses['flow'], _, _, _ = self._loss_fn['flow'](
-                pred_flow_fw=nnet_outputs['flow'], pred_flow_bw=nnet_outputs['flow_b'],
-                im1_origin=batch_data['l_img'], im2_origin=batch_data['l_seq'])
-
-        if 'segmentation' in self._loss_fn:
-            losses['seg'] = self._loss_fn['segmentation'](
-                seg_pred=nnet_outputs, seg_gt=batch_data['seg'])
-
-        if 'depth' in self._loss_fn:
-            losses['depth'] = self._loss_fn['depth'](
-                disp_pred=nnet_outputs['depth'], disp_gt=batch_data['l_disp'])
+        for loss_type, loss_func in self._loss_fn.items():
+            losses[loss_type] = loss_func(preds=nnet_outputs, targets=batch_data)
 
         return losses
 
@@ -348,7 +331,7 @@ class ModelTrainer(object):
         propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
 
         if 'depth' in forward and 'l_disp' in batch_data:
-            if isinstance(forward['depth'], List):
+            if isinstance(forward['depth'], list):
                 forward['depth'] = forward['depth'][0]
             depth_pred_cpu = forward['depth'].type(torch.float32).detach().cpu().numpy()
             depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
@@ -400,13 +383,11 @@ class ModelTrainer(object):
 
             if 'depth' in forward and 'l_disp' in batch_data:
                 plt.subplot(2, 4, 4)
-                plt.imshow(depth_gt_cpu[i], cmap='magma',
-                           vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                plt.imshow(depth_gt_cpu[i], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Ground Truth Disparity")
 
                 plt.subplot(2, 4, 8)
-                plt.imshow(depth_pred_cpu[i, 0], cmap='magma',
-                           vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+                plt.imshow(depth_pred_cpu[i, 0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Predicted Depth")
 
             plt.suptitle("Propagation time: " + str(propagation_time))
