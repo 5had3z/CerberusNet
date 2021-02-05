@@ -6,15 +6,16 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-import box_ops
+from . import box_ops
 
-from backbone import build_backbone
-from matcher import build_matcher
-from segmentation import DETRsegm, PostProcessPanoptic, PostProcessSegm
-from transformer import build_transformer
-from misc import NestedTensor, nested_tensor_from_tensor_list
+from .backbone import build_backbone
+from .matcher import build_matcher
+from .segmentation import DETRsegm, PostProcessPanoptic, PostProcessSegm
+from .transformer import build_transformer
+from .misc import NestedTensor
+from .misc import nested_tensor_from_tensor_list
 
-from nnet_training.loss_functions.detr import DetrLoss
+from nnet_training.loss_functions.detr_loss import DetrLoss
 
 class Detr(nn.Module):
     """ This is the DETR module that performs object detection """

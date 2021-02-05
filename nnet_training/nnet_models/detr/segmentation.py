@@ -12,14 +12,17 @@ import torch.nn.functional as F
 from torch import Tensor
 from PIL import Image
 
-import box_ops
-from misc import NestedTensor, interpolate, nested_tensor_from_tensor_list
+from .box_ops import box_cxcywh_to_xyxy
+from .misc import NestedTensor
+from .misc import interpolate
+from .misc import nested_tensor_from_tensor_list
 
 try:
     from panopticapi.utils import id2rgb, rgb2id
 except ImportError:
     pass
 
+__all__ = ['DETRsegm', 'PostProcessPanoptic', 'PostProcessSegm']
 
 class DETRsegm(nn.Module):
     def __init__(self, detr, freeze_detr=False):
@@ -285,7 +288,7 @@ class PostProcessPanoptic(nn.Module):
             cur_classes = cur_classes[keep]
             cur_masks = cur_masks[keep]
             cur_masks = interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_boxes = box_ops.box_cxcywh_to_xyxy(cur_boxes[keep])
+            cur_boxes = box_cxcywh_to_xyxy(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
             assert len(cur_boxes) == len(cur_classes)

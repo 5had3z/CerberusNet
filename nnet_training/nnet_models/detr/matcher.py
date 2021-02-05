@@ -6,8 +6,8 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from box_ops import box_cxcywh_to_xyxy, generalized_box_iou
-
+from .box_ops import box_cxcywh_to_xyxy
+from .box_ops import generalized_box_iou
 
 class HungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
@@ -39,14 +39,14 @@ class HungarianMatcher(nn.Module):
 
         Params:
             outputs: This is a dict that contains at least these entries:
-                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the
-                                classification logits
+                 "logits":  Tensor of dim [batch_size, num_queries, num_classes] with the
+                            classification logits
                  "bboxes":  Tensor of dim [batch_size, num_queries, 4] with the predicted
-                                box coordinates
+                            box coordinates
 
             targets: This is a list of targets (len(targets) = batch_size), where each target
                     is a dict containing:
-                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number
+                 "labels":  Tensor of dim [num_target_boxes] (where num_target_boxes is the number
                             of ground-truth objects in the target) containing the class labels
                  "bboxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
 
@@ -87,8 +87,12 @@ class HungarianMatcher(nn.Module):
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
+                for i, j in indices]
 
 
 def build_matcher(args):
-    return HungarianMatcher(cost_class=args.set_cost_class, cost_bbox=args.set_cost_bbox, cost_giou=args.set_cost_giou)
+    return HungarianMatcher(
+        cost_class=args.set_cost_class,
+        cost_bbox=args.set_cost_bbox,
+        cost_giou=args.set_cost_giou)

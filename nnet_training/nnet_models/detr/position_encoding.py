@@ -6,8 +6,9 @@ import math
 import torch
 from torch import nn
 
-from misc import NestedTensor
+from .misc import NestedTensor
 
+__all__ = ['build_position_encoding']
 
 class PositionEmbeddingSine(nn.Module):
     """
@@ -76,14 +77,14 @@ class PositionEmbeddingLearned(nn.Module):
         return pos
 
 
-def build_position_encoding(args):
-    n_steps = args.hidden_dim // 2
-    if args.position_embedding in ('v2', 'sine'):
+def build_position_encoding(**kwargs):
+    n_steps = kwargs['hidden_dim'] // 2
+    if kwargs['type'] in ('v2', 'sine'):
         # TODO find a better way of exposing other arguments
         position_embedding = PositionEmbeddingSine(n_steps, normalize=True)
-    elif args.position_embedding in ('v3', 'learned'):
+    elif kwargs['type'] in ('v3', 'learned'):
         position_embedding = PositionEmbeddingLearned(n_steps)
     else:
-        raise ValueError(f"not supported {args.position_embedding}")
+        raise ValueError(f"not supported {kwargs['type']}")
 
     return position_embedding

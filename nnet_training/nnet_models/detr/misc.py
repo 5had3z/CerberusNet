@@ -22,6 +22,7 @@ if float(torchvision.__version__[:3]) < 0.7:
     from torchvision.ops import _new_empty_tensor
     from torchvision.ops.misc import _output_size
 
+__all__ = ['NestedTensor']
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a

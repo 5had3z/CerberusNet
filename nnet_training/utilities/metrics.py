@@ -6,7 +6,7 @@ __email__ = "bryce.ferenczi@monash.edu"
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Callable, Union, overload
+from typing import Dict, List, Callable, Union, Tuple, overload
 
 import h5py
 import numpy as np
@@ -16,10 +16,12 @@ import pandas as pd
 from scipy import stats
 
 import torch
+from torchvision.ops.boxes import box_iou
 
 from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.nnet_models.detr.matcher import HungarianMatcher
+from nnet_training.nnet_models.detr.box_ops import generalized_box_iou, box_cxcywh_to_xyxy
 
 __all__ = ['MetricBase', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
@@ -1009,10 +1011,41 @@ class BoundaryBoxMetric(MetricBase):
         assert self.main_metric in self.metric_data.keys()
         self.matcher = HungarianMatcher()
 
+    @staticmethod
+    def _get_src_permutation_idx(indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
+        src_idx = torch.cat([src for (src, _) in indices])
+        return batch_idx, src_idx
+
+    @staticmethod
+    def _calculate_iou(predictions: Dict[str, torch.Tensor], targets: torch.Tensor,
+                       indices: List[Tuple[torch.Tensor, torch.Tensor]]) -> np.ndarray:
+        """
+        Calulate the iou between predicted and ground truth boxes given an
+        already matched set of indices.
+        """
+        idx = BoundaryBoxMetric._get_src_permutation_idx(indices)
+        src_boxes = predictions[idx]
+        target_boxes = torch.cat([t[i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        return torch.diag(box_iou(
+            box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes)))
+
     def add_sample(self, predictions: Dict[str, torch.Tensor],
                    targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
-        detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes', 'masks']}
+        assert all(key in predictions.keys() for key in ['logits', 'bboxes'])
+        assert all(key in targets.keys() for key in ['labels', 'bboxes'])
+
+        self.metric_data["Batch_Loss"].append(loss)
+
+        #   Calculate IoU for each Box
+        detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes']}
         indices = self.matcher(detr_outputs, targets)
+        iou = self._calculate_iou(detr_outputs['boxes'], targets['boxes'], indices)
+
+        self.metric_data['Batch_IoU'].append(iou)
+
 
     def max_accuracy(self, main_metric=True):
         """
@@ -1047,7 +1080,7 @@ class ClassificationMetric(MetricBase):
     Accuracy/Error and Loss Staticstics tracking for classification problems
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super(ClassificationMetric, self).__init__(savefile=savefile, base_dir=base_dir,
+        super().__init__(savefile=savefile, base_dir=base_dir,
                                                    main_metric=main_metric, mode=mode)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
@@ -1081,7 +1114,7 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
             loggers['depth'] = DepthMetric(
                 'depth_data', main_metric=main_metric, base_dir=basepath)
         elif logger_type == 'bbox':
-            loggers['depth'] = BoundaryBoxMetric(
+            loggers['bbox'] = BoundaryBoxMetric(
                 'bbox_data', main_metric=main_metric, base_dir=basepath)
         else:
             raise NotImplementedError(logger_type)

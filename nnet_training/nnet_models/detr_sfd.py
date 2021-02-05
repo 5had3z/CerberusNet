@@ -70,14 +70,15 @@ import torch.nn.functional as F
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
+from nnet_training.nnet_models.detr.detr import MLP
+from nnet_training.nnet_models.detr.transformer import Transformer
+from nnet_training.nnet_models.detr.segmentation import MaskHeadSmallConv
+from nnet_training.nnet_models.detr.segmentation import MHAttentionMap
+from nnet_training.nnet_models.detr.position_encoding import build_position_encoding
+
 from .hrnetv2 import get_seg_model
 from .pwcnet_modules import FlowEstimatorDense, FlowEstimatorLite, ContextNetwork, pwc_conv
 from .ocrnet_sfd import DepthHeadV1, scale_as
-
-from .detr.detr import MLP
-from .detr.transformer import Transformer
-from .detr.segmentation import MaskHeadSmallConv, MHAttentionMap
-from .detr.position_encoding import build_position_encoding
 
 class DetrSegmHead(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -169,7 +170,8 @@ class DetrNetSFD(nn.Module):
         self.modelname = "DetrNetSFD"
 
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
-        self.pos_embed = build_position_encoding(**kwargs['position_embedding_config'])
+        self.pos_embed = build_position_encoding(
+            **kwargs['position_embedding_config'], **kwargs['transformer_config'])
 
         self.detr = DetrSegmHead(
             transformer=Transformer(**kwargs['transformer_config']), **kwargs['detr_config'])

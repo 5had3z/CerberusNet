@@ -212,7 +212,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     if hasattr(self, 'pose'):
                         self.pose.append(pose_path)
                     if hasattr(self, 'bbox'):
-                        self.pose.append(bbox_path)
+                        self.bbox.append(bbox_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if 'id_vector' in kwargs:
@@ -269,6 +269,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
         # if hasattr(self, 'pose'):
         #     epoch_data["pose"] = self.pose_json(self.pose[idx])
 
+        if all(key in epoch_data.keys() for key in ['bboxes', 'labels']):
+            epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'])
+            epoch_data['labels'] = torch.as_tensor(epoch_data['labels'])
+
         return epoch_data
 
     @staticmethod
@@ -310,18 +314,19 @@ class CityScapesDataset(torch.utils.data.Dataset):
         ret_val = []
         for bbox in bbox_list:
             corners = []
-            rot_mat = np.asarray([[np.cos(angle), -np.sin(angle)],
-                                  [-np.sin(angle), np.cos(angle)]])
+            rad_angle = np.deg2rad(angle)
+            rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
+                                  [np.sin(rad_angle), np.cos(rad_angle)]])
 
             corners.append(np.matmul(rot_mat, np.asarray(bbox[:2])))
-            corners.append(np.matmul(rot_mat, np.asarray(bbox[2], bbox[1])))
-            corners.append(np.matmul(rot_mat, np.asarray(bbox[1], bbox[3])))
+            corners.append(np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])))
+            corners.append(np.matmul(rot_mat, np.asarray([bbox[1], bbox[3]])))
             corners.append(np.matmul(rot_mat, np.asarray(bbox[2:])))
 
-            x_1 = max(min(corners, key=lambda x: x[0]), 0)
-            y_1 = max(min(corners, key=lambda x: x[1]), 0)
-            x_2 = min(max(corners, key=lambda x: x[0]), img_dims[0])
-            y_2 = min(max(corners, key=lambda x: x[1]), img_dims[1])
+            x_1 = max(min(corners, key=lambda x: x[0])[0], 0)
+            y_1 = max(min(corners, key=lambda x: x[1])[1], 0)
+            x_2 = min(max(corners, key=lambda x: x[0])[0], img_dims[0])
+            y_2 = min(max(corners, key=lambda x: x[1])[1], img_dims[1])
 
             ret_val.append([x_1, y_1, x_2, y_2])
 
@@ -340,7 +345,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             bbox[2] * x_scale, bbox[3] * y_scale])
         return ret_val
 
-    def _sync_transform(self, epoch_data: Dict[str, Union[Image, List]]) -> None:
+    def _sync_transform(self, epoch_data: Dict[str, Union[Image.Image, List]]) -> None:
         """
         Augments and formats all the batch data in a synchronised manner
         """
@@ -368,22 +373,22 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.BILINEAR)
-                elif key == 'bboxes':
-                    epoch_data[key] = self._rotate_bbox(data, angle, self.base_size)
-                else:
+                elif key in ['l_disp', 'r_disp', 'seg']:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
+                elif key == 'bboxes':
+                    epoch_data[key] = self._rotate_bbox(data, angle, self.base_size)
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                 data = data.resize(self.output_shape, Image.BILINEAR)
                 epoch_data[key] = self._img_transform(data)
+            elif key in ["l_disp", 'r_disp']:
+                data = data.resize(self.output_shape, Image.NEAREST)
+                epoch_data[key] = self._depth_transform(data)
             elif key == "seg":
                 data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
-            elif key == "l_disp":
-                data = data.resize(self.output_shape, Image.NEAREST)
-                epoch_data[key] = self._depth_transform(data)
             elif key == "bboxes":
                 epoch_data[key] = self._scale_bbox(data, self.base_size, self.output_shape)
 
@@ -488,13 +493,13 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
 
     training_dirs = {}
     for subset in dataset_config.train_subdirs:
-        training_dirs[str(subset)] = dataset_config.rootdir +\
-                                        dataset_config.train_subdirs[str(subset)]
+        training_dirs[str(subset)] = \
+            dataset_config.rootdir + dataset_config.train_subdirs[str(subset)]
 
     validation_dirs = {}
     for subset in dataset_config.val_subdirs:
-        validation_dirs[str(subset)] = dataset_config.rootdir +\
-                                        dataset_config.val_subdirs[str(subset)]
+        validation_dirs[str(subset)] = \
+            dataset_config.rootdir + dataset_config.val_subdirs[str(subset)]
 
     aux_aug = {}
     if 'img_normalize' in dataset_config.augmentations:

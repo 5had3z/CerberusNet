@@ -10,7 +10,7 @@ from .depth_losses import InvHuberLoss, InvHuberLossPyr, DepthAwareLoss, ScaleIn
 from .UnFlowLoss import unFlowLoss
 from .rmi import RMILoss, RMILossAux, MultiScaleRMILoss
 from .seg_losses import FocalLoss2D, SegCrossEntropy
-from .detr import DetrLoss
+from .detr_loss import DetrLoss
 
 def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
     """
