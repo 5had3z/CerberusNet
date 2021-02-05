@@ -301,6 +301,33 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return ret_val
 
     @staticmethod
+    def _rotate_bbox(bbox_list: List[List[int]], angle: float,
+                     img_dims: Tuple[int, int]) -> List[List[int]]:
+        """
+        Transforms a boundary box [x1,y1,x2,y2] according to an image
+        rotation angle and ensures it stays within clipping.
+        """
+        ret_val = []
+        for bbox in bbox_list:
+            corners = []
+            rot_mat = np.asarray([[np.cos(angle), -np.sin(angle)],
+                                  [-np.sin(angle), np.cos(angle)]])
+
+            corners.append(np.matmul(rot_mat, np.asarray(bbox[:2])))
+            corners.append(np.matmul(rot_mat, np.asarray(bbox[2], bbox[1])))
+            corners.append(np.matmul(rot_mat, np.asarray(bbox[1], bbox[3])))
+            corners.append(np.matmul(rot_mat, np.asarray(bbox[2:])))
+
+            x_1 = max(min(corners, key=lambda x: x[0]), 0)
+            y_1 = max(min(corners, key=lambda x: x[1]), 0)
+            x_2 = min(max(corners, key=lambda x: x[0]), img_dims[0])
+            y_2 = min(max(corners, key=lambda x: x[1]), img_dims[1])
+
+            ret_val.append([x_1, y_1, x_2, y_2])
+
+        return ret_val
+
+    @staticmethod
     def _scale_bbox(bbox_list: List[List[int]], src_dims: Tuple[int, int],
                     dst_dims: Tuple[int, int]) -> List[List[int]]:
         """
@@ -341,6 +368,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.BILINEAR)
+                elif key == 'bboxes':
+                    epoch_data[key] = self._rotate_bbox(data, angle, self.base_size)
                 else:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
