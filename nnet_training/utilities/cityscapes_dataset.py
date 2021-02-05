@@ -279,7 +279,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         ret_val = []
         mirror_x = lambda x : img_dims[0] - (x - int(img_dims[0] / 2))
         for bbox in bbox_list:
-            ret_val.append([mirror_x(bbox[0]), bbox[1], mirror_x(bbox[2]), bbox[3]])
+            ret_val.append([mirror_x(bbox[2]), bbox[1], mirror_x(bbox[0]), bbox[3]])
         return ret_val
 
     @staticmethod
