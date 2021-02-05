@@ -300,6 +300,19 @@ class CityScapesDataset(torch.utils.data.Dataset):
             ret_val.append([b_x1, b_y1, b_x2, b_x2])
         return ret_val
 
+    @staticmethod
+    def _scale_bbox(bbox_list: List[List[int]], src_dims: Tuple[int, int],
+                    dst_dims: Tuple[int, int]) -> List[List[int]]:
+        """
+        Scales bbox from scr dimensions to dst dimensions
+        """
+        ret_val = []
+        [x_scale, y_scale] = [dst / src for dst, src in zip(dst_dims, src_dims)]
+        for bbox in bbox_list:
+            ret_val.append([bbox[0] * x_scale, bbox[1] * y_scale,
+                            bbox[2] * x_scale, bbox[3] * y_scale])
+        return ret_val
+
     def _sync_transform(self, epoch_data: Dict[str, Union[Image, List]]) -> None:
         """
         Augments and formats all the batch data in a synchronised manner
@@ -342,6 +355,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == "l_disp":
                 data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
+            elif key == "bboxes":
+                epoch_data[key] = self._scale_bbox(data, self.base_size, self.output_shape)
 
         if hasattr(self, 'crop_fraction'):
             # random crop
