@@ -24,7 +24,7 @@ __all__ = ['ModelTrainer']
 MIN_DEPTH = 0.
 MAX_DEPTH = 80.
 
-class ModelTrainer(object):
+class ModelTrainer():
     """
     Base class that various model trainers inherit from
     """
@@ -203,7 +203,9 @@ class ModelTrainer(object):
             loss.backward()
             self._optimizer.step()
 
-            self.log_output_performance(forward, batch_data, losses)
+            with torch.no_grad():
+                for key in self.metric_loggers:
+                    self.metric_loggers[key].add_sample(forward, batch_data, losses[key].item())
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
@@ -231,7 +233,8 @@ class ModelTrainer(object):
             forward = self._model(**batch_data)
             losses = self.calculate_losses(forward, batch_data)
 
-            self.log_output_performance(forward, batch_data, losses)
+            for key in self.metric_loggers:
+                self.metric_loggers[key].add_sample(forward, batch_data, losses[key].item())
 
             if not batch_idx % 10:
                 sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
@@ -254,41 +257,10 @@ class ModelTrainer(object):
         cuda_s = torch.cuda.Stream()
         with torch.cuda.stream(cuda_s):
             for key in data:
-                if key in ['l_img', 'l_seq', 'seg', 'l_disp', 'r_img', 'r_seq', 'r_disp']:
+                if key in ['l_img', 'l_seq', 'seg', 'l_disp', 'r_img',
+                           'r_seq', 'r_disp', 'flow', 'flow_mask']:
                     data[key] = data[key].cuda(non_blocking=True)
-
-            if all(key in data.keys() for key in ["flow", "flow_mask"]):
-                data['flow_gt'] = {"flow": data['flow'].cuda(non_blocking=True),
-                                   "flow_mask": data['flow_mask'].cuda(non_blocking=True)}
-                del data['flow'], data['flow_mask']
-            else:
-                data['flow_gt'] = None
         cuda_s.synchronize()
-
-    @torch.no_grad()
-    def log_output_performance(self, nnet_outputs: Dict[str, torch.Tensor],
-                               batch_data: Dict[str, torch.Tensor],
-                               losses: Dict[str, torch.Tensor]):
-        """
-        Calculates different metrics for each of the output types
-        """
-        if 'flow' in self.metric_loggers:
-            self.metric_loggers['flow'].add_sample(
-                batch_data['l_img'], batch_data['l_seq'], nnet_outputs['flow'][0],
-                batch_data['flow_gt'], loss=losses['flow'].item()
-            )
-
-        if 'seg' in self.metric_loggers:
-            self.metric_loggers['seg'].add_sample(
-                torch.argmax(nnet_outputs['seg'], dim=1, keepdim=True),
-                batch_data['seg'], loss=losses['seg'].item()
-            )
-
-        if 'depth' in self.metric_loggers:
-            self.metric_loggers['depth'].add_sample(
-                nnet_outputs['depth'], batch_data['l_disp'],
-                loss=losses['depth'].item()
-            )
 
     def calculate_losses(self, nnet_outputs: Dict[str, torch.Tensor],
                          batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:

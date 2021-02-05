@@ -23,14 +23,14 @@ from nnet_training.loss_functions.UnFlowLoss import flow_warp
 __all__ = ['MetricBase', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
 
-class MetricBase(object):
+class MetricBase():
     """
     Provides basic functionality for statistics tracking classes
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
         assert mode in ['training', 'validation']
         self.mode = mode
-        self.metric_data = dict()
+        self.metric_data = {}
         if main_metric[:6] != "Batch_":
             main_metric = "Batch_"+main_metric
         self.main_metric = main_metric
@@ -359,6 +359,13 @@ class MetricBase(object):
         """
         raise NotImplementedError
 
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
+        """
+        Add a sample of nnet outputs and ground truth to calculate statistics.
+        """
+        raise NotImplementedError
+
     @staticmethod
     def _max_accuracy_lambda(
             criterion_dict: Dict[str, List[Union[Callable[[float, float], bool], float]]],
@@ -458,20 +465,23 @@ class SegmentationMetric(MetricBase):
     """
     def __init__(self, num_classes, savefile: str, base_dir: Path,
                  main_metric: str, mode='training'):
-        super(SegmentationMetric, self).__init__(savefile=savefile, base_dir=base_dir,
-                                                 main_metric=main_metric, mode=mode)
+        super().__init__(
+            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
         self._n_classes = num_classes
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
-    def add_sample(self, preds: torch.Tensor, labels: torch.Tensor, loss=None):
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
         """
         Update Accuracy (and Loss) Metrics
         """
-        self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
+        assert all('seg' in keys for keys in [predictions.keys(), targets.keys()])
+        self.metric_data["Batch_Loss"].append(loss)
 
-        labels = labels.type(torch.int32).cuda()
-        preds = preds.type(torch.int32).squeeze(dim=1)
+        labels = targets['seg'].type(torch.int32).cuda()
+        preds = torch.argmax(
+            predictions['seg'], dim=1,keepdim=True).type(torch.int32).squeeze(dim=1)
 
         batch_pix_acc = np.zeros((preds.shape[0], 1))
         batch_iou = np.zeros((preds.shape[0], self._n_classes))
@@ -800,15 +810,22 @@ class DepthMetric(MetricBase):
     Tracks Invariant, RMSE Linear, RMSE Log, Squared Relative and Absolute Relative.
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super(DepthMetric, self).__init__(savefile=savefile, base_dir=base_dir,
-                                          main_metric=main_metric, mode=mode)
+        super().__init__(
+            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
-    def add_sample(self, pred_depth: torch.Tensor, gt_depth: torch.Tensor, loss=None):
-        self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
-        if isinstance(pred_depth, List):
-            pred_depth = pred_depth[0]
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
+        assert all('depth' in keys for keys in [predictions.keys(), targets.keys()])
+        self.metric_data["Batch_Loss"].append(loss)
+
+        gt_depth = targets['l_disp']
+
+        if isinstance(pred_depth, list):
+            pred_depth = predictions['depth'][0]
+        else:
+            pred_depth = predictions['depth']
 
         pred_depth = pred_depth.squeeze(dim=1)
         pred_depth[pred_depth == 0] += 1e-7
@@ -902,8 +919,8 @@ class OpticFlowMetric(MetricBase):
     warped image sequence (SAD).
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super(OpticFlowMetric, self).__init__(savefile=savefile, base_dir=base_dir,
-                                              main_metric=main_metric, mode=mode)
+        super().__init__(
+            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
@@ -919,32 +936,38 @@ class OpticFlowMetric(MetricBase):
                 torch.tensor([1e-10], device=gt_flow.get_device())) > 0.05)
         return torch.sum(bad_pixels, dim=(1, 2)) / torch.sum(mask, dim=(1, 2))
 
-    def add_sample(self, orig_img, seq_img, flow_pred, flow_target=None, loss=None):
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
         """
         @input list of original, prediction and sequence images i.e. [left, right]
         """
         self.metric_data["Batch_Loss"].append(loss if loss is not None else 0)
 
-        if flow_target is not None:
-            flow_target["flow_mask"] = flow_target["flow_mask"].squeeze(1)
-            n_valid = torch.sum(flow_target["flow_mask"], dim=(1, 2))
+        if isinstance(predictions['flow'], list):
+            flow_pred = predictions['flow'][0]
+        else:
+            flow_pred = predictions['flow']
 
-            diff = flow_pred - flow_target["flow"]
+        if all(key in targets.keys() for key in ["flow", "flow_mask"]):
+            targets["flow_mask"] = targets["flow_mask"].squeeze(1)
+            n_valid = torch.sum(targets["flow_mask"], dim=(1, 2))
+
+            diff = flow_pred - targets["flow"]
             norm_diff = ((diff[:, 0, :, :]**2 + diff[:, 1, :, :]**2)**0.5)
-            masked_epe = torch.sum(norm_diff * flow_target["flow_mask"], dim=(1, 2))
+            masked_epe = torch.sum(norm_diff * targets["flow_mask"], dim=(1, 2))
 
             self.metric_data["Batch_EPE"].append(
                 (masked_epe / n_valid).cpu().numpy())
 
             self.metric_data["Batch_Fl_all"].append(
-                self.error_rate(norm_diff, flow_target["flow"],
-                                flow_target["flow_mask"]).cpu().numpy())
+                self.error_rate(norm_diff, targets["flow"], targets["flow_mask"]).cpu().numpy())
         else:
             self.metric_data["Batch_EPE"].append(np.zeros((flow_pred.shape[0], 1)))
             self.metric_data["Batch_Fl_all"].append(np.zeros((flow_pred.shape[0], 1)))
 
         self.metric_data["Batch_SAD"].append(
-            (orig_img-flow_warp(seq_img, flow_pred)).abs().mean(dim=(1, 2, 3)).cpu().numpy())
+            (targets['l_img']-flow_warp(targets['l_seq'], flow_pred)) \
+                .abs().mean(dim=(1, 2, 3)).cpu().numpy())
 
     def max_accuracy(self, main_metric=True):
         """
@@ -979,20 +1002,42 @@ class BoundaryBoxMetric(MetricBase):
     Accuracy/Error and Loss Staticstics tracking for nnets with boundary box output
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super(BoundaryBoxMetric, self).__init__(savefile=savefile, base_dir=base_dir,
-                                                main_metric=main_metric, mode=mode)
+        super().__init__(
+            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
-        raise NotImplementedError
 
-    def add_sample(self, pred_depth, gt_depth, loss=None):
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
         raise NotImplementedError
 
     def max_accuracy(self, main_metric=True):
-        raise NotImplementedError
+        """
+        Returns highest average precision.\n
+        @param  main_metric, if true only returns the main statistic\n
+        @output average precision, mIoU
+        """
+        cost_func = {
+            'Batch_Loss': [min, sys.float_info.max],
+            'Batch_IoU': [max, sys.float_info.min],
+            'Batch_Recall': [max, sys.float_info.min],
+            'Batch_Precision': [max, sys.float_info.min]
+        }
+
+        if self._path is not None:
+            ret_type = self.main_metric if main_metric else None
+            return self._max_accuracy_lambda(cost_func, self._path, ret_type)
+
+        print("No File Specified for Segmentation Metric Manager")
+        return None
 
     def _reset_metric(self):
-        raise NotImplementedError
+        self.metric_data = dict(
+            Batch_Loss=[],
+            Batch_IoU=[],
+            Batch_Recall=[],
+            Batch_Precision=[]
+        )
 
 class ClassificationMetric(MetricBase):
     """
@@ -1004,7 +1049,8 @@ class ClassificationMetric(MetricBase):
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 
-    def add_sample(self, pred_depth, gt_depth, loss=None):
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
         raise NotImplementedError
 
     def max_accuracy(self, main_metric=True):
@@ -1031,6 +1077,9 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
         elif logger_type == 'depth':
             loggers['depth'] = DepthMetric(
                 'depth_data', main_metric=main_metric, base_dir=basepath)
+        elif logger_type == 'bbox':
+            loggers['depth'] = BoundaryBoxMetric(
+                'bbox_data', main_metric=main_metric, base_dir=basepath)
         else:
             raise NotImplementedError(logger_type)
 
