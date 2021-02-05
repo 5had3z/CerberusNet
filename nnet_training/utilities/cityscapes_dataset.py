@@ -15,7 +15,7 @@ import json
 import multiprocessing
 from shutil import copy
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple, Union
 
 import torch
 import torchvision
@@ -83,7 +83,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self._initialize_dataset(directories, l_img_key, **kwargs)
 
         self.disparity_out = disparity_out
-        self.base_size = output_size
+        self.base_size = output_size # (width, height)
         self.output_shape = output_size
         self.scale_factor = 1
 
@@ -271,7 +271,36 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         return epoch_data
 
-    def _sync_transform(self, epoch_data):
+    @staticmethod
+    def _mirror_bbox(bbox_list: List[List[int]], img_dims: Tuple[int, int]) -> List[List[int]]:
+        """
+        Mirrors a boundary box [x1,y1,x2,y2] in an image of img_dims (width, height)
+        """
+        ret_val = []
+        mirror_x = lambda x : img_dims[0] - (x - int(img_dims[0] / 2))
+        for bbox in bbox_list:
+            ret_val.append([mirror_x(bbox[0]), bbox[1], mirror_x(bbox[2]), bbox[3]])
+        return ret_val
+
+    @staticmethod
+    def _crop_bbox(bbox_list: List[List[int]], img_dims: Tuple[int, int],
+                   crop_dims: Tuple[int, int, int, int]) -> List[List[int]]:
+        """
+        Transforms a boundary box [x1,y1,x2,y2] according to an image crop (x, y, w, h)
+        """
+        ret_val = []
+        for bbox in bbox_list:
+            # Shift bbox top left, clip at 0
+            b_x1 = max(bbox[0] - crop_dims[0], 0)
+            b_y1 = max(bbox[1] - crop_dims[1], 0)
+            # Shift bbox top left, clip at bottom right boundary
+            # if image crop encroaches on transformed bbox.
+            b_x2 = min(bbox[2] - crop_dims[0], img_dims[0] - crop_dims[2])
+            b_x2 = min(bbox[3] - crop_dims[1], img_dims[1] - crop_dims[3])
+            ret_val.append([b_x1, b_y1, b_x2, b_x2])
+        return ret_val
+
+    def _sync_transform(self, epoch_data: Dict[str, Union[Image, List]]) -> None:
         """
         Augments and formats all the batch data in a synchronised manner
         """
@@ -281,7 +310,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
         # random mirror
         if random.random() < 0.5 and self.rand_flip:
             for key, data in epoch_data.items():
-                epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
+                if key not in ['labels', 'bboxes']:
+                    epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
+                elif key == 'bboxes':
+                    epoch_data[key] = self._mirror_bbox(data, self.output_shape)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
@@ -321,6 +353,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
             for key, data in epoch_data.items():
                 if key in ["seg", "l_disp", "r_disp"]:
                     epoch_data[key] = data[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                elif key == 'bboxes':
+                    epoch_data[key] = self._crop_bbox(
+                        data, self.output_shape, (crop_x, crop_y, crop_w, crop_h))
                 else:
                     epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
 
