@@ -87,7 +87,7 @@ class DetrLoss(torch.nn.Module):
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """ Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU
-            loss targets dicts must contain the key "boxes" containing a tensor of dim
+            loss targets dicts must contain the key "bboxes" containing a tensor of dim
             [nb_target_boxes, 4].\n
             The target boxes are expected in format (center_x, center_y, w, h),
             normalized by the image size.
@@ -95,7 +95,7 @@ class DetrLoss(torch.nn.Module):
         assert 'bboxes' in outputs
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs['bboxes'][idx]
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat([t['bboxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
 

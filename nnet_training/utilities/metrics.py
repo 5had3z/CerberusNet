@@ -19,6 +19,7 @@ import torch
 
 from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
+from nnet_training.nnet_models.detr.matcher import HungarianMatcher
 
 __all__ = ['MetricBase', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
@@ -1006,10 +1007,12 @@ class BoundaryBoxMetric(MetricBase):
             savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
+        self.matcher = HungarianMatcher()
 
     def add_sample(self, predictions: Dict[str, torch.Tensor],
                    targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
-        raise NotImplementedError
+        detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes', 'masks']}
+        indices = self.matcher(detr_outputs, targets)
 
     def max_accuracy(self, main_metric=True):
         """

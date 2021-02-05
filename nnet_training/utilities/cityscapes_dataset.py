@@ -259,7 +259,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if hasattr(self, 'r_seq'):
             epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
         if hasattr(self, 'bbox'):
-            epoch_data['bbox'] = self.bbox_json(self.bbox[idx])
+            epoch_data['labels'], epoch_data['bboxes'] = self.bbox_json_parse(self.bbox[idx])
 
         self._sync_transform(epoch_data)
 
@@ -384,13 +384,19 @@ class CityScapesDataset(torch.utils.data.Dataset):
         raise NotImplementedError
 
     @staticmethod
-    def bbox_json(json_path: str):
+    def bbox_json_parse(json_path: str):
         """
         Parse json with bbox information and return list of information.
         """
+        labels = []
+        bboxes = []
         with open(json_path) as json_file:
             json_data = json.load(json_file)
-        return json_data
+            for bbox in json_data:
+                labels.append(bbox['train_id'])
+                bboxes.append(bbox['bbox'])
+
+        return labels, bboxes
 
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     """
