@@ -276,11 +276,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
         #     epoch_data["pose"] = self.pose_json(self.pose[idx])
 
         if all(key in epoch_data.keys() for key in ['bboxes', 'labels']):
-            epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'])
-            epoch_data['labels'] = torch.as_tensor(epoch_data['labels'])
-            if hasattr(self, 'bbox_type') and self.bbox_type == 'cxcywh':
-                epoch_data['bboxes'] = box_xyxy_to_cxcywh(epoch_data['bboxes'])
-            epoch_data['bboxes'] = normalize_boxes(epoch_data['bboxes'], self.output_shape)
+            epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'], dtype=torch.float64)
+            epoch_data['labels'] = torch.as_tensor(epoch_data['labels'], dtype=torch.int64)
+            if epoch_data['bboxes'].shape[0] != 0:
+                if hasattr(self, 'bbox_type') and self.bbox_type == 'cxcywh':
+                    epoch_data['bboxes'] = box_xyxy_to_cxcywh(epoch_data['bboxes'])
+                epoch_data['bboxes'] = normalize_boxes(epoch_data['bboxes'], self.output_shape)
 
         return epoch_data
 
@@ -324,13 +325,13 @@ class CityScapesDataset(torch.utils.data.Dataset):
         rad_angle = np.deg2rad(angle)
         rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
                                [np.sin(rad_angle), np.cos(rad_angle)]])
-
+        img_tr = np.asarray(img_dims) / 2
         for bbox in bbox_list:
             corners = [
-                np.matmul(rot_mat, np.asarray(bbox[:2])),
-                np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])),
-                np.matmul(rot_mat, np.asarray([bbox[0], bbox[3]])),
-                np.matmul(rot_mat, np.asarray(bbox[2:]))
+                np.matmul(rot_mat, np.asarray(bbox[:2]) - img_tr) + img_tr,
+                np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])- img_tr) + img_tr,
+                np.matmul(rot_mat, np.asarray([bbox[0], bbox[3]]) - img_tr) + img_tr,
+                np.matmul(rot_mat, np.asarray(bbox[2:]) - img_tr) + img_tr
             ]
 
             x_1 = max(min(corners, key=lambda x: x[0])[0], 0)
@@ -338,8 +339,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             x_2 = min(max(corners, key=lambda x: x[0])[0], img_dims[0])
             y_2 = min(max(corners, key=lambda x: x[1])[1], img_dims[1])
 
-            assert x_1 <= x_2, f"{x_1} > {x_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
-            assert y_1 <= y_2, f"{y_1} > {y_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
+            assert x_1 <= x_2, f"Angle {angle}: {x_1} > {x_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
+            assert y_1 <= y_2, f"Angle {angle}: {y_1} > {y_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
 
             ret_val.append([x_1, y_1, x_2, y_2])
 
@@ -495,7 +496,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     labels.append(bbox['train_id'])
                     bboxes.append(bbox['bbox'])
 
-        assert all(item > 0 for item in [len(labels), len(bboxes)])
         return labels, bboxes
 
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
