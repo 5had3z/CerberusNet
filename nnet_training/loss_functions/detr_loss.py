@@ -47,7 +47,7 @@ class DetrLoss(torch.nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer('empty_weight', empty_weight)
 
-    def loss_labels(self, outputs, targets, indices, log=True):
+    def loss_labels(self, outputs, targets, indices, log=False):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
@@ -55,7 +55,7 @@ class DetrLoss(torch.nn.Module):
         src_logits = outputs['logits']
 
         idx = self._get_src_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_o = torch.cat([t[J] for t, (_, J) in zip(targets["labels"], indices)])
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
                                     dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
@@ -70,15 +70,15 @@ class DetrLoss(torch.nn.Module):
 
     @staticmethod
     @torch.no_grad()
-    def loss_cardinality(outputs, targets):
+    def loss_cardinality(outputs, targets, *_args):
         """ Compute the cardinality error, ie the absolute error in the number of predicted
             non-empty boxes.\n
             This is not really a loss, it is intended for logging purposes only, it doesn't
             propagate gradients.
         """
         pred_logits = outputs['logits']
-        device = pred_logits.device
-        tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
+        tgt_lengths = torch.as_tensor([len(v) for v in targets["labels"]],
+                                      device=pred_logits.device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
         card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
@@ -95,7 +95,7 @@ class DetrLoss(torch.nn.Module):
         assert 'bboxes' in outputs
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs['bboxes'][idx]
-        target_boxes = torch.cat([t['bboxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat([t[i] for t, (_, i) in zip(targets['bboxes'], indices)], dim=0)
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
 
@@ -119,10 +119,8 @@ class DetrLoss(torch.nn.Module):
         tgt_idx = self._get_tgt_permutation_idx(indices)
         src_masks = outputs["masks"]
         src_masks = src_masks[src_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, _ = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
+
+        target_masks = targets["masks"].to(src_masks)
         target_masks = target_masks[tgt_idx]
 
         # upsample predictions to the target size
@@ -176,7 +174,7 @@ class DetrLoss(torch.nn.Module):
         indices = self.matcher(detr_outputs, targets)
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
-        num_boxes = sum(len(t["labels"]) for t in targets)
+        num_boxes = sum(len(t) for t in targets["labels"])
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float,
                                     device=next(iter(predictions.values())).device)
         if is_dist_avail_and_initialized():
@@ -204,4 +202,5 @@ class DetrLoss(torch.nn.Module):
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        return self.weight * sum([losses[k] * self.weight_dict[k] for k in losses])
+        return self.weight * sum([losses[k] * self.weight_dict[k] for k in losses
+                                  if k in self.weight_dict.keys()])

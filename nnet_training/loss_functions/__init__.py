@@ -44,4 +44,5 @@ def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
         else:
             raise NotImplementedError(loss_fn['function'])
 
-    return loss_fn_dict
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return {k:v.to(device) for k, v in loss_fn_dict.items()}

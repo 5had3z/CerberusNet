@@ -1042,7 +1042,7 @@ class BoundaryBoxMetric(MetricBase):
         #   Calculate IoU for each Box
         detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes']}
         indices = self.matcher(detr_outputs, targets)
-        iou = self._calculate_iou(detr_outputs['boxes'], targets['boxes'], indices)
+        iou = self._calculate_iou(detr_outputs['bboxes'], targets['bboxes'], indices)
 
         self.metric_data['Batch_IoU'].append(iou)
 

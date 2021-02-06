@@ -70,8 +70,11 @@ class HungarianMatcher(nn.Module):
         # tgt_ids = torch.cat([v["labels"] for v in targets])
         # tgt_bbox = torch.cat([v["bboxes"] for v in targets])
 
-        tgt_ids = targets["labels"].type(torch.int64).to(outputs["logits"].device).squeeze(0)
-        tgt_bbox = targets["bboxes"].type(torch.float32).to(outputs["logits"].device).squeeze(0)
+        tgt_ids = torch.cat(targets['labels']).type(torch.int64).to(outputs["logits"].device)
+        tgt_bbox = torch.cat(targets['bboxes']).type(torch.float32).to(outputs["logits"].device)
+
+        # tgt_ids = targets["labels"].type(torch.int64).to(outputs["logits"].device).squeeze(0)
+        # tgt_bbox = targets["bboxes"].type(torch.float32).to(outputs["logits"].device).squeeze(0)
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
@@ -88,7 +91,7 @@ class HungarianMatcher(nn.Module):
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()
 
-        sizes = [len(v["boxes"]) for v in targets]
+        sizes = [len(v) for v in targets["bboxes"]]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
                 for i, j in indices]

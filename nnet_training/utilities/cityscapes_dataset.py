@@ -25,6 +25,7 @@ from PIL import Image
 import numpy as np
 
 from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
+from nnet_training.utilities.custom_batch_sampler import collate_w_bboxes
 from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
 from nnet_training.nnet_models.detr.box_ops import normalize_boxes
 
@@ -489,6 +490,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         with open(json_path) as json_file:
             json_data = json.load(json_file)
             for bbox in json_data:
+                assert bbox['train_id'] < 255, f"invalid id {bbox['train_id']}"
                 labels.append(bbox['train_id'])
                 bboxes.append(bbox['bbox'])
 
@@ -532,7 +534,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
             drop_last=dataset_config.drop_last,
-            pin_memory=True
+            pin_memory=True,
+            collate_fn=collate_w_bboxes
         )
     }
 
@@ -543,7 +546,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
                 sampler=RandomSampler(datasets["Training"]),
                 batch_size=dataset_config.batch_size,
                 drop_last=dataset_config.drop_last,
-                scale_range=dataset_config.augmentations.rand_scale)
+                scale_range=dataset_config.augmentations.rand_scale),
+                collate_fn=collate_w_bboxes
         )
     else:
         torch.backends.cudnn.benchmark = True
@@ -554,7 +558,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
             shuffle=dataset_config.shuffle,
             num_workers=n_workers,
             drop_last=dataset_config.drop_last,
-            pin_memory=True
+            pin_memory=True,
+            collate_fn=collate_w_bboxes
         )
 
     return dataloaders
