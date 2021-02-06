@@ -25,6 +25,8 @@ from PIL import Image
 import numpy as np
 
 from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
+from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
+from nnet_training.nnet_models.detr.box_ops import normalize_boxes
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 
@@ -83,6 +85,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self._initialize_dataset(directories, l_img_key, **kwargs)
 
         self.disparity_out = disparity_out
+        self.cs_base_size = [2048, 1024]
         self.base_size = output_size # (width, height)
         self.output_shape = output_size
         self.scale_factor = 1
@@ -101,6 +104,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
             self.img_normalize = torchvision.transforms.Normalize(
                 kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
+        if 'box_type' in kwargs:
+            self.bbox_type = kwargs['box_type']
 
         self.rand_flip = True
 
@@ -272,6 +277,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if all(key in epoch_data.keys() for key in ['bboxes', 'labels']):
             epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'])
             epoch_data['labels'] = torch.as_tensor(epoch_data['labels'])
+            if hasattr(self, 'bbox_type') and self.bbox_type == 'cxcywh':
+                epoch_data['bboxes'] = box_xyxy_to_cxcywh(epoch_data['bboxes'])
+            epoch_data['bboxes'] = normalize_boxes(epoch_data['bboxes'], self.output_shape)
 
         return epoch_data
 
@@ -281,7 +289,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         Mirrors a boundary box [x1,y1,x2,y2] in an image of img_dims (width, height)
         """
         ret_val = []
-        mirror_x = lambda x : img_dims[0] - (x - int(img_dims[0] / 2))
+        mirror_x = lambda x : int(img_dims[0] / 2) - (x - int(img_dims[0] / 2))
         for bbox in bbox_list:
             ret_val.append([mirror_x(bbox[2]), bbox[1], mirror_x(bbox[0]), bbox[3]])
         return ret_val
@@ -312,21 +320,25 @@ class CityScapesDataset(torch.utils.data.Dataset):
         rotation angle and ensures it stays within clipping.
         """
         ret_val = []
-        for bbox in bbox_list:
-            corners = []
-            rad_angle = np.deg2rad(angle)
-            rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
-                                  [np.sin(rad_angle), np.cos(rad_angle)]])
+        rad_angle = np.deg2rad(angle)
+        rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
+                               [np.sin(rad_angle), np.cos(rad_angle)]])
 
-            corners.append(np.matmul(rot_mat, np.asarray(bbox[:2])))
-            corners.append(np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])))
-            corners.append(np.matmul(rot_mat, np.asarray([bbox[1], bbox[3]])))
-            corners.append(np.matmul(rot_mat, np.asarray(bbox[2:])))
+        for bbox in bbox_list:
+            corners = [
+                np.matmul(rot_mat, np.asarray(bbox[:2])),
+                np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])),
+                np.matmul(rot_mat, np.asarray([bbox[0], bbox[3]])),
+                np.matmul(rot_mat, np.asarray(bbox[2:]))
+            ]
 
             x_1 = max(min(corners, key=lambda x: x[0])[0], 0)
             y_1 = max(min(corners, key=lambda x: x[1])[1], 0)
             x_2 = min(max(corners, key=lambda x: x[0])[0], img_dims[0])
             y_2 = min(max(corners, key=lambda x: x[1])[1], img_dims[1])
+
+            assert x_1 <= x_2, f"{x_1} > {x_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
+            assert y_1 <= y_2, f"{y_1} > {y_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
 
             ret_val.append([x_1, y_1, x_2, y_2])
 
@@ -358,7 +370,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if key not in ['labels', 'bboxes']:
                     epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
                 elif key == 'bboxes':
-                    epoch_data[key] = self._mirror_bbox(data, self.output_shape)
+                    epoch_data[key] = self._mirror_bbox(data, self.cs_base_size)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
@@ -377,7 +389,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
                 elif key == 'bboxes':
-                    epoch_data[key] = self._rotate_bbox(data, angle, self.base_size)
+                    epoch_data[key] = self._rotate_bbox(data, angle, self.cs_base_size)
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
@@ -390,7 +402,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 data = data.resize(self.output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
             elif key == "bboxes":
-                epoch_data[key] = self._scale_bbox(data, self.base_size, self.output_shape)
+                epoch_data[key] = self._scale_bbox(data, self.cs_base_size, self.output_shape)
 
         if hasattr(self, 'crop_fraction'):
             # random crop

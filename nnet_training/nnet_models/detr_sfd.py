@@ -95,7 +95,6 @@ class DetrSegmHead(nn.Module):
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
         """
         super().__init__()
-        self.num_queries = num_queries
         self.transformer = transformer
         hidden_dim = transformer.d_model
         self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
@@ -130,11 +129,13 @@ class DetrSegmHead(nn.Module):
                                 list of dictionnaries containing the two above keys for each decoder
                                 layer.
         """
+        # Generating mask
+        mask_size = list(features.shape)
+        del mask_size[1]
+        mask = torch.zeros(mask_size, dtype=torch.bool, device=features.device)
 
-        src, mask = features[-1].decompose()
-        assert mask is not None
-        src_proj = self.input_proj(src)
-        hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos_embeddings[-1])
+        src_proj = self.input_proj(features)
+        hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos_embeddings)
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
@@ -269,15 +270,12 @@ class DetrNetSFD(nn.Module):
         of outputs.\n During onnx export, consistency becomes the sequential image argument \
         because onnx export is not compatible with keyword aruments.
         """
-        forward = {}
-
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(l_img)
         positional_embeddings = self.pos_embed(high_level_features)
 
         # Segmentation pass with image 1
-        forward['bbox'], forward['seg_aux'], _ = self.detr(high_level_features, positional_embeddings)
-        forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
+        forward = self.detr(high_level_features, positional_embeddings)
 
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
@@ -313,7 +311,8 @@ class DetrNetSFD(nn.Module):
                 forward['seg_b'] = scale_as(forward['seg_b'], l_img)
                 forward['depth_b'] = scale_as(forward['depth_b'], l_img)
 
-        forward['seg'] = scale_as(forward['seg'], l_img)
+        if 'seg' in forward.keys():
+            forward['seg'] = scale_as(forward['seg'], l_img)
         forward['depth'] = scale_as(forward['depth'], l_img)
 
         return forward

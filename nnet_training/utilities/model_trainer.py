@@ -270,7 +270,7 @@ class ModelTrainer():
         losses = {}
 
         for loss_type, loss_func in self._loss_fn.items():
-            losses[loss_type] = loss_func(preds=nnet_outputs, targets=batch_data)
+            losses[loss_type] = loss_func(predictions=nnet_outputs, targets=batch_data)
 
         return losses
 

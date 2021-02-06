@@ -19,6 +19,11 @@ def box_xyxy_to_cxcywh(x):
          (x1 - x0), (y1 - y0)]
     return torch.stack(b, dim=-1)
 
+def normalize_boxes(x, dims):
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [x0 / dims[0], y0 / dims[1],
+         x1 / dims[0], y1 / dims[1]]
+    return torch.stack(b, dim=-1)
 
 # modified from torchvision to also return the union
 def box_iou(boxes1, boxes2):
@@ -48,6 +53,8 @@ def generalized_box_iou(boxes1, boxes2):
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
+    test_1 = boxes1.cpu()
+    test_2 = boxes2.cpu()
     assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
     iou, union = box_iou(boxes1, boxes2)
