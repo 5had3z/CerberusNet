@@ -126,6 +126,8 @@ def test_image_processing():
 
     bboxes = bbox_info_from_instance(inst_img)
 
+    # assert all(bbox['train_id'] < 19 for bbox in bboxes), f"Invalid Train ID found: {inst_path}."
+
     write_info_json(inst_path, bboxes)
 
     visualise_output(base_img, bboxes)
@@ -136,6 +138,7 @@ def generate_bbox_json(path_: str) -> None:
     """
     inst_img = np.array(Image.open(path_), dtype=np.int16)
     bboxes = bbox_info_from_instance(inst_img)
+    # assert all(bbox['train_id'] < 19 for bbox in bboxes), f"Invalid Train ID found: {path_}."
     write_info_json(path_, bboxes)
 
 def main(path_: str) -> None:

@@ -490,10 +490,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
         with open(json_path) as json_file:
             json_data = json.load(json_file)
             for bbox in json_data:
-                assert bbox['train_id'] < 255, f"invalid id {bbox['train_id']}"
-                labels.append(bbox['train_id'])
-                bboxes.append(bbox['bbox'])
+                # assert bbox['train_id'] < 255, f"invalid id {bbox['train_id']}"
+                if bbox['train_id'] < 19:
+                    labels.append(bbox['train_id'])
+                    bboxes.append(bbox['bbox'])
 
+        assert all(item > 0 for item in [len(labels), len(bboxes)])
         return labels, bboxes
 
 def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
