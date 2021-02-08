@@ -1044,7 +1044,9 @@ class BoundaryBoxMetric(MetricBase):
         indices = self.matcher(detr_outputs, targets)
         iou = self._calculate_iou(detr_outputs['bboxes'], targets['bboxes'], indices)
 
-        self.metric_data['Batch_IoU'].append(iou)
+        self.metric_data['Batch_IoU'].append(iou.cpu().numpy())
+        self.metric_data['Batch_Precision'].append((iou > 0.5).cpu().numpy().mean())
+        self.metric_data['Batch_Precision'].append((iou > 0.5).cpu().numpy().mean())
 
 
     def max_accuracy(self, main_metric=True):

@@ -297,36 +297,42 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return ret_val
 
     @staticmethod
-    def _crop_bbox(bbox_list: List[List[int]], img_dims: Tuple[int, int],
-                   crop_dims: Tuple[int, int, int, int]) -> List[List[int]]:
+    def _crop_bbox(batch_data: List[List[int]],
+                   crop_dims: Tuple[int, int, int, int]) -> None:
         """
         Transforms a boundary box [x1,y1,x2,y2] according to an image crop (x, y, w, h)
         """
-        ret_val = []
-        for bbox in bbox_list:
+        for idx, bbox in enumerate(batch_data['bboxes']):
             # Shift bbox top left, clip at 0
             b_x1 = max(bbox[0] - crop_dims[0], 0)
             b_y1 = max(bbox[1] - crop_dims[1], 0)
             # Shift bbox top left, clip at bottom right boundary
             # if image crop encroaches on transformed bbox.
-            b_x2 = min(bbox[2] - crop_dims[0], img_dims[0] - crop_dims[2])
-            b_x2 = min(bbox[3] - crop_dims[1], img_dims[1] - crop_dims[3])
-            ret_val.append([b_x1, b_y1, b_x2, b_x2])
-        return ret_val
+            b_x2 = min(bbox[2] - crop_dims[0], crop_dims[2])
+            b_y2 = min(bbox[3] - crop_dims[1], crop_dims[3])
+
+            if b_x1 > crop_dims[2] or b_y1 > crop_dims[3]:
+                Warning(f"Box {idx}: {bbox} outside of crop {crop_dims}")
+                del batch_data['labels'][idx]
+                del batch_data['bboxes'][idx]
+            else:
+                batch_data['bboxes'][idx] = [b_x1, b_y1, b_x2, b_y2]
 
     @staticmethod
-    def _rotate_bbox(bbox_list: List[List[int]], angle: float,
-                     img_dims: Tuple[int, int]) -> List[List[int]]:
+    def _rotate_bbox(batch_data: List[List[int]], angle: float,
+                     img_dims: Tuple[int, int]) -> None:
         """
         Transforms a boundary box [x1,y1,x2,y2] according to an image
         rotation angle and ensures it stays within clipping.
         """
-        ret_val = []
         rad_angle = np.deg2rad(angle)
         rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
                                [np.sin(rad_angle), np.cos(rad_angle)]])
         img_tr = np.asarray(img_dims) / 2
-        for bbox in bbox_list:
+
+        clamp = lambda x, _min, _max: min(max(x, _min), _max)
+
+        for idx, bbox in enumerate(batch_data['bboxes']):
             corners = [
                 np.matmul(rot_mat, np.asarray(bbox[:2]) - img_tr) + img_tr,
                 np.matmul(rot_mat, np.asarray([bbox[2], bbox[1]])- img_tr) + img_tr,
@@ -334,17 +340,20 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 np.matmul(rot_mat, np.asarray(bbox[2:]) - img_tr) + img_tr
             ]
 
-            x_1 = max(min(corners, key=lambda x: x[0])[0], 0)
-            y_1 = max(min(corners, key=lambda x: x[1])[1], 0)
-            x_2 = min(max(corners, key=lambda x: x[0])[0], img_dims[0])
-            y_2 = min(max(corners, key=lambda x: x[1])[1], img_dims[1])
+            x_1 = clamp(min(corners, key=lambda x: x[0])[0], 0, img_dims[0])
+            y_1 = clamp(min(corners, key=lambda x: x[1])[1], 0, img_dims[1])
+            x_2 = clamp(max(corners, key=lambda x: x[0])[0], 0, img_dims[0])
+            y_2 = clamp(max(corners, key=lambda x: x[1])[1], 0, img_dims[1])
 
             assert x_1 <= x_2, f"Angle {angle}: {x_1} > {x_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
             assert y_1 <= y_2, f"Angle {angle}: {y_1} > {y_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
 
-            ret_val.append([x_1, y_1, x_2, y_2])
-
-        return ret_val
+            if x_1 == x_2 or y_1 == y_2:
+                Warning(f"Box {idx}: {bbox} outside of rotation augmentation {angle}")
+                del batch_data['labels'][idx]
+                del batch_data['bboxes'][idx]
+            else:
+                batch_data['bboxes'][idx] = [x_1, y_1, x_2, y_2]
 
     @staticmethod
     def _scale_bbox(bbox_list: List[List[int]], src_dims: Tuple[int, int],
@@ -391,7 +400,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
                 elif key == 'bboxes':
-                    epoch_data[key] = self._rotate_bbox(data, angle, self.cs_base_size)
+                    self._rotate_bbox(epoch_data, angle, self.cs_base_size)
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
@@ -414,13 +423,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
             crop_y = random.randint(0, epoch_data["l_img"].shape[1] - crop_h)
 
             for key, data in epoch_data.items():
-                if key in ["seg", "l_disp", "r_disp"]:
+                if key in ["l_img", "r_img", "l_seq", "r_seq"]:
+                    epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                elif key in ["seg", "l_disp", "r_disp"]:
                     epoch_data[key] = data[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
                 elif key == 'bboxes':
-                    epoch_data[key] = self._crop_bbox(
-                        data, self.output_shape, (crop_x, crop_y, crop_w, crop_h))
-                else:
-                    epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                    self._crop_bbox(data, (crop_x, crop_y, crop_w, crop_h))
 
     def _class_to_index(self, seg):
         values = np.unique(seg)
