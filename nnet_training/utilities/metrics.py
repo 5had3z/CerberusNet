@@ -6,7 +6,12 @@ __email__ = "bryce.ferenczi@monash.edu"
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Callable, Union, Tuple, overload
+from typing import Dict
+from typing import List
+from typing import Callable
+from typing import Union
+from typing import Tuple
+from typing import overload
 
 import h5py
 import numpy as np
@@ -21,7 +26,7 @@ from torchvision.ops.boxes import box_iou
 from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.nnet_models.detr.matcher import HungarianMatcher
-from nnet_training.nnet_models.detr.box_ops import generalized_box_iou, box_cxcywh_to_xyxy
+from nnet_training.nnet_models.detr.box_ops import box_cxcywh_to_xyxy
 
 __all__ = ['MetricBase', 'SegmentationMetric', 'DepthMetric',
            'BoundaryBoxMetric', 'ClassificationMetric']
@@ -31,21 +36,21 @@ class MetricBase():
     Provides basic functionality for statistics tracking classes
     """
     def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        assert mode in ['training', 'validation']
+        assert mode in ['training', 'validation'], f'invalid mode: {mode}'
         self.mode = mode
         self.metric_data = {}
-        if main_metric[:6] != "Batch_":
+        if not main_metric.startswith("Batch_"):
             main_metric = "Batch_"+main_metric
         self.main_metric = main_metric
 
         if savefile != "":
-            if savefile[-5:] != '.hdf5':
-                savefile = savefile + '.hdf5'
+            if not savefile.endswith('.hdf5'):
+                savefile += '.hdf5'
             self._path = base_dir / savefile
             if not os.path.isfile(self._path):
                 with h5py.File(self._path, 'a') as hfile:
                     hfile.create_group('cache')
-                    print("Training Statitsics created at ", self._path)
+                    print(f"Training Statitsics created at {self._path}")
             else:
                 # Clear any previously cached data
                 with h5py.File(self._path, 'a') as hfile:
@@ -77,14 +82,14 @@ class MetricBase():
                     self._flush_to_main()
 
                 if self.mode in list(hfile):
-                    group_name = self.mode + '/Epoch_' + str(len(list(hfile[self.mode])) + 1)
+                    group_name = f'{self.mode}/Epoch_{len(list(hfile[self.mode]))+1}'
                 else:
-                    group_name = self.mode + '/Epoch_1'
+                    group_name = f'{self.mode}/Epoch_1'
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
                     data = np.asarray(data)
-                    if name[:6] == "Batch_" and len(data.shape) > 1:
+                    if name.startswith("Batch_") and len(data.shape) > 1:
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
@@ -108,9 +113,8 @@ class MetricBase():
 
         if self._path is not None:
             with h5py.File(self._path, 'r') as hfile:
-                group_name = 'Epoch_' + str(epoch_idx)
-                for metric in list(hfile[mode][group_name]):
-                    self.metric_data[metric] = hfile[mode][group_name][metric][:]
+                for metric in list(hfile[f'{mode}/Epoch_{epoch_idx}']):
+                    self.metric_data[metric] = hfile[f'{mode}/Epoch_{epoch_idx}/{metric}'][:]
             return self.metric_data
 
         print("No File Specified for Segmentation Metric Manager")
@@ -139,13 +143,13 @@ class MetricBase():
 
         group_name = 'Epoch_' + str(epoch_idx)
         with h5py.File(self._path, 'r') as hfile:
-            num_metrics = len(list(hfile['training'][group_name]))
-            for idx, metric in enumerate(list(hfile['training'][group_name])):
+            num_metrics = len(list(hfile[f'training/{group_name}']))
+            for idx, metric in enumerate(list(hfile[f'training/{group_name}'])):
                 plt.subplot(1, num_metrics, idx+1)
-                plt.plot(hfile['training'][group_name][metric][:])
-                plt.plot(hfile['validation'][group_name][metric][:])
+                plt.plot(hfile[f'training/{group_name}/{metric}'][:])
+                plt.plot(hfile[f'validation/{group_name}/{metric}'][:])
                 plt.legend(["Training", "Validation"])
-                plt.title('Batch ' + str(metric) + ' over Epochs')
+                plt.title(f'Batch {metric} over Epochs')
                 plt.ylabel(str(metric))
                 plt.xlabel('Iter #')
 
@@ -159,13 +163,12 @@ class MetricBase():
             with h5py.File(self._path, 'a') as hfile:
                 n_cached = 1
                 if 'cache' in list(hfile) and self.mode in list(hfile['cache']):
-                    n_cached = len(list(hfile['cache/'+self.mode])) + 1
+                    n_cached = len(list(hfile[f'cache/{self.mode}'])) + 1
 
                 if self.mode in list(hfile):
-                    group_name = 'cache/' + self.mode + '/Epoch_' +\
-                        str(len(list(hfile[self.mode])) + n_cached)
+                    group_name = f'cache/{self.mode}/Epoch_{len(list(hfile[self.mode])+n_cached)}'
                 else:
-                    group_name = 'cache/' + self.mode + '/Epoch_' + str(n_cached)
+                    group_name = f'cache/{self.mode}/Epoch_{n_cached}'
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
@@ -187,9 +190,9 @@ class MetricBase():
         """
         with h5py.File(self._path, 'a') as hfile:
             for mode in list(hfile['cache']):
-                for epoch in list(hfile['cache/'+mode]):
-                    hfile.copy('cache/'+mode+'/'+epoch, mode+'/'+epoch)
-                    del hfile['cache/'+mode+'/'+epoch]
+                for epoch in list(hfile[f'cache/{mode}']):
+                    hfile.copy(f'cache/{mode}/{epoch}', f'{mode}/{epoch}')
+                    del hfile[f'cache/{mode}/{epoch}']
 
     def get_summary_data(self):
         """
@@ -208,18 +211,18 @@ class MetricBase():
 
             sort_func = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_func)):
-                if 'Summary' in list(hfile['training/'+epoch]):
-                    training_mean[idx] = hfile['training/'+epoch+'/Summary'][:]
+                if 'Summary' in list(hfile[f'training/{epoch}']):
+                    training_mean[idx] = hfile[f'training/{epoch}/Summary'][:]
                 else:
-                    training_mean[idx] = hfile['training/'+epoch+'/Summary_Mean'][:]
-                    training_var[idx] = hfile['training/'+epoch+'/Summary_Variance'][:]
+                    training_mean[idx] = hfile[f'training/{epoch}/Summary_Mean'][:]
+                    training_var[idx] = hfile[f'training/{epoch}/Summary_Variance'][:]
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_func)):
-                if 'Summary' in list(hfile['validation/'+epoch]):
-                    testing_mean[idx] = hfile['validation/'+epoch+'/Summary'][:]
+                if 'Summary' in list(hfile[f'validation/{epoch}']):
+                    testing_mean[idx] = hfile[f'validation/{epoch}/Summary'][:]
                 else:
-                    testing_mean[idx] = hfile['validation/'+epoch+'/Summary_Mean'][:]
-                    testing_var[idx] = hfile['validation/'+epoch+'/Summary_Variance'][:]
+                    testing_mean[idx] = hfile[f'validation/{epoch}/Summary_Mean'][:]
+                    testing_var[idx] = hfile[f'validation/{epoch}/Summary_Variance'][:]
 
         ret_val = {}
         for idx, metric in enumerate(metrics):
@@ -289,32 +292,30 @@ class MetricBase():
         This plots all the statistics over all non-cached iterations
         """
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Iteration Training and Validation Results')
+        plt.suptitle(f'{self._path.name} Iteration Training and Validation Results')
 
         with h5py.File(self._path, 'r') as hfile:
             training_metrics = {}
             validation_metrics = {}
             for metric in list(hfile['training/Epoch_1']):
-                if metric[:5] == 'Batch':
+                if metric.startswith('Batch'):
                     training_metrics[metric] = np.zeros((1, 1))
                     validation_metrics[metric] = np.zeros((1, 1))
 
             for epoch in list(hfile['training']):
-                for metric in list(hfile['training/'+epoch]):
-                    if metric[:5] == 'Batch':
+                for metric in list(hfile[f'training/{epoch}']):
+                    if metric.startswith('Batch'):
                         training_metrics[metric] = np.append(
-                            training_metrics[metric],
-                            hfile['training/'+epoch+'/'+metric][:])
+                            training_metrics[metric], hfile[f'training/{epoch}/{metric}'][:])
 
             for epoch in list(hfile['validation']):
-                for metric in list(hfile['validation/'+epoch]):
-                    if metric[:5] == 'Batch':
+                for metric in list(hfile[f'validation/{epoch}']):
+                    if metric.startswith('Batch'):
                         validation_metrics[metric] = np.append(
-                            validation_metrics[metric],
-                            hfile['validation/'+epoch+'/'+metric][:])
+                            validation_metrics[metric], hfile[f'validation/{epoch}/{metric}'][:])
 
-            print("# Training, ", len(list(hfile['training'])),
-                  "\t# Validation", len(list(hfile['validation'])))
+            print(f"# Training, {len(list(hfile['training']))}" \
+                  f"\t# Validation, {len(list(hfile['validation']))}")
 
         num_metrics = len(training_metrics.keys())
         for idx, metric in enumerate(training_metrics):
@@ -322,7 +323,7 @@ class MetricBase():
             plt.plot(training_metrics[metric])
             plt.plot(validation_metrics[metric])
             plt.legend(["Training", "Validation"])
-            plt.title(metric + ' over Iterations')
+            plt.title(f'{metric} over Iterations')
             plt.xlabel('Iteration #')
 
         plt.show()
@@ -385,12 +386,12 @@ class MetricBase():
         with h5py.File(path, 'a') as hfile:
             if 'validation' in list(hfile):
                 for epoch in hfile['validation']:
-                    if 'Summary' in list(hfile['validation/'+epoch]):
-                        summary_mean = hfile['validation/'+epoch+'/Summary'][:]
+                    if 'Summary' in list(hfile[f'validation/{epoch}']):
+                        summary_mean = hfile[f'validation/{epoch}/Summary'][:]
                         summary_var = 0.
                     else:
-                        summary_mean = hfile['validation/'+epoch+'/Summary_Mean'][:]
-                        summary_var = hfile['validation/'+epoch+'/Summary_Variance'][:]
+                        summary_mean = hfile[f'validation/{epoch}/Summary_Mean'][:]
+                        summary_var = hfile[f'validation/{epoch}/Summary_Variance'][:]
 
                     srt_fnc = lambda x: x[0]
                     for idx, (key, data) in enumerate(sorted(criterion_dict.items(), key=srt_fnc)):
@@ -428,9 +429,7 @@ class MetricBase():
         Prints all the statistics
         """
         for key, data in self.metric_data.items():
-            stripped = key.replace("Batch_", "")
-            mean_data = np.asarray(data).mean()
-            print("%s: %.3f" %(stripped, mean_data))
+            print(f"{key.replace('Batch_', '')}: {np.asarray(data).mean():.3f}")
 
     def get_epoch_data(self, epoch=-1, statistic=None, mode='validation'):
         """
@@ -511,7 +510,7 @@ class SegmentationMetric(MetricBase):
         miou = np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"]))
 
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
-        print(f"Pixel Accuracy: {pixel_acc:.4f}\nmIoU: {miou:.4f}\nLoss: {loss:.4f}")
+        print(f"Pixel Accuracy: {pixel_acc:.4f}\tmIoU: {miou:.4f}\tLoss: {loss:.4f}")
 
     def get_current_statistics(self, main_metric=True, loss_metric=True):
         """
