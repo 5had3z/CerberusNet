@@ -5,15 +5,15 @@ Example Config Structure
     "name" : "DetrNetSFD",
     "args" : {
         "detr_config" : {
-            "num_channels" : 512, "num_classes" : 19, "num_queries" : 100,
+            "num_channels" : 720, "num_classes" : 19, "num_queries" : 100,
             "aux_loss" : false
         },
         "transformer_config" : {
             "dropout" : 0.1, "enc_layers" : 6, "dec_layers" : 6,
-            "dim_feedforward" : 2048, "hidden_dim" : 256, "n_heads" : 8
+            "dim_feedforward" : 2048, "d_model" : 256, "n_heads" : 8
         },
         "position_embedding_config" : {
-            "type" : "sine"
+            "type" : "sine", "hidden_dim" : 256
         },
         "hrnetv2_config" : {
             "pretrained" : "hrnetv2_w48_imagenet_pretrained.pth",
@@ -129,7 +129,7 @@ class DetrSegmHead(nn.Module):
                                 list of dictionnaries containing the two above keys for each decoder
                                 layer.
         """
-        # Generating mask
+        # TODO Intergrate in rotation for dataloader
         mask_size = list(features.shape)
         del mask_size[1]
         mask = torch.zeros(mask_size, dtype=torch.bool, device=features.device)

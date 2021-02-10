@@ -391,6 +391,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                         data, brightness_scale)
 
         if hasattr(self, 'rand_rot'):
+            # TODO Add mask for bboxes which is required for attention head
             angle = random.uniform(0, self.rand_rot)
             for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
