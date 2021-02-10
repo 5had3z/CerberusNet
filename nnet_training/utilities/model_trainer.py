@@ -146,7 +146,6 @@ class ModelTrainer():
 
             torch.cuda.empty_cache()
 
-            self._model.train()
             self._train_epoch(max_epoch)
 
             for metric in self.metric_loggers.values():
@@ -154,7 +153,6 @@ class ModelTrainer():
 
             torch.cuda.empty_cache()
 
-            self._model.eval()
             self._validate_model(max_epoch)
 
             epoch_duration = time.time() - epoch_start_time
@@ -183,6 +181,7 @@ class ModelTrainer():
         print(f"\nTotal Traning Time: \t{train_end_time - train_start_time}")
 
     def _train_epoch(self, max_epoch):
+        self._model.train()
         start_time = time.time()
 
         for batch_idx, batch_data in enumerate(self._training_loader):
@@ -226,6 +225,8 @@ class ModelTrainer():
 
     @torch.no_grad()
     def _validate_model(self, max_epoch):
+        # TODO Fix bbox issues when using model.eval()
+        self._model.train()
         start_time = time.time()
 
         for batch_idx, batch_data in enumerate(self._validation_loader):
@@ -299,7 +300,8 @@ class ModelTrainer():
         """
         Displays the outputs of the network
         """
-        self._model.eval()
+        # TODO Fix bbox issues when using model.eval()
+        self._model.train()
 
         batch_data = next(iter(self._validation_loader))
         self._data_to_gpu(batch_data)

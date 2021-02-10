@@ -325,7 +325,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         Transforms a boundary box [x1,y1,x2,y2] according to an image
         rotation angle and ensures it stays within clipping.
         """
-        rad_angle = np.deg2rad(angle)
+        rad_angle = np.deg2rad(-angle)
         rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
                                [np.sin(rad_angle), np.cos(rad_angle)]])
         img_tr = np.asarray(img_dims) / 2
