@@ -349,7 +349,7 @@ class MetricBase():
                 ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                if key != "Batch_Loss" or return_loss:
+                if (key != "Batch_Loss" or return_loss) and key.startswith('Batch'):
                     data = np.asarray(data).flatten()
                     ret_mean += (data.mean(),)
                     ret_var += (data.var(ddof=1),)
@@ -1079,6 +1079,50 @@ class BoundaryBoxMetric(MetricBase):
 
         self.metric_data['Batch_IoU'].append(iou_class.cpu().numpy())
 
+    def get_current_statistics(self, main_only=True, return_loss=True):
+        """
+        Returns either all statistics or only main statistic\n
+        @todo   get a specified epoch instead of only currently loaded one\n
+        @param  main_metric, returns mIoU and not Pixel Accuracy\n
+        @param  loss_metric, returns recorded loss\n
+        """
+        ret_mean = ()
+        ret_var = ()
+        precision, recall = self._confmat_cls_pr_rc(self.metric_data["Confusion_Mat"].numpy())
+        if main_only:
+            if self.main_metric == 'Batch_Precision':
+                ret_mean += (np.nanmean(precision),)
+                ret_var += (np.nanvar(
+                    np.asarray(self.metric_data['Batch_Precision']).reshape(-1, self._n_classes),
+                    axis=1).mean(),)
+            elif self.main_metric == 'Batch_Recall':
+                ret_mean += (np.nanmean(recall),)
+                ret_var += (np.nanvar(
+                    np.asarray(self.metric_data['Batch_Recall']).reshape(-1, self._n_classes),
+                    axis=1).mean(),)
+            else:
+                data = np.asarray(self.metric_data[self.main_metric]).flatten()
+                ret_mean += (data.mean(),)
+                ret_var += (data.var(ddof=1),)
+            if return_loss:
+                ret_mean += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
+                ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
+        else:
+            for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
+                if key == 'Batch_Precision':
+                    ret_mean += (np.nanmean(precision),)
+                    data = np.asarray(data).reshape(-1, self._n_classes)
+                    ret_var += (np.nanvar(data, axis=1).mean(),)
+                elif key == 'Batch_Recall':
+                    ret_mean += (np.nanmean(recall),)
+                    data = np.asarray(data).reshape(-1, self._n_classes)
+                    ret_var += (np.nanvar(data, axis=1).mean(),)
+                elif (key != 'Batch_Loss' or return_loss) and key.startswith('Batch'):
+                    data = np.asarray(data).flatten()
+                    ret_mean += (data.mean(),)
+                    ret_var += (data.var(ddof=1),)
+
+        return ret_mean, ret_var
 
     def max_accuracy(self, main_metric=True):
         """
