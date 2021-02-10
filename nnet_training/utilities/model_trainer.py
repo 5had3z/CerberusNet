@@ -7,7 +7,8 @@ import os
 import time
 import sys
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict
+from typing import Union
 
 import numpy as np
 import torch
@@ -17,7 +18,9 @@ import matplotlib.pyplot as plt
 
 from nnet_training.utilities.metrics import get_loggers
 from nnet_training.utilities.lr_scheduler import LRScheduler
-from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
+from nnet_training.utilities.visualisation import get_color_pallete
+from nnet_training.utilities.visualisation import flow_to_image
+from nnet_training.utilities.visualisation import apply_bboxes
 
 __all__ = ['ModelTrainer']
 
@@ -159,7 +162,7 @@ class ModelTrainer():
             if self._checkpoints:
                 for key, logger in self.metric_loggers.items():
                     epoch_acc, _ = logger.get_current_statistics(
-                        main_metric=True, loss_metric=False)
+                        main_only=True, return_loss=False)
                     prev_best = logger.max_accuracy(main_metric=True)
                     if prev_best is None or \
                         prev_best[0](epoch_acc[0], prev_best[1]) == epoch_acc[0]:
@@ -303,7 +306,7 @@ class ModelTrainer():
 
         start_time = time.time()
         forward = self._model(**batch_data)
-        propagation_time = (time.time() - start_time)/self._validation_loader.batch_size
+        propagation_time = (time.time() - start_time) / self._validation_loader.batch_size
 
         if 'depth' in forward and 'l_disp' in batch_data:
             if isinstance(forward['depth'], list):
@@ -313,6 +316,9 @@ class ModelTrainer():
 
         if 'seg' in forward:
             seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
+
+        if 'logits' in forward:
+            class_pred_cpu = torch.argmax(forward['logits'], dim=2)
 
         if 'flow' in forward:
             np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
@@ -327,45 +333,60 @@ class ModelTrainer():
             img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
 
         for i in range(self._validation_loader.batch_size):
-            plt.subplot(2, 4, 1)
+            plt.subplot(2, 5, 1)
             plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
             plt.xlabel("Base Image")
 
             if 'l_seq' in batch_data:
-                plt.subplot(2, 4, 2)
+                plt.subplot(2, 5, 2)
                 plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
                 plt.xlabel("Sequential Image")
 
             if 'seg' in forward and 'seg' in batch_data:
-                plt.subplot(2, 4, 5)
+                plt.subplot(2, 5, 5)
                 plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
                 plt.xlabel("Ground Truth Segmentation")
 
-                plt.subplot(2, 4, 6)
+                plt.subplot(2, 5, 6)
                 plt.imshow(get_color_pallete(seg_pred_cpu[i]))
                 plt.xlabel("Predicted Segmentation")
 
-            if batch_data['flow_gt'] is not None:
-                plt.subplot(2, 4, 3)
+            if 'flow' in batch_data:
+                plt.subplot(2, 5, 3)
                 plt.imshow(flow_to_image(
-                    batch_data['flow_gt']['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
+                    batch_data['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
                 plt.xlabel("Ground Truth Flow")
 
             if 'flow' in forward:
-                plt.subplot(2, 4, 7)
+                plt.subplot(2, 5, 7)
                 plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
                 plt.xlabel("Predicted Flow")
 
             if 'depth' in forward and 'l_disp' in batch_data:
-                plt.subplot(2, 4, 4)
+                plt.subplot(2, 5, 4)
                 plt.imshow(depth_gt_cpu[i], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Ground Truth Disparity")
 
-                plt.subplot(2, 4, 8)
+                plt.subplot(2, 5, 8)
                 plt.imshow(depth_pred_cpu[i, 0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
                 plt.xlabel("Predicted Depth")
 
-            plt.suptitle("Propagation time: " + str(propagation_time))
+            if all(key in batch_data for key in ['bboxes', 'labels']) and \
+                all(key in forward for key in ['bboxes', 'logits']):
+                plt.subplot(2, 5, 9)
+                base_img = np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2)
+                plt.imshow(apply_bboxes(base_img,
+                    batch_data['bboxes'][i].cpu().numpy(),
+                    batch_data['labels'][i].cpu().numpy()))
+                plt.xlabel("Ground Truth Objects")
+
+                plt.subplot(2, 5, 10)
+                pred_labels = class_pred_cpu[i].cpu().numpy()
+                pred_boxes = forward['bboxes'][i].cpu().numpy()
+                plt.imshow(apply_bboxes(base_img, pred_boxes, pred_labels))
+                plt.xlabel("Predicted Objects")
+
+            plt.suptitle(f"Propagation time: {propagation_time}")
             plt.show()
 
 if __name__ == "__main__":

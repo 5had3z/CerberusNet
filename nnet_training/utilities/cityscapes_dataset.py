@@ -276,7 +276,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         #     epoch_data["pose"] = self.pose_json(self.pose[idx])
 
         if all(key in epoch_data.keys() for key in ['bboxes', 'labels']):
-            epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'], dtype=torch.float64)
+            epoch_data['bboxes'] = torch.as_tensor(epoch_data['bboxes'], dtype=torch.float32)
             epoch_data['labels'] = torch.as_tensor(epoch_data['labels'], dtype=torch.int64)
             if epoch_data['bboxes'].shape[0] != 0:
                 if hasattr(self, 'bbox_type') and self.bbox_type == 'cxcywh':
@@ -449,7 +449,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def _depth_transform(self, disparity):
         disparity = np.array(disparity).astype('float32')
-        disparity[disparity > 0] = self.scale_factor * (disparity[disparity > 0] - 1) / 256.0
+        disparity[disparity > 0] = self.scale_factor * (disparity[disparity > 0] - 1) / 256.
         if not self.disparity_out:
             disparity[disparity > 0] = (0.209313 * 2262.52) / disparity[disparity > 0]
 
@@ -530,6 +530,8 @@ def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoa
         aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
     if 'disparity_out' in dataset_config.augmentations:
         aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
+    if 'box_type' in dataset_config.augmentations:
+        aux_aug['box_type'] = dataset_config.augmentations.box_type
 
     datasets = {
         'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),

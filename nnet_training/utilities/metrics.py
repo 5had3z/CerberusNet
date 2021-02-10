@@ -93,7 +93,7 @@ class MetricBase():
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                mean, variance = np.asarray(self.get_current_statistics(main_metric=False))
+                mean, variance = np.asarray(self.get_current_statistics(main_only=False))
                 top_group.create_dataset('Summary_Mean', data=mean)
                 top_group.create_dataset('Summary_Variance', data=variance)
 
@@ -166,18 +166,18 @@ class MetricBase():
                     n_cached = len(list(hfile[f'cache/{self.mode}'])) + 1
 
                 if self.mode in list(hfile):
-                    group_name = f'cache/{self.mode}/Epoch_{len(list(hfile[self.mode])+n_cached)}'
+                    group_name = f'cache/{self.mode}/Epoch_{len(list(hfile[self.mode]))+n_cached}'
                 else:
                     group_name = f'cache/{self.mode}/Epoch_{n_cached}'
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
                     data = np.asarray(data)
-                    if name[:6] == "Batch_" and len(data.shape) > 1:
+                    if name.startswith("Batch_") and len(data.shape) > 1:
                         data = data.reshape(data.shape[0] * data.shape[1], -1)
                     top_group.create_dataset(name, data=data)
 
-                mean, variance = np.asarray(self.get_current_statistics(main_metric=False))
+                mean, variance = np.asarray(self.get_current_statistics(main_only=False))
                 top_group.create_dataset('Summary_Mean', data=mean)
                 top_group.create_dataset('Summary_Variance', data=variance)
 
@@ -201,7 +201,7 @@ class MetricBase():
         with h5py.File(self._path, 'r') as hfile:
             metrics = []
             for metric in list(hfile['training/Epoch_1']):
-                if metric[:5] == 'Batch':
+                if metric.startswith('Batch'):
                     metrics.append(metric)
 
             training_mean = np.zeros((len(list(hfile['training'])), len(metrics)))
@@ -243,7 +243,7 @@ class MetricBase():
 
         with h5py.File(self._path, 'r') as hfile:
             for metric in list(hfile[f'{dataset}/Epoch_1']):
-                if metric[:5] == 'Batch':
+                if metric.startswith('Batch'):
                     return hfile[f'{dataset}/Epoch_1/{metric}'][:].shape[0]
 
         return 0
@@ -331,7 +331,7 @@ class MetricBase():
     def _reset_metric(self):
         raise NotImplementedError
 
-    def get_current_statistics(self, main_metric=True, loss_metric=True):
+    def get_current_statistics(self, main_only=True, return_loss=True):
         """
         Returns Accuracy and Loss Metrics from an Epoch\n
         @todo   get a specified epoch instead of only currently loaded one\n
@@ -340,21 +340,19 @@ class MetricBase():
         """
         ret_mean = ()
         ret_var = ()
-        if main_metric:
+        if main_only:
             data = np.asarray(self.metric_data[self.main_metric]).flatten()
             ret_mean += (data.mean(),)
             ret_var += (data.var(ddof=1),)
-            if loss_metric:
+            if return_loss:
                 ret_mean += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
                 ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
-
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
-                if key != "Batch_Loss" or loss_metric:
+                if key != "Batch_Loss" or return_loss:
                     data = np.asarray(data).flatten()
                     ret_mean += (data.mean(),)
                     ret_var += (data.var(ddof=1),)
-
         return ret_mean, ret_var
 
     def max_accuracy(self, main_metric=True):
@@ -416,7 +414,7 @@ class MetricBase():
         Return the data from the last batch
         """
         if main_metric:
-            return self.metric_data[self.main_metric][-1].mean()
+            return np.nanmean(self.metric_data[self.main_metric][-1])
 
         ret_val = ()
         for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
@@ -460,6 +458,22 @@ class MetricBase():
         epoch_data = self.get_epoch_data(epoch, statistic, mode)
         return np.nanmean(epoch_data), np.nanvar(epoch_data, ddof=1)
 
+    @staticmethod
+    def _confmat_cls_pr_rc(conf_mat: np.ndarray) -> np.ndarray:
+        """
+        Returns tuple of classwise average precision and recall
+        The below calculations are made, but simplified in the actual code:
+        cls_tp = np.diag(conf_mat)
+        cls_fp = np.sum(conf_mat, axis=0) - cls_tp
+        cls_fn = np.sum(conf_mat, axis=1) - cls_tp
+
+        cls_precision = cls_tp / (cls_tp + cls_fp)
+        cls_recall = cls_tp / (cls_tp + cls_fn)
+        """
+        cls_precision = np.diag(conf_mat) / np.sum(conf_mat, axis=0)
+        cls_recall = np.diag(conf_mat) / np.sum(conf_mat, axis=1)
+        return cls_precision, cls_recall
+
 class SegmentationMetric(MetricBase):
     """
     Accuracy and Loss Staticstics tracking for semantic segmentation networks.\n
@@ -482,8 +496,7 @@ class SegmentationMetric(MetricBase):
         self.metric_data["Batch_Loss"].append(loss)
 
         labels = targets['seg'].type(torch.int32).cuda()
-        preds = torch.argmax(
-            predictions['seg'], dim=1,keepdim=True).type(torch.int32).squeeze(dim=1)
+        preds = torch.argmax(predictions['seg'], dim=1).type(torch.int32)
 
         batch_pix_acc = np.zeros((preds.shape[0], 1))
         batch_iou = np.zeros((preds.shape[0], self._n_classes))
@@ -512,16 +525,16 @@ class SegmentationMetric(MetricBase):
         loss = np.asarray(self.metric_data["Batch_Loss"]).mean()
         print(f"Pixel Accuracy: {pixel_acc:.4f}\tmIoU: {miou:.4f}\tLoss: {loss:.4f}")
 
-    def get_current_statistics(self, main_metric=True, loss_metric=True):
+    def get_current_statistics(self, main_only=True, return_loss=True):
         """
-        Returns Accuracy Metrics [pixelwise, mIoU, loss]\n
+        Returns either all statistics or only main statistic\n
         @todo   get a specified epoch instead of only currently loaded one\n
         @param  main_metric, returns mIoU and not Pixel Accuracy\n
         @param  loss_metric, returns recorded loss\n
         """
         ret_mean = ()
         ret_var = ()
-        if main_metric:
+        if main_only:
             if self.main_metric == 'Batch_IoU':
                 ret_mean += (np.nanmean(self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
                 data = np.asarray(self.metric_data['Batch_IoU']).reshape(-1, self._n_classes)
@@ -530,7 +543,7 @@ class SegmentationMetric(MetricBase):
                 data = np.asarray(self.metric_data[self.main_metric]).flatten()
                 ret_mean += (data.mean(),)
                 ret_var += (data.var(ddof=1),)
-            if loss_metric:
+            if return_loss:
                 ret_mean += (np.asarray(self.metric_data["Batch_Loss"]).mean(),)
                 ret_var += (np.asarray(self.metric_data["Batch_Loss"]).var(ddof=1),)
         else:
@@ -540,7 +553,7 @@ class SegmentationMetric(MetricBase):
                         self._confmat_cls_iou(self.metric_data["Confusion_Mat"])),)
                     data = np.asarray(data).reshape(-1, self._n_classes)
                     ret_var += (np.nanvar(data, axis=1).mean(),)
-                elif (key != 'Batch_Loss' or loss_metric) and key[:5] == 'Batch':
+                elif (key != 'Batch_Loss' or return_loss) and key.startswith('Batch'):
                     data = np.asarray(data).flatten()
                     ret_mean += (data.mean(),)
                     ret_var += (data.var(ddof=1),)
@@ -1003,9 +1016,11 @@ class BoundaryBoxMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for nnets with boundary box output
     """
-    def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
+    def __init__(self, n_classes: int, savefile: str, base_dir: Path,
+                 main_metric: str, mode='training'):
         super().__init__(
             savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+        self._n_classes = n_classes
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
         self.matcher = HungarianMatcher()
@@ -1041,11 +1056,28 @@ class BoundaryBoxMetric(MetricBase):
         #   Calculate IoU for each Box
         detr_outputs = {k: v for k, v in predictions.items() if k in ['logits', 'bboxes']}
         indices = self.matcher(detr_outputs, targets)
-        iou = self._calculate_iou(detr_outputs['bboxes'], targets['bboxes'], indices)
 
-        self.metric_data['Batch_IoU'].append(iou.cpu().numpy())
-        self.metric_data['Batch_Precision'].append((iou > 0.5).cpu().numpy().mean())
-        self.metric_data['Batch_Precision'].append((iou > 0.5).cpu().numpy().mean())
+        conf_mat = torch.zeros((self._n_classes, self._n_classes), dtype=torch.int32).cuda()
+        for idx, (src_idx, tgt_idx) in enumerate(indices):
+            if tgt_idx.shape[0] > 0 and src_idx.shape[0] > 0:
+                gt_lab = targets['labels'][idx][tgt_idx]
+                pred_lab = predictions['logits'][idx][src_idx].argmax(dim=1)
+                conf_mat += torch.bincount(
+                    self._n_classes * gt_lab + pred_lab, minlength=self._n_classes**2
+                    ).reshape(self._n_classes, self._n_classes)
+
+        self.metric_data['Confusion_Mat'] += conf_mat.cpu()
+        precision, recall = self._confmat_cls_pr_rc(conf_mat.cpu().numpy())
+        self.metric_data['Batch_Precision'].append(precision)
+        self.metric_data['Batch_Recall'].append(recall)
+
+        iou_vector = self._calculate_iou(detr_outputs['bboxes'], targets['bboxes'], indices)
+        target_idx = torch.cat([t[J] for t, (_, J) in zip(targets["labels"], indices)])
+        iou_class = torch.zeros(self._n_classes, dtype=torch.float32).cuda()
+        for cls_id in torch.unique(target_idx):
+            iou_class[cls_id] = iou_vector[target_idx == cls_id].mean()
+
+        self.metric_data['Batch_IoU'].append(iou_class.cpu().numpy())
 
 
     def max_accuracy(self, main_metric=True):
@@ -1073,7 +1105,8 @@ class BoundaryBoxMetric(MetricBase):
             Batch_Loss=[],
             Batch_IoU=[],
             Batch_Recall=[],
-            Batch_Precision=[]
+            Batch_Precision=[],
+            Confusion_Mat=torch.zeros((self._n_classes, self._n_classes), dtype=torch.int32)
         )
 
 class ClassificationMetric(MetricBase):
@@ -1116,7 +1149,7 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
                 'depth_data', main_metric=main_metric, base_dir=basepath)
         elif logger_type == 'bbox':
             loggers['bbox'] = BoundaryBoxMetric(
-                'bbox_data', main_metric=main_metric, base_dir=basepath)
+                19, 'bbox_data', main_metric=main_metric, base_dir=basepath)
         else:
             raise NotImplementedError(logger_type)
 
@@ -1125,6 +1158,6 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
 if __name__ == "__main__":
     FILENAME = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_seg"
     TEST = MetricBase(savefile=FILENAME, main_metric="Batch_EPE",
-                           base_dir=Path.cwd()/"torch_models")
+                      base_dir=Path.cwd()/"torch_models")
     TEST.plot_summary_data()
     input("Press enter to leave")

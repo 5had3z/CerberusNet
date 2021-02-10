@@ -121,15 +121,9 @@ def run_evaluation(model, dataloader, loggers):
         if not batch_idx % 10:
             sys.stdout.write(f'\rValidaton Iter: [{batch_idx+1:4d}/{len(dataloader):4d}]')
 
-            if 'seg' in forward.keys():
-                sys.stdout.write(f" || {loggers['seg'].main_metric}: "\
-                                 f"{loggers['seg'].get_last_batch():.4f}")
-            if 'l_disp' in data.keys() and 'depth' in forward.keys():
-                sys.stdout.write(f" || {loggers['depth'].main_metric}: "\
-                                 f"{loggers['depth'].get_last_batch():.4f}")
-            if 'flow' in forward.keys():
-                sys.stdout.write(f" || {loggers['flow'].main_metric}: "\
-                                 f"{loggers['flow'].get_last_batch():.4f}")
+            for logger in loggers:
+                sys.stdout.write(f" || {logger.main_metric}: "\
+                                 f"{logger.get_last_batch():.4f}")
 
             time_elapsed = time.time() - start_time
             time_remain = time_elapsed/(batch_idx+1)*(len(dataloader)-(batch_idx+1))

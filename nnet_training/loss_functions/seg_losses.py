@@ -97,16 +97,16 @@ class SoftmaxCrossEntropyOHEMLoss(nn.Module):
 
 class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
     def __init__(self, aux=False, aux_weight=0.2, ignore_index=255, **kwargs):
-        super(MixSoftmaxCrossEntropyOHEMLoss, self).__init__(ignore_label=ignore_index, **kwargs)
+        super().__init__(ignore_label=ignore_index, **kwargs)
         self.aux = aux
         self.aux_weight = aux_weight
 
     def _aux_forward(self, *inputs, **kwargs):
         *preds, target = tuple(inputs)
 
-        loss = super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(preds[0], target)
+        loss = super().forward(preds[0], target)
         for i in range(1, len(preds)):
-            aux_loss = super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(preds[i], target)
+            aux_loss = super().forward(preds[i], target)
             loss += self.aux_weight * aux_loss
         return loss
 
@@ -116,7 +116,7 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
         if self.aux:
             return self._aux_forward(*inputs)
         else:
-            return super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(*inputs)
+            return super().forward(*inputs)
 
 class FocalLoss2D(nn.Module):
     """

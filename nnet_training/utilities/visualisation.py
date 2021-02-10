@@ -1,8 +1,8 @@
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from matplotlib.colors import hsv_to_rgb
 
-__all__ = ['flow_to_image', 'get_color_pallete']
+__all__ = ['flow_to_image', 'get_color_pallete', ]
 
 def flow_to_image(flow, max_flow=256):
     '''
@@ -40,6 +40,35 @@ def get_color_pallete(npimg):
     out_img = Image.fromarray(npimg.astype('uint8'))
     out_img.putpalette(CITYSPALLETTE)
     return out_img
+
+def apply_bboxes(npimg: np.ndarray, bboxes: np.ndarray, labels: np.ndarray) -> Image:
+    """Adds colour coded boundary boxes with labels on top of image.
+
+    Parameters
+    ----------
+    npimg : numpy.ndarray
+        Normalised RGB image with shape C, H, W
+    bboxes : numpy.ndarray
+        List of boundary cxyxwh boxes in normalised form [0,1]
+    labels : numpy.ndarray
+        List of labels corresponding to the boxes.
+    Returns
+    -------
+    img_out : PIL.Image
+        RBG image with boxes applied ontop
+    """
+    img_out = Image.fromarray((npimg * 255).astype('uint8'))
+    draw = ImageDraw.Draw(img_out)
+    for bbox, label in zip(bboxes, labels):
+        if label < 19:
+            bbox_shape = [
+                (bbox[0] - bbox[2] / 2) * img_out.width,
+                (bbox[1] - bbox[3] / 2) * img_out.height,
+                (bbox[0] + bbox[2] / 2) * img_out.width,
+                (bbox[1] + bbox[3] / 2) * img_out.height]
+            draw.rectangle(bbox_shape, outline=CITYSPALLETTE[label])
+    return img_out
+
 
 CITYSPALLETTE = [
     128, 64, 128,
