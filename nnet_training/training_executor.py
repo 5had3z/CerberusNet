@@ -41,13 +41,14 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
     loss_fns = get_loss_function(config_json.loss_functions)
 
-    if config_json.optimiser.type in ['adam', 'Adam']:
-        optimiser = torch.optim.Adam(
-            model.parameters(),
-            **config_json.optimiser.args
-        )
-    elif config_json.optimiser.type in ['sgd', 'SGD']:
-        optimiser = torch.optim.SGD(
+    optim_map = {
+        'Adam'  : torch.optim.Adam,
+        'SGD'   : torch.optim.SGD,
+        'AdamW' : torch.optim.AdamW
+    }
+
+    if optim_map.get(config_json.optimiser.type, False):
+        optimiser = optim_map[config_json.optimiser.type](
             model.parameters(),
             **config_json.optimiser.args
         )

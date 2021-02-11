@@ -7,7 +7,6 @@ __all__ = ['flow_to_image', 'get_color_pallete', ]
 def flow_to_image(flow, max_flow=256):
     '''
     Converts optic flow to a hsv represenation and then rgb for display
-    Scaled by 40 just so I can see it at the moment
     '''
     if max_flow is not None:
         max_flow = max(max_flow, 1.)

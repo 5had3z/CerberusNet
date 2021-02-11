@@ -320,7 +320,7 @@ class ModelTrainer():
             seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
 
         if 'logits' in forward:
-            class_pred_cpu = torch.argmax(forward['logits'], dim=2)
+            class_pred_cpu = torch.argmax(forward['logits'], dim=2).cpu().numpy()
 
         if 'flow' in forward:
             np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
@@ -383,7 +383,7 @@ class ModelTrainer():
                 plt.xlabel("Ground Truth Objects")
 
                 plt.subplot(2, 5, 10)
-                pred_labels = class_pred_cpu[i].cpu().numpy()
+                pred_labels = class_pred_cpu[i]
                 pred_boxes = forward['bboxes'][i].cpu().numpy()
                 plt.imshow(apply_bboxes(base_img, pred_boxes, pred_labels))
                 plt.xlabel("Predicted Objects")
