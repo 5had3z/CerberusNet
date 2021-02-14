@@ -22,8 +22,8 @@ from scipy import stats
 
 import torch
 from torchvision.ops.boxes import box_iou
+from cityscapesscripts.helpers.labels import trainId2label
 
-from nnet_training.utilities.cityscapes_labels import trainId2name
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.nnet_models.detr.matcher import HungarianMatcher
 from nnet_training.nnet_models.detr.box_ops import box_cxcywh_to_xyxy
@@ -704,7 +704,7 @@ class SegmentationMetric(MetricBase):
                     alpha=0.2)
 
         for idx in range(self._n_classes):
-            axis[idx%3][idx//3].set_title(f'{trainId2name[idx]} over Epochs')
+            axis[idx%3][idx//3].set_title(f'{trainId2label[idx].name} over Epochs')
 
         plt.show(block=False)
 
@@ -764,7 +764,7 @@ class SegmentationMetric(MetricBase):
 
         plt.figure(figsize=(18, 5))
         plt.suptitle("Class Confusion Matrix")
-        labels = [trainId2name[i] for i in range(19)]
+        labels = [trainId2label[i].name for i in range(19)]
         normalised_data = epoch_data / np.sum(epoch_data, axis=1, keepdims=True)
         conf_mat = pd.DataFrame(normalised_data, labels, labels)
         sn.set(font_scale=1)
@@ -785,7 +785,7 @@ class SegmentationMetric(MetricBase):
             plt.plot(train['iou'][:, idx])
             plt.plot(test['iou'][:, idx])
             plt.legend(["Training", "Validation"])
-            plt.title(f'{trainId2name[idx]}')
+            plt.title(f'{trainId2label[idx].name}')
             plt.xlabel('Epoch #')
 
         plt.tight_layout()
@@ -799,7 +799,7 @@ class SegmentationMetric(MetricBase):
             plt.plot(train['precision'][:, idx])
             plt.plot(test['precision'][:, idx])
             plt.legend(["Training", "Validation"])
-            plt.title(f'{trainId2name[idx]}')
+            plt.title(f'{trainId2label[idx].name}')
             plt.xlabel('Epoch #')
 
         plt.tight_layout()
@@ -813,7 +813,7 @@ class SegmentationMetric(MetricBase):
             plt.plot(train['recall'][:, idx])
             plt.plot(test['recall'][:, idx])
             plt.legend(["Training", "Validation"])
-            plt.title(f'{trainId2name[idx]}')
+            plt.title(f'{trainId2label[idx].name}')
             plt.xlabel('Epoch #')
 
         plt.tight_layout()

@@ -15,7 +15,10 @@ import json
 import multiprocessing
 from shutil import copy
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict
+from typing import List
+from typing import Tuple
+from typing import Union
 
 import torch
 import torchvision
@@ -24,10 +27,11 @@ from PIL import Image
 
 import numpy as np
 
-from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
-from nnet_training.utilities.custom_batch_sampler import collate_w_bboxes
 from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
 from nnet_training.nnet_models.detr.box_ops import normalize_boxes
+
+from .custom_batch_sampler import BatchSamplerRandScale
+from .custom_batch_sampler import collate_w_bboxes
 
 __all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
 

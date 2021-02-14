@@ -16,9 +16,10 @@ from typing import List, Dict, Union
 import cv2
 import numpy as np
 from PIL import Image
+from cityscapesscripts.helpers.labels import id2label
+from cityscapesscripts.helpers.labels import trainId2label
 
 from nnet_training.utilities.visualisation import CITYSPALLETTE
-from nnet_training.utilities.cityscapes_labels import label2trainid, trainId2name
 
 def cs_seg_gen(path_: str) -> str:
     """
@@ -41,7 +42,7 @@ def visualise_output(base_img: np.ndarray,
         overlay_img = cv2.rectangle(
             overlay_img, tuple(bbox[:2]), tuple(bbox[2:]), (255, 0, 0), thickness=2)
         cv2.putText(
-            overlay_img, trainId2name[bbox_info['train_id']], tuple(bbox[:2]),
+            overlay_img, trainId2label[bbox_info['train_id']].name, tuple(bbox[:2]),
             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     cv2.add(overlay_img, base_img, dst=overlay_img)
@@ -100,7 +101,7 @@ def bbox_info_from_instance(inst_img: np.ndarray) -> List[Dict[str, Union[int, n
                 bbox_dict[inst_id] = [x_idx, y_idx, x_idx, y_idx]
 
     return [{'id': inst_id // 1000,
-            'train_id' : label2trainid[inst_id // 1000],
+            'train_id' : id2label[inst_id // 1000].trainId,
             'bbox' : bbox}
             for inst_id, bbox in bbox_dict.items()]
 

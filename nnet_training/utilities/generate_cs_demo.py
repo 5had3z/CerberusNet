@@ -20,13 +20,13 @@ import cv2
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from cityscapesscripts.helpers.labels import labels
 
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.evaluate_model import data_to_gpu
 from nnet_training.nnet_models import get_model
-from nnet_training.utilities.cityscapes_dataset import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, CITYSPALLETTE
-from nnet_training.utilities.cityscapes_labels import labels
+from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
 IMG_EXT = '.png'
 MIN_DEPTH = 0.

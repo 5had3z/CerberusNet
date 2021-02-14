@@ -23,7 +23,7 @@ class _ConvBNReLU(nn.Module):
     """Conv-BN-ReLU"""
 
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, **kwargs):
-        super(_ConvBNReLU, self).__init__()
+        super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -38,7 +38,7 @@ class _DSConv(nn.Module):
     """Depthwise Separable Convolutions"""
 
     def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DSConv, self).__init__()
+        super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(dw_channels, dw_channels, 3, stride, 1, groups=dw_channels, bias=False),
             nn.BatchNorm2d(dw_channels),
@@ -56,7 +56,7 @@ class _DWConv(nn.Module):
     """Depthwise Convolutions"""
 
     def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DWConv, self).__init__()
+        super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(dw_channels, out_channels, 3, stride, 1, groups=dw_channels, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -97,7 +97,7 @@ class LinearBottleneck(nn.Module):
     """LinearBottleneck used in MobileNetV2"""
 
     def __init__(self, in_channels, out_channels, t=6, stride=2, **kwargs):
-        super(LinearBottleneck, self).__init__()
+        super().__init__()
         self.use_shortcut = stride == 1 and in_channels == out_channels
         self.block = nn.Sequential(
             # pw
@@ -120,7 +120,7 @@ class LinearBottleneckAGN(nn.Module):
     """LinearBottleneck used in MobileNetV2 with injected Noise After Batchnorm"""
 
     def __init__(self, in_channels, out_channels, t=6, stride=2, sigma=0.1, **kwargs):
-        super(LinearBottleneckAGN, self).__init__()
+        super().__init__()
         self.use_shortcut = stride == 1 and in_channels == out_channels
         self.block = nn.Sequential(
             # pw
@@ -144,7 +144,7 @@ class PyramidPooling(nn.Module):
     """Pyramid pooling module"""
 
     def __init__(self, in_channels, out_channels, **kwargs):
-        super(PyramidPooling, self).__init__()
+        super().__init__()
         inter_channels = int(in_channels / 4)
         self.conv1 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
         self.conv2 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)

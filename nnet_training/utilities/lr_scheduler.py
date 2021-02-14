@@ -35,7 +35,7 @@ class LRScheduler():
 
     def __init__(self, mode, base_lr=0.01, target_lr=0, niters=0, nepochs=0, iters_per_epoch=0,
                  offset=0, power=2, step_iter=None, step_epoch=None, step_factor=0.1):
-        super(LRScheduler, self).__init__()
+        super().__init__()
         assert (mode in ['constant', 'step', 'linear', 'poly', 'cosine'])
 
         self.mode = mode

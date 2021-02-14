@@ -17,12 +17,12 @@ class ASPPConv(nn.Sequential):
             nn.BatchNorm2d(out_channels),
             nn.ReLU()
         ]
-        super(ASPPConv, self).__init__(*modules)
+        super().__init__(*modules)
 
 
 class ASPPPooling(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(ASPPPooling, self).__init__()
+        super().__init__()
         self.aspp_pooling = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(in_channels, out_channels, 1, bias=False),
@@ -43,7 +43,7 @@ class ASPPPooling(nn.Module):
 
 class ASPP(nn.Module):
     def __init__(self, in_channels, out_channels, atrous_rates):
-        super(ASPP, self).__init__()
+        super().__init__()
         # out_channels = 256
         modules = []
         modules.append(nn.Sequential(
