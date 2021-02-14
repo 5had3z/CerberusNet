@@ -61,7 +61,8 @@ Example Config Structure
 
 """
 
-from typing import List, Dict
+from typing import List
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -82,8 +83,8 @@ from .ocrnet_sfd import DepthHeadV1, scale_as
 
 class DetrSegmHead(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, num_channels, transformer, num_classes, num_queries,
-                 aux_loss:bool=False, seg_enable:bool=False):
+    def __init__(self, num_channels, num_classes, num_queries, position_embedding_config,
+                 transformer_config, aux_loss:bool=False, seg_enable:bool=False):
         """ Initializes the model.
         Parameters:
             num_channels: the number of channels from the backbone. See backbone.py
@@ -95,8 +96,11 @@ class DetrSegmHead(nn.Module):
             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
         """
         super().__init__()
-        self.transformer = transformer
-        hidden_dim = transformer.d_model
+        self.pos_embed = build_position_encoding(
+            **position_embedding_config, **transformer_config)
+        self.transformer = Transformer(**transformer_config)
+
+        hidden_dim = self.transformer.d_model
         self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
@@ -109,7 +113,7 @@ class DetrSegmHead(nn.Module):
             self.mask_head = MaskHeadSmallConv(
                 hidden_dim + self.transformer.nhead, [1024, 512, 256], hidden_dim)
 
-    def forward(self, features: torch.Tensor, pos_embeddings: torch.Tensor):
+    def forward(self, features: torch.Tensor):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor:    batched images, of shape [batch_size x 3 x H x W]
                - samples.mask:      a binary mask of shape [batch_size x H x W], containing 1 on
@@ -134,6 +138,7 @@ class DetrSegmHead(nn.Module):
         del mask_size[1]
         mask = torch.zeros(mask_size, dtype=torch.bool, device=features.device)
 
+        pos_embeddings = self.pos_embed(features)
         src_proj = self.input_proj(features)
         hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos_embeddings)
 
@@ -171,22 +176,18 @@ class DetrNetSFD(nn.Module):
         self.modelname = "DetrNetSFD"
 
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
-        self.pos_embed = build_position_encoding(
-            **kwargs['position_embedding_config'], **kwargs['transformer_config'])
-
-        self.detr = DetrSegmHead(
-            transformer=Transformer(**kwargs['transformer_config']), **kwargs['detr_config'])
+        self.detr = DetrSegmHead(**kwargs['detr_config'])
 
         if 'correlation_args' in kwargs:
             search_range = kwargs['correlation_args']['max_displacement']
             self.corr = Correlation(**kwargs['correlation_args'])
         else:
             search_range = 4
-            self.corr = Correlation(pad_size=search_range, kernel_size=1,
-                                    max_displacement=search_range, stride1=1,
-                                    stride2=1, corr_multiply=1)
+            self.corr = Correlation(
+                pad_size=search_range, kernel_size=1, max_displacement=search_range,
+                stride1=1, stride2=1, corr_multiply=1)
 
-        out_1x1 = 32 if '1x1_conv_out' not in kwargs else kwargs['1x1_conv_out']
+        out_1x1 = kwargs.get('1x1_conv_out', 32)
         self.conv_1x1 = nn.ModuleList()
 
         for channels in reversed(kwargs['hrnetv2_config']['STAGE4']['NUM_CHANNELS']):
@@ -216,12 +217,12 @@ class DetrNetSFD(nn.Module):
 
         if 'depth_network' in kwargs:
             if kwargs['depth_network']['type'] == 'DepthHeadV1':
-                self.depth_head = DepthHeadV1(self.backbone.high_level_ch,
-                                              **kwargs['depth_network']['args'])
+                self.depth_head = DepthHeadV1(
+                    self.backbone.out_channels, **kwargs['depth_network']['args'])
             else:
                 raise NotImplementedError(kwargs['depth_network']['type'])
         else:
-            self.depth_head = DepthHeadV1(self.backbone.high_level_ch, 32)
+            self.depth_head = DepthHeadV1(self.backbone.out_channels, 32)
 
     def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor],
                      final_scale: float):
@@ -272,10 +273,9 @@ class DetrNetSFD(nn.Module):
         """
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(l_img)
-        positional_embeddings = self.pos_embed(high_level_features)
 
         # Segmentation pass with image 1
-        forward = self.detr(high_level_features, positional_embeddings)
+        forward = self.detr(high_level_features)
 
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)

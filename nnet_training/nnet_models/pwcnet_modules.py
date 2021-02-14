@@ -1,9 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from nnet_training.loss_functions.UnFlowLoss import flow_warp
-from nnet_training.correlation_package.correlation import Correlation
 
 __all__ = ['pwc_conv', 'FeatureExtractor', 'FlowEstimatorDense', 'FlowEstimatorLite',
            'ContextNetwork']
@@ -16,17 +12,17 @@ def pwc_conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=
                       padding=((kernel_size - 1) * dilation) // 2, bias=True),
             nn.LeakyReLU(0.1, inplace=True)
         )
-    else:
-        return nn.Sequential(
-            nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size,
-                      stride=stride, dilation=dilation,
-                      padding=((kernel_size - 1) * dilation) // 2, bias=True)
-        )
+
+    return nn.Sequential(
+        nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size,
+                    stride=stride, dilation=dilation,
+                    padding=((kernel_size - 1) * dilation) // 2, bias=True)
+    )
 
 
 class FeatureExtractor(nn.Module):
     def __init__(self, num_chs):
-        super(FeatureExtractor, self).__init__()
+        super().__init__()
         self.num_chs = num_chs
         self.convs = nn.ModuleList()
 
@@ -48,7 +44,7 @@ class FeatureExtractor(nn.Module):
 
 class FlowEstimatorDense(nn.Module):
     def __init__(self, ch_in):
-        super(FlowEstimatorDense, self).__init__()
+        super().__init__()
         self.conv1 = pwc_conv(ch_in, 128)
         self.conv2 = pwc_conv(ch_in + 128, 128)
         self.conv3 = pwc_conv(ch_in + 256, 96)
@@ -69,7 +65,7 @@ class FlowEstimatorDense(nn.Module):
 
 class FlowEstimatorLite(nn.Module):
     def __init__(self, ch_in):
-        super(FlowEstimatorLite, self).__init__()
+        super().__init__()
         self.conv1 = pwc_conv(ch_in, 128)
         self.conv2 = pwc_conv(128, 128)
         self.conv3 = pwc_conv(128 + 128, 96)
@@ -90,7 +86,7 @@ class FlowEstimatorLite(nn.Module):
 
 class ContextNetwork(nn.Module):
     def __init__(self, ch_in):
-        super(ContextNetwork, self).__init__()
+        super().__init__()
 
         self.convs = nn.Sequential(
             pwc_conv(ch_in, 128, 3, 1, 1),

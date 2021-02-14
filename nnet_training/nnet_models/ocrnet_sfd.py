@@ -75,9 +75,9 @@ class DepthHeadV1(nn.Module):
     """
     Ultra basic to get things started
     """
-    def __init__(self, in_ch, inter_ch: List[int], **kwargs):
+    def __init__(self, channels_in: List[int], inter_ch: List[int], **_kwargs):
         super().__init__()
-        mod_list = OrderedDict({"conv0": nn.Conv2d(in_ch, inter_ch[0], 1)})
+        mod_list = OrderedDict({"conv0": nn.Conv2d(sum(channels_in), inter_ch[0], 1)})
         mod_list["relu0"] = nn.ReLU(True)
 
         for idx in range(1, len(inter_ch)):
@@ -89,12 +89,31 @@ class DepthHeadV1(nn.Module):
 
         self.net = nn.Sequential(mod_list)
 
-    def forward(self, x):
-        out = self.net(x)
+    def forward(self, features_in: List[torch.Tensor]):
+        """
+        Simple forward for Depth Head that matches input size.
+        """
+        out = self.net(features_in[0])
         out = nn.functional.interpolate(
-            out, size=tuple(x.size()[2:]), mode="bilinear", align_corners=True)
+            out, size=tuple(features_in[0].size()[2:]),
+            mode="bilinear", align_corners=True)
         return out
 
+class OCRNetHead(nn.Module):
+    """
+    Self contained OCR head for use with CerberusBase
+    """
+    def __init__(self, channels_in: List[int], **kwargs):
+        super().__init__()
+        self.ocr = OCR_block(sum(channels_in), **kwargs['ocr_config'])
+
+    def forward(self, features_in: List[torch.Tensor]):
+        """
+        Simple forward for OCR
+        """
+        forward = {}
+        forward['seg'], forward['seg_aux'], _ = self.ocr(features_in)
+        return forward
 
 class OCRNetSFD(nn.Module):
     """

@@ -22,23 +22,26 @@ from .UnFlowLoss import unFlowLoss
 
 from .detr_loss import DetrLoss
 
+from .panoptic_loss import DeeplabPanopticLoss
+
 def get_loss_function(loss_config) -> Dict[str, torch.nn.Module]:
     """
     Returns a dictionary of loss functions given a config
     """
 
     loss_map = {
-        "FocalLoss2D"   : FocalLoss2D,
-        "unFlowLoss"    : unFlowLoss,
-        "InvHuberLoss"  : InvHuberLoss,
+        "FocalLoss2D"           : FocalLoss2D,
+        "unFlowLoss"            : unFlowLoss,
+        "InvHuberLoss"          : InvHuberLoss,
         "ScaleInvariantError"   : ScaleInvariantError,
-        "DepthAwareLoss"    : DepthAwareLoss,
-        "InvHuberLossPyr"   : InvHuberLossPyr,
-        "RMILoss"       : RMILoss,
-        "RMILossAux"    : RMILossAux,
-        "MultiScaleRMILoss" : MultiScaleRMILoss,
-        "SegCrossEntropy"   : SegCrossEntropy,
-        "DetrLoss"      : DetrLoss
+        "DepthAwareLoss"        : DepthAwareLoss,
+        "InvHuberLossPyr"       : InvHuberLossPyr,
+        "RMILoss"               : RMILoss,
+        "RMILossAux"            : RMILossAux,
+        "MultiScaleRMILoss"     : MultiScaleRMILoss,
+        "SegCrossEntropy"       : SegCrossEntropy,
+        "DetrLoss"              : DetrLoss,
+        "DeeplabPanopticLoss"   : DeeplabPanopticLoss
     }
 
     loss_fn_dict = {}
