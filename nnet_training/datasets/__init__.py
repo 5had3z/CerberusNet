@@ -63,20 +63,13 @@ def get_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
                 id_vector=val_ids, **aux_aug)
         }
     elif dataset_config.type == "Cityscapes":
-        training_dirs = {}
-        for subset in dataset_config.train_subdirs:
-            training_dirs[str(subset)] = \
-                dataset_config.rootdir + dataset_config.train_subdirs[str(subset)]
-
-        validation_dirs = {}
-        for subset in dataset_config.val_subdirs:
-            validation_dirs[str(subset)] = \
-                dataset_config.rootdir + dataset_config.val_subdirs[str(subset)]
-
         datasets = {
-            'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
+            'Training'   : CityScapesDataset(
+                dataset_config.rootdir, dataset_config.subsets, 'train',
+                **dataset_config.augmentations),
             'Validation' : CityScapesDataset(
-                validation_dirs, output_size=dataset_config.augmentations.output_size, **aux_aug)
+                dataset_config.rootdir, dataset_config.subsets, 'val',
+                output_size=dataset_config.augmentations.output_size, **aux_aug)
         }
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset_config.type}")

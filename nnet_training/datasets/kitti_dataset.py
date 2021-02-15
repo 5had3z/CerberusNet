@@ -8,7 +8,8 @@ import re
 import random
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
+from typing import List
 import cv2
 
 import torch
@@ -29,6 +30,24 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     Get Item will return the corresponding dictionary with keys:
         [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
+    width_to_focal = {
+        1242: 721.5377,
+        1241: 718.856,
+        1238: 718.3351,
+        1224: 707.0493
+    }
+
+    # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+    #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
+    train_ids = np.array([255, 255, 255, 255, 255, 255,
+                          255, 255, 0, 1, 255, 255,
+                          2, 3, 4, 255, 255, 255,
+                          5, 255, 6, 7, 8, 9,
+                          10, 11, 12, 13, 14, 15,
+                          255, 255, 16, 17, 18])
+
+    id_mapping = np.array(range(-1, len(train_ids) - 1)).astype('int32')
+
     def __init__(self, directory: Path, objectives: List[str], id_vector=None,
                  output_size=(1274, 375), disparity_out=True, **kwargs):
         '''
@@ -137,13 +156,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         self.output_shape = output_size
         self.scale_factor = 1
 
-        self.width_to_focal = {
-            1242: 721.5377,
-            1241: 718.856,
-            1238: 718.3351,
-            1224: 707.0493
-        }
-
         self.mirror_x = 1.0
 
         if 'crop_fraction' in kwargs:
@@ -157,15 +169,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
             self.img_normalize = torchvision.transforms.Normalize(
                 kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
-
-        self._key = np.array([255, 255, 255, 255, 255, 255,
-                              255, 255, 0, 1, 255, 255,
-                              2, 3, 4, 255, 255, 255,
-                              5, 255, 6, 7, 8, 9,
-                              10, 11, 12, 13, 14, 15,
-                              255, 255, 16, 17, 18])
-
-        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):
         return len(self.l_img)
@@ -269,7 +272,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _depth_transform(self, disparity):
         disparity = self.scale_factor * np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
-            focal = self.width_to_focal[self.std_kitti_dims[0]]
+            focal = Kitti2015Dataset.width_to_focal[self.std_kitti_dims[0]]
             disparity[disparity > 0] = focal * 0.54 / disparity[disparity > 0]
         return torch.FloatTensor(disparity)
 
@@ -296,12 +299,13 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         ])
         epoch_data["flow_mask"] = torchvision.transforms.functional.to_tensor(bitmask)
 
-    def _class_to_index(self, seg):
+    @staticmethod
+    def _class_to_index(seg):
         values = np.unique(seg)
         for value in values:
-            assert value in self._mapping
-        index = np.digitize(seg.ravel(), self._mapping, right=True)
-        return self._key[index].reshape(seg.shape)
+            assert value in Kitti2015Dataset.id_mapping
+        index = np.digitize(seg.ravel(), Kitti2015Dataset.id_mapping, right=True)
+        return Kitti2015Dataset.train_ids[index].reshape(seg.shape)
 
     def _img_transform(self, img):
         img = torchvision.transforms.functional.to_tensor(img)

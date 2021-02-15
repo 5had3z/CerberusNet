@@ -26,7 +26,7 @@ import numpy as np
 
 from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
 from nnet_training.nnet_models.detr.box_ops import normalize_boxes
-
+from nnet_training.utilities.visualisation import get_color_pallete
 
 __all__ = ['CityScapesDataset']
 
@@ -40,54 +40,95 @@ class CityScapesDataset(torch.utils.data.Dataset):
     Get Item will return the corresponding dictionary with keys:
         [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
-    def __init__(self, directories: Path, output_size=(1024, 512), disparity_out=False, **kwargs):
+    sub_directories = {
+        "l_img" : lambda root, folder, filename : \
+            os.path.join(root, "leftImg8bit/", folder, filename),
+        "r_img" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "rightImg8bit/", folder),
+                filename, 'leftImg8bit', 'rightImg8bit'),
+        "seg" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "gtFine/", folder),
+                filename, 'leftImg8bit', 'gtFine_labelIds'),
+        "panoptic" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "gtFine/", folder),
+                filename, 'leftImg8bit', 'gtFine_panoptic'),
+        "bbox" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "gtFine/", folder),
+                filename, 'leftImg8bit.png', 'gtFine_bbox.json'),
+        "disparity": lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "disparity/", folder),
+                filename, 'leftImg8bit', 'disparity'),
+        "l_seq" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "leftImg8bit_sequence/", folder), filename,
+                f"{int(re.split('_', filename)[2]):03}_leftImg8bit",
+                f"{int(re.split('_', filename)[2])+1:03}_leftImg8bit"),
+        "r_seq" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "rightImg8bit_sequence/", folder), filename,
+                f"{int(re.split('_', filename)[2]):03}_leftImg8bit",
+                f"{int(re.split('_', filename)[2])+1:03}_rightImg8bit"),
+        "cam"   : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "camera/", folder),
+                filename, 'leftImg8bit.png', 'camera.json'),
+        "pose" : lambda root, folder, filename : \
+            CityScapesDataset.replace_filename(
+                os.path.join(root, "vehicle/", folder),
+                filename, 'leftImg8bit.png', 'vehicle.json'),
+    }
+
+    base_size = [2048, 1024]
+
+    # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+    #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
+    train_ids = np.array([255, 255, 255, 255, 255, 255,
+                          255, 255, 0, 1, 255, 255,
+                          2, 3, 4, 255, 255, 255,
+                          5, 255, 6, 7, 8, 9,
+                          10, 11, 12, 13, 14, 15,
+                          255, 255, 16, 17, 18])
+
+    id_mapping = np.array(range(-1, len(train_ids) - 1)).astype('int32')
+
+    @staticmethod
+    def replace_filename(root_dir, filename, old_str: str, new_str: str) -> str:
+        return os.path.join(root_dir, filename.replace(old_str, new_str))
+
+    def __init__(self, directory: Path, subsets: List[str], split: str,
+                 output_size=(1024, 512), disparity_out=False, **kwargs):
         '''
         Initializer for Cityscapes dataset\n
         @input dictionary that contain paths of datasets as
-        [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
+            [l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose]\n
         @param disparity_out determines whether the disparity is
-        given or a direct depth estimation.\n
+            given or a direct depth estimation.\n
         @param crop_fraction determines if the image is randomly cropped to by a fraction
             e.g. 2 results in width/2 by height/2 random crop of original image\n
         @param rand_rotation randomly rotates an image a maximum number of degrees.\n
         @param rand_brightness, the maximum random increase or decrease as a percentage.
         '''
         super().__init__()
-        l_img_key = None
 
-        for key in directories.keys():
-            if key in ['left_images', 'images']:
-                l_img_key = key
-                self.l_img = []
-            elif key == 'seg':
-                self.seg = []
-            elif key == 'right_images':
-                self.r_img = []
-            elif key == 'disparity':
-                self.l_disp = []
-            elif key == 'left_seq':
-                self.l_seq = []
-            elif key == 'right_seq':
-                self.r_seq = []
-            elif key == 'cam':
-                self.cam = []
-            elif key == 'pose':
-                self.pose = []
-            elif key == 'bbox':
-                self.bbox = []
+        assert all(subset in CityScapesDataset.sub_directories for subset in subsets), \
+            f"Invalid subset found in given {subsets}"
+        assert "l_img" in subsets, "Requires left images present"
+        assert split in ["train", "test", "val"], f"Invalid Split given: {split}"
 
-        if not any(hasattr(self, key_) for key_ in ['seg', 'l_disp', 'l_seq', 'bbox']):
-            Warning("Neither Segmentation, Disparity, Img Sequence or Boundary Box Keys are used")
+        self.subsets = subsets
+        self.root_dir = directory
+        self.split = split
+        self.l_img = []
 
-        if l_img_key is None:
-            Warning("Empty dataset given to base cityscapes dataset")
-        else:
-            self._initialize_dataset(directories, l_img_key, **kwargs)
+        self._validate_dataset(directory, subsets, **kwargs)
 
         self.disparity_out = disparity_out
-        self.cs_base_size = [2048, 1024]
-        self.base_size = output_size # (width, height)
-        self.output_shape = output_size
+        self.output_size = output_size # (width, height)
         self.scale_factor = 1
 
         if 'crop_fraction' in kwargs:
@@ -107,118 +148,30 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if 'box_type' in kwargs:
             self.bbox_type = kwargs['box_type']
 
-        self.rand_flip = True
+        self.rand_flip = True 
 
-        # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
-        #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
-        self._key = np.array([255, 255, 255, 255, 255, 255,
-                              255, 255, 0, 1, 255, 255,
-                              2, 3, 4, 255, 255, 255,
-                              5, 255, 6, 7, 8, 9,
-                              10, 11, 12, 13, 14, 15,
-                              255, 255, 16, 17, 18])
-        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
-
-    def _initialize_dataset(self, directories, l_img_key, **kwargs):
+    def _validate_dataset(self, root_dir, subsets, **kwargs):
         """
         Gets all the filenames
         """
-        for dirpath, _, filenames in os.walk(directories[l_img_key]):
+        for dirpath, _, filenames in os.walk(os.path.join(root_dir, 'leftImg8bit', self.split)):
             for filename in filenames:
                 if not filename.endswith(IMG_EXT):
                     continue
 
                 l_imgpath = os.path.join(dirpath, filename)
-                foldername = os.path.basename(os.path.dirname(l_imgpath))
-                frame_n = int(re.split("_", filename)[2])
+                foldername = os.path.join(self.split, os.path.basename(os.path.dirname(l_imgpath)))
                 self.l_img.append(l_imgpath)
 
-                if hasattr(self, 'r_img'):
-                    r_imgpath = os.path.join(
-                        directories['right_images'], foldername,
-                        filename.replace('leftImg8bit', 'rightImg8bit'))
-                    assert os.path.isfile(r_imgpath), \
-                        f"Error finding corresponding right image to {l_imgpath}"
-                    self.r_img.append(r_imgpath)
-
-                if hasattr(self, 'seg'):
-                    seg_path = os.path.join(
-                        directories['seg'], foldername,
-                        filename.replace('leftImg8bit', 'gtFine_labelIds'))
-                    assert os.path.isfile(seg_path), \
-                        f"Error finding corresponding segmentation image to {l_imgpath}"
-                    self.seg.append(seg_path)
-
-                if hasattr(self, 'l_disp'):
-                    disp_path = os.path.join(
-                        directories['disparity'], foldername,
-                        filename.replace('leftImg8bit', 'disparity'))
-                    assert os.path.isfile(disp_path), \
-                        f"Error finding corresponding disparity image to {l_imgpath}"
-                    self.l_disp.append(disp_path)
-
-                if hasattr(self, 'l_seq'):
-                    left_seq_path = os.path.join(
-                        directories['left_seq'], foldername,
-                        filename.replace(
-                            str(frame_n).zfill(6), str(frame_n+1).zfill(6)))
-                    assert os.path.isfile(left_seq_path), \
-                        f"Error finding corresponding left sequence image to {l_imgpath}"
-                    self.l_seq.append(left_seq_path)
-
-                if hasattr(self, 'r_seq'):
-                    right_seq_path = os.path.join(
-                        directories['right_seq'], foldername,
-                        filename.replace(
-                            str(frame_n).zfill(6)+"_leftImg8bit",
-                            str(frame_n+1).zfill(6)+"_rightImg8bit"))
-                    assert os.path.isfile(right_seq_path), \
-                        f"Error finding corresponding right sequence image to {l_imgpath}"
-                    self.r_seq.append(right_seq_path)
-
-                if hasattr(self, 'cam'):
-                    cam_path = os.path.join(
-                        directories['cam'], foldername,
-                        filename.replace('leftImg8bit.png', 'camera.json'))
-                    assert os.path.isfile(cam_path), \
-                        f"Error finding corresponding right image to {l_imgpath}"
-                    self.cam.append(cam_path)
-
-                if hasattr(self, 'pose'):
-                    pose_path = os.path.join(
-                        directories['pose'], foldername,
-                        filename.replace('leftImg8bit.png', 'vehicle.json'))
-                    assert os.path.isfile(pose_path), \
-                        f"Error finding corresponding GPS/Pose information to {l_imgpath}"
-                    self.pose.append(pose_path)
-
-                if hasattr(self, 'bbox'):
-                    bbox_path = os.path.join(
-                        directories['bbox'], foldername,
-                        filename.replace('leftImg8bit.png', 'gtFine_bbox.json'))
-                    assert os.path.isfile(bbox_path), \
-                        f"Error finding corresponding bbox information to {l_imgpath}"
-                    self.bbox.append(bbox_path)
+                for subset in subsets:
+                    target_pth = CityScapesDataset.sub_directories[subset](
+                            root_dir, foldername, filename)
+                    assert os.path.isfile(target_pth), \
+                        f"Error target {target_pth} corresponding to {l_imgpath}"
 
         # Create dataset from specified ids if id_vector given else use all
         if 'id_vector' in kwargs:
             self.l_img = [self.l_img[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'r_img'):
-                self.r_img = [self.r_img[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'seg'):
-                self.seg = [self.seg[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'l_disp'):
-                self.l_disp = [self.l_disp[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'l_seq'):
-                self.l_seq = [self.l_seq[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'r_seq'):
-                self.r_seq = [self.r_seq[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'cam'):
-                self.cam = [self.cam[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'pose'):
-                self.pose = [self.pose[i] for i in kwargs['id_vector']]
-            if hasattr(self, 'bbox'):
-                self.bbox = [self.bbox[i] for i in kwargs['id_vector']]
 
     def __len__(self):
         return len(self.l_img)
@@ -233,24 +186,29 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         # Read image and labels
         epoch_data = {"l_img" : Image.open(self.l_img[idx]).convert('RGB')}
+        foldername = os.path.join(self.split, os.path.basename(os.path.dirname(self.l_img[idx])))
+        filename = os.path.basename(self.l_img[idx])
 
-        if hasattr(self, 'r_img'):
-            epoch_data["r_img"] = Image.open(self.r_img[idx]).convert('RGB')
-        if hasattr(self, 'seg'):
-            epoch_data["seg"] = Image.open(self.seg[idx])
-        if hasattr(self, 'l_disp'):
-            epoch_data["l_disp"] = Image.open(self.l_disp[idx])
-        if hasattr(self, 'l_seq'):
-            epoch_data["l_seq"] = Image.open(self.l_seq[idx]).convert('RGB')
-        if hasattr(self, 'r_seq'):
-            epoch_data["r_seq"] = Image.open(self.r_seq[idx]).convert('RGB')
-        if hasattr(self, 'bbox'):
-            epoch_data['labels'], epoch_data['bboxes'] = self.bbox_json_parse(self.bbox[idx])
+        for subset in self.subsets:
+            if subset in ["r_img", "l_seq", "r_seq"]:
+                img_pth = CityScapesDataset.sub_directories[subset](
+                    self.root_dir, foldername, filename)
+                epoch_data[subset] = Image.open(img_pth).convert('RGB')
+            elif subset in ['seg', 'l_disp', 'r_disp']:
+                img_pth = CityScapesDataset.sub_directories[subset](
+                    self.root_dir, foldername, filename)
+                epoch_data[subset] = Image.open(img_pth)
+            elif subset == "bbox":
+                bbox_pth = CityScapesDataset.sub_directories[subset](
+                    self.root_dir, foldername, filename)
+                epoch_data['labels'], epoch_data['bboxes'] = self.bbox_json_parse(bbox_pth)
 
         self._sync_transform(epoch_data)
 
-        if hasattr(self, 'cam'):
-            epoch_data["cam"] = self.intrinsics_json(self.cam[idx])
+        if 'cam' in self.subsets:
+            cam_pth = CityScapesDataset.sub_directories['cam'](
+                self.root_dir, foldername, filename)
+            epoch_data["cam"] = self.intrinsics_json(cam_pth)
 
         # if hasattr(self, 'pose'):
         #     epoch_data["pose"] = self.pose_json(self.pose[idx])
@@ -261,7 +219,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             if epoch_data['bboxes'].shape[0] != 0:
                 if hasattr(self, 'bbox_type') and self.bbox_type == 'cxcywh':
                     epoch_data['bboxes'] = box_xyxy_to_cxcywh(epoch_data['bboxes'])
-                epoch_data['bboxes'] = normalize_boxes(epoch_data['bboxes'], self.output_shape)
+                epoch_data['bboxes'] = normalize_boxes(epoch_data['bboxes'],
+                                                       epoch_data['l_img'].shape[-2:])
 
         return epoch_data
 
@@ -299,8 +258,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 batch_data['bboxes'][idx] = [b_x1, b_y1, b_x2, b_y2]
 
     @staticmethod
-    def _rotate_bbox(batch_data: List[List[int]], angle: float,
-                     img_dims: Tuple[int, int]) -> None:
+    def _rotate_bbox(batch_data: List[List[int]], angle: float) -> None:
         """
         Transforms a boundary box [x1,y1,x2,y2] according to an image
         rotation angle and ensures it stays within clipping.
@@ -308,7 +266,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         rad_angle = np.deg2rad(-angle)
         rot_mat = np.asarray([[np.cos(rad_angle), -np.sin(rad_angle)],
                                [np.sin(rad_angle), np.cos(rad_angle)]])
-        img_tr = np.asarray(img_dims) / 2
+        img_tr = np.asarray(CityScapesDataset.base_size) / 2
 
         clamp = lambda x, _min, _max: min(max(x, _min), _max)
 
@@ -320,10 +278,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 np.matmul(rot_mat, np.asarray(bbox[2:]) - img_tr) + img_tr
             ]
 
-            x_1 = clamp(min(corners, key=lambda x: x[0])[0], 0, img_dims[0])
-            y_1 = clamp(min(corners, key=lambda x: x[1])[1], 0, img_dims[1])
-            x_2 = clamp(max(corners, key=lambda x: x[0])[0], 0, img_dims[0])
-            y_2 = clamp(max(corners, key=lambda x: x[1])[1], 0, img_dims[1])
+            x_1 = clamp(min(corners, key=lambda x: x[0])[0], 0, CityScapesDataset.base_size[0])
+            y_1 = clamp(min(corners, key=lambda x: x[1])[1], 0, CityScapesDataset.base_size[1])
+            x_2 = clamp(max(corners, key=lambda x: x[0])[0], 0, CityScapesDataset.base_size[0])
+            y_2 = clamp(max(corners, key=lambda x: x[1])[1], 0, CityScapesDataset.base_size[1])
 
             assert x_1 <= x_2, f"Angle {angle}: {x_1} > {x_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
             assert y_1 <= y_2, f"Angle {angle}: {y_1} > {y_2} for {bbox} -> {[x_1, y_1, x_2, y_2]}"
@@ -336,13 +294,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 batch_data['bboxes'][idx] = [x_1, y_1, x_2, y_2]
 
     @staticmethod
-    def _scale_bbox(bbox_list: List[List[int]], src_dims: Tuple[int, int],
-                    dst_dims: Tuple[int, int]) -> List[List[int]]:
+    def _scale_bbox(bbox_list: List[List[int]], dst_dims: Tuple[int, int]) -> List[List[int]]:
         """
         Scales bbox from scr dimensions to dst dimensions
         """
         ret_val = []
-        [x_scale, y_scale] = [dst / src for dst, src in zip(dst_dims, src_dims)]
+        [x_scale, y_scale] = [dst / src for dst, src in zip(dst_dims, CityScapesDataset.base_size)]
         for bbox in bbox_list:
             ret_val.append([bbox[0] * x_scale, bbox[1] * y_scale,
                             bbox[2] * x_scale, bbox[3] * y_scale])
@@ -353,7 +310,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         Augments and formats all the batch data in a synchronised manner
         """
         scale_func = lambda x: int(self.scale_factor * x / 32.0) * 32
-        self.output_shape = [scale_func(x) for x in self.base_size]
+        output_shape = [scale_func(x) for x in self.output_size]
 
         # random mirror
         if random.random() < 0.5 and self.rand_flip:
@@ -361,7 +318,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if key not in ['labels', 'bboxes']:
                     epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
                 elif key == 'bboxes':
-                    epoch_data[key] = self._mirror_bbox(data, self.cs_base_size)
+                    epoch_data[key] = self._mirror_bbox(data, CityScapesDataset.base_size)
 
         if hasattr(self, 'brightness'):
             brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
@@ -381,20 +338,20 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
                 elif key == 'bboxes':
-                    self._rotate_bbox(epoch_data, angle, self.cs_base_size)
+                    self._rotate_bbox(epoch_data, angle)
 
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                data = data.resize(self.output_shape, Image.BILINEAR)
+                data = data.resize(output_shape, Image.BILINEAR)
                 epoch_data[key] = self._img_transform(data)
             elif key in ["l_disp", 'r_disp']:
-                data = data.resize(self.output_shape, Image.NEAREST)
+                data = data.resize(output_shape, Image.NEAREST)
                 epoch_data[key] = self._depth_transform(data)
             elif key == "seg":
-                data = data.resize(self.output_shape, Image.NEAREST)
+                data = data.resize(output_shape, Image.NEAREST)
                 epoch_data[key] = self._seg_transform(data)
             elif key == "bboxes":
-                epoch_data[key] = self._scale_bbox(data, self.cs_base_size, self.output_shape)
+                epoch_data[key] = self._scale_bbox(data, output_shape)
 
         if hasattr(self, 'crop_fraction'):
             # random crop
@@ -411,12 +368,13 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 elif key == 'bboxes':
                     self._crop_bbox(data, (crop_x, crop_y, crop_w, crop_h))
 
-    def _class_to_index(self, seg):
+    @staticmethod
+    def _class_to_index(seg):
         values = np.unique(seg)
         for value in values:
-            assert value in self._mapping
-        index = np.digitize(seg.ravel(), self._mapping, right=True)
-        return self._key[index].reshape(seg.shape)
+            assert value in CityScapesDataset.id_mapping
+        index = np.digitize(seg.ravel(), CityScapesDataset.id_mapping, right=True)
+        return CityScapesDataset.train_ids[index].reshape(seg.shape)
 
     def _img_transform(self, img):
         img = torchvision.transforms.functional.to_tensor(img)
@@ -557,20 +515,11 @@ def some_test_idk():
     #     'labels': hdd_dir + 'gtFine/train'
     # }
 
-    full_training_data = {
-        'left_images': hdd_dir + 'leftImg8bit/train',
-        'right_images': hdd_dir + 'rightImg8bit/train',
-        'seg': hdd_dir + 'gtFine/train',
-        'disparity': hdd_dir + 'disparity/train',
-        'cam': hdd_dir + 'camera/train',
-        'left_seq': hdd_dir + 'leftImg8bit_sequence/train',
-        'pose': hdd_dir + 'vehicle/train'
-    }
+    full_training_data = ['l_img', 'r_img', 'seg', 'disparity', 'cam', 'l_seq', 'pose']
 
-    test_dset = CityScapesDataset(full_training_data, crop_fraction=1)
+    test_dset = CityScapesDataset(hdd_dir, full_training_data, 'train', crop_fraction=1)
 
     print(len(test_dset.l_img))
-    print(len(test_dset.seg))
 
     batch_size = 2
     test_loader = torch.utils.data.DataLoader(
@@ -586,7 +535,7 @@ def some_test_idk():
         plt.imshow(np.moveaxis(image[i, 0:3, :, :], 0, 2))
 
         plt.subplot(122)
-        plt.imshow(seg[i, :, :])
+        plt.imshow(get_color_pallete(seg[i, :, :]))
 
         plt.show()
 
@@ -647,4 +596,4 @@ def regex_rep_test():
     assert testdst == testrseq
 
 if __name__ == '__main__':
-    move_hdd_to_ssd()
+    some_test_idk()
