@@ -133,43 +133,43 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if not filename.endswith(IMG_EXT):
                     continue
 
-                read_check = True
                 l_imgpath = os.path.join(dirpath, filename)
                 foldername = os.path.basename(os.path.dirname(l_imgpath))
                 frame_n = int(re.split("_", filename)[2])
+                self.l_img.append(l_imgpath)
 
                 if hasattr(self, 'r_img'):
                     r_imgpath = os.path.join(
                         directories['right_images'], foldername,
                         filename.replace('leftImg8bit', 'rightImg8bit'))
-                    if not os.path.isfile(r_imgpath):
-                        read_check = False
-                        print("Error finding corresponding right image to ", l_imgpath)
+                    assert os.path.isfile(r_imgpath), \
+                        f"Error finding corresponding right image to {l_imgpath}"
+                    self.r_img.append(r_imgpath)
 
                 if hasattr(self, 'seg'):
                     seg_path = os.path.join(
                         directories['seg'], foldername,
                         filename.replace('leftImg8bit', 'gtFine_labelIds'))
-                    if not os.path.isfile(seg_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(seg_path), \
+                        f"Error finding corresponding segmentation image to {l_imgpath}"
+                    self.seg.append(seg_path)
 
                 if hasattr(self, 'l_disp'):
                     disp_path = os.path.join(
                         directories['disparity'], foldername,
                         filename.replace('leftImg8bit', 'disparity'))
-                    if not os.path.isfile(disp_path):
-                        read_check = False
-                        print("Error finding corresponding disparity image to ", l_imgpath)
+                    assert os.path.isfile(disp_path), \
+                        f"Error finding corresponding disparity image to {l_imgpath}"
+                    self.l_disp.append(disp_path)
 
                 if hasattr(self, 'l_seq'):
                     left_seq_path = os.path.join(
                         directories['left_seq'], foldername,
                         filename.replace(
                             str(frame_n).zfill(6), str(frame_n+1).zfill(6)))
-                    if not os.path.isfile(left_seq_path):
-                        read_check = False
-                        print("Error finding corresponding left sequence image to ", l_imgpath)
+                    assert os.path.isfile(left_seq_path), \
+                        f"Error finding corresponding left sequence image to {l_imgpath}"
+                    self.l_seq.append(left_seq_path)
 
                 if hasattr(self, 'r_seq'):
                     right_seq_path = os.path.join(
@@ -177,52 +177,33 @@ class CityScapesDataset(torch.utils.data.Dataset):
                         filename.replace(
                             str(frame_n).zfill(6)+"_leftImg8bit",
                             str(frame_n+1).zfill(6)+"_rightImg8bit"))
-                    if not os.path.isfile(right_seq_path):
-                        read_check = False
-                        print("Error finding corresponding right sequence image to ", l_imgpath)
+                    assert os.path.isfile(right_seq_path), \
+                        f"Error finding corresponding right sequence image to {l_imgpath}"
+                    self.r_seq.append(right_seq_path)
 
                 if hasattr(self, 'cam'):
                     cam_path = os.path.join(
                         directories['cam'], foldername,
                         filename.replace('leftImg8bit.png', 'camera.json'))
-                    if not os.path.isfile(cam_path):
-                        read_check = False
-                        print("Error finding corresponding camera parameters to ", l_imgpath)
+                    assert os.path.isfile(cam_path), \
+                        f"Error finding corresponding right image to {l_imgpath}"
+                    self.cam.append(cam_path)
 
                 if hasattr(self, 'pose'):
                     pose_path = os.path.join(
                         directories['pose'], foldername,
                         filename.replace('leftImg8bit.png', 'vehicle.json'))
-                    if not os.path.isfile(pose_path):
-                        read_check = False
-                        print("Error finding corresponding GPS/Pose information to ", l_imgpath)
+                    assert os.path.isfile(pose_path), \
+                        f"Error finding corresponding GPS/Pose information to {l_imgpath}"
+                    self.pose.append(pose_path)
 
                 if hasattr(self, 'bbox'):
                     bbox_path = os.path.join(
                         directories['bbox'], foldername,
                         filename.replace('leftImg8bit.png', 'gtFine_bbox.json'))
-                    if not os.path.isfile(bbox_path):
-                        read_check = False
-                        print("Error finding corresponding bbox information to ", l_imgpath)
-
-                if read_check:
-                    self.l_img.append(l_imgpath)
-                    if hasattr(self, 'r_img'):
-                        self.r_img.append(r_imgpath)
-                    if hasattr(self, 'seg'):
-                        self.seg.append(seg_path)
-                    if hasattr(self, 'l_disp'):
-                        self.l_disp.append(disp_path)
-                    if hasattr(self, 'l_seq'):
-                        self.l_seq.append(left_seq_path)
-                    if hasattr(self, 'r_seq'):
-                        self.r_seq.append(right_seq_path)
-                    if hasattr(self, 'cam'):
-                        self.cam.append(cam_path)
-                    if hasattr(self, 'pose'):
-                        self.pose.append(pose_path)
-                    if hasattr(self, 'bbox'):
-                        self.bbox.append(bbox_path)
+                    assert os.path.isfile(bbox_path), \
+                        f"Error finding corresponding bbox information to {l_imgpath}"
+                    self.bbox.append(bbox_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if 'id_vector' in kwargs:
