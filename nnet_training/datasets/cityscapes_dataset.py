@@ -7,12 +7,10 @@ Dataloader and misc utilities related to the cityscapes dataset
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
-import platform
 import os
 import re
 import random
 import json
-import multiprocessing
 from shutil import copy
 from pathlib import Path
 from typing import Dict
@@ -22,7 +20,6 @@ from typing import Union
 
 import torch
 import torchvision
-from torch.utils.data import RandomSampler
 from PIL import Image
 
 import numpy as np
@@ -30,10 +27,8 @@ import numpy as np
 from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
 from nnet_training.nnet_models.detr.box_ops import normalize_boxes
 
-from .custom_batch_sampler import BatchSamplerRandScale
-from .custom_batch_sampler import collate_w_bboxes
 
-__all__ = ['CityScapesDataset', 'get_cityscapse_dataset']
+__all__ = ['CityScapesDataset']
 
 IMG_EXT = '.png'
 
@@ -492,75 +487,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         return labels, bboxes
 
-def get_cityscapse_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
-    """
-    Returns a cityscapes dataset given a config
-    """
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
-
-    training_dirs = {}
-    for subset in dataset_config.train_subdirs:
-        training_dirs[str(subset)] = \
-            dataset_config.rootdir + dataset_config.train_subdirs[str(subset)]
-
-    validation_dirs = {}
-    for subset in dataset_config.val_subdirs:
-        validation_dirs[str(subset)] = \
-            dataset_config.rootdir + dataset_config.val_subdirs[str(subset)]
-
-    aux_aug = {}
-    if 'img_normalize' in dataset_config.augmentations:
-        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
-    if 'disparity_out' in dataset_config.augmentations:
-        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
-    if 'box_type' in dataset_config.augmentations:
-        aux_aug['box_type'] = dataset_config.augmentations.box_type
-
-    datasets = {
-        'Training'   : CityScapesDataset(training_dirs, **dataset_config.augmentations),
-        'Validation' : CityScapesDataset(
-            validation_dirs, output_size=dataset_config.augmentations.output_size, **aux_aug)
-    }
-
-    dataloaders = {
-        'Validation' : torch.utils.data.DataLoader(
-            datasets["Validation"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True,
-            collate_fn=collate_w_bboxes
-        )
-    }
-
-    if hasattr(dataset_config.augmentations, 'rand_scale'):
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"], num_workers=n_workers, pin_memory=True,
-            batch_sampler=BatchSamplerRandScale(
-                sampler=RandomSampler(datasets["Training"]),
-                batch_size=dataset_config.batch_size,
-                drop_last=dataset_config.drop_last,
-                scale_range=dataset_config.augmentations.rand_scale),
-                collate_fn=collate_w_bboxes
-        )
-    else:
-        torch.backends.cudnn.benchmark = True
-
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True,
-            collate_fn=collate_w_bboxes
-        )
-
-    return dataloaders
 
 def copy_cityscapes(src_dir: Path, datasets: Dict[str, Path], subsets: List[str], dst_dir: Path):
     """

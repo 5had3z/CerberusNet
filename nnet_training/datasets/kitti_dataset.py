@@ -3,12 +3,10 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
-import platform
 import os
 import re
 import random
 import json
-import multiprocessing
 from pathlib import Path
 from typing import Dict, List
 import cv2
@@ -16,14 +14,14 @@ import cv2
 import torch
 import torchvision
 from PIL import Image
-
 import numpy as np
 
-from torch.utils.data import RandomSampler
-from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
-from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
+from nnet_training.utilities.visualisation import get_color_pallete
+from nnet_training.utilities.visualisation import flow_to_image
 
-__all__ = ['Kitti2015Dataset', 'get_kitti_dataset']
+from . import get_dataset
+
+__all__ = ['Kitti2015Dataset']
 
 IMG_EXT = '.png'
 
@@ -73,69 +71,52 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         for filename in sorted(os.listdir(os.path.join(directory, 'image_2'))):
             frame_n = int(re.split("_", filename)[1][:2])
             if filename.endswith(IMG_EXT) and frame_n == 10:
-                read_check = True
                 l_imgpath = os.path.join(directory, 'image_2', filename)
+                self.l_img.append(l_imgpath)
 
                 if hasattr(self, 'r_img'):
                     r_imgpath = os.path.join(directory, 'image_3', filename)
-                    if not os.path.isfile(r_imgpath):
-                        read_check = False
-                        print("Error finding corresponding right image to ", l_imgpath)
+                    assert os.path.isfile(r_imgpath), \
+                        f"Error finding corresponding right image to {l_imgpath}"
+                    self.r_img.append(r_imgpath)
 
                 if hasattr(self, 'seg'):
                     seg_path = os.path.join(directory, 'semantic', filename)
-                    if not os.path.isfile(seg_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(seg_path), \
+                        f"Error finding corresponding segmentation image to {l_imgpath}"
+                    self.seg.append(seg_path)
 
                 if hasattr(self, 'l_disp'):
                     left_disp_path = os.path.join(directory, 'disp_noc_0', filename)
-                    if not os.path.isfile(left_disp_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(left_disp_path), \
+                        f"Error finding corresponding left disparity image to {l_imgpath}"
+                    self.l_disp.append(left_disp_path)
 
                 if hasattr(self, 'r_disp'):
                     right_disp_path = os.path.join(directory, 'disp_noc_1', filename)
-                    if not os.path.isfile(right_disp_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(right_disp_path), \
+                        f"Error finding corresponding right disparity image to {l_imgpath}"
+                    self.r_disp.append(right_disp_path)
 
                 if hasattr(self, 'l_seq'):
                     seq_name = filename.replace('10.png', '11.png')
                     left_seq_path = os.path.join(directory, 'image_2', seq_name)
-                    if not os.path.isfile(left_seq_path):
-                        read_check = False
-                        print("Error finding corresponding left sequence image to ", l_imgpath)
+                    assert os.path.isfile(left_seq_path), \
+                        f"Error finding corresponding left sequence image to {l_imgpath}"
+                    self.l_seq.append(left_seq_path)
 
                 if hasattr(self, 'r_seq'):
                     seq_name = filename.replace('10.png', '11.png')
                     right_seq_path = os.path.join(directory, 'image_3', seq_name)
-                    if not os.path.isfile(right_seq_path):
-                        read_check = False
-                        print("Error finding corresponding right sequence image to ", l_imgpath)
+                    assert os.path.isfile(right_seq_path), \
+                        f"Error finding corresponding right sequence image to {l_imgpath}"
+                    self.r_seq.append(right_seq_path)
 
                 if hasattr(self, 'flow'):
                     flow_path = os.path.join(directory, 'flow_noc', filename)
-                    if not os.path.isfile(flow_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
-
-                if read_check:
-                    self.l_img.append(l_imgpath)
-                    if hasattr(self, 'r_img'):
-                        self.r_img.append(r_imgpath)
-                    if hasattr(self, 'seg'):
-                        self.seg.append(seg_path)
-                    if hasattr(self, 'l_disp'):
-                        self.l_disp.append(left_disp_path)
-                    if hasattr(self, 'r_disp'):
-                        self.r_disp.append(right_disp_path)
-                    if hasattr(self, 'l_seq'):
-                        self.l_seq.append(left_seq_path)
-                    if hasattr(self, 'r_seq'):
-                        self.r_seq.append(right_seq_path)
-                    if hasattr(self, 'flow'):
-                        self.flow.append(flow_path)
+                    assert os.path.isfile(flow_path), \
+                        f"Error finding corresponding flow image to {l_imgpath}"
+                    self.flow.append(flow_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if id_vector is not None:
@@ -336,87 +317,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         target = self._class_to_index(np.array(segmentaiton).astype('int32'))
         return torch.LongTensor(target.astype('int32'))
 
-def id_vec_generator(train_ratio, directory):
-    """
-    Generates the training and validation split of a monlitic dataset.\n
-    Ensures that you are always using the same testing and training data for a given set and ratio.
-    """
-    num_images = 0
-    for file in os.listdir(directory):
-        num_images += file.endswith(IMG_EXT)
-
-    print("Number of Images:\t", num_images)
-    n_train = int(num_images * train_ratio)
-
-    train_ids = list(range(n_train))
-    val_ids = list(range(n_train, num_images))
-
-    return train_ids, val_ids
-
-def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
-    """
-    Input configuration json for kitti dataset
-    Output dataloaders for training and validation
-    """
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
-
-    # Using the segmentaiton gt dir to count the number of images
-    seg_dir = os.path.join(dataset_config.rootdir, "semantic")
-    train_ids, val_ids = id_vec_generator(dataset_config.train_ratio, seg_dir)
-
-    aux_aug = {}
-    if 'img_normalize' in dataset_config.augmentations:
-        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
-    if 'disparity_out' in dataset_config.augmentations:
-        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
-
-    datasets = {
-        'Training'   : Kitti2015Dataset(
-            dataset_config.rootdir, dataset_config.objectives,
-            **dataset_config.augmentations, id_vector=train_ids),
-        'Validation' : Kitti2015Dataset(
-            dataset_config.rootdir, dataset_config.objectives,
-            output_size=dataset_config.augmentations.output_size,
-            id_vector=val_ids, **aux_aug)
-    }
-
-    dataloaders = {
-        'Validation' : torch.utils.data.DataLoader(
-            datasets["Validation"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        )
-    }
-
-    if hasattr(dataset_config.augmentations, 'rand_scale'):
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"], num_workers=n_workers, pin_memory=True,
-            batch_sampler=BatchSamplerRandScale(
-                sampler=RandomSampler(datasets["Training"]),
-                batch_size=dataset_config.batch_size,
-                drop_last=dataset_config.drop_last,
-                scale_range=dataset_config.augmentations.rand_scale)
-        )
-    else:
-        torch.backends.cudnn.benchmark = True
-
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        )
-
-    return dataloaders
-
 def test_kitti_loading():
     """
     Get kitti dataset for testing
@@ -427,7 +327,7 @@ def test_kitti_loading():
     with open("configs/Kitti_test.json") as f:
         cfg = EasyDict(json.load(f))
 
-    dataloaders = get_kitti_dataset(cfg['dataset'])
+    dataloaders = get_dataset(cfg['dataset'])
 
     data = next(iter(dataloaders['Validation']))
     left     = data['l_img']

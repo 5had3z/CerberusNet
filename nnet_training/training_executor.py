@@ -19,8 +19,7 @@ from easydict import EasyDict
 import torch
 from nnet_training.nnet_models import get_model
 
-from nnet_training.utilities.kitti_dataset import get_kitti_dataset
-from nnet_training.utilities.cityscapes_dataset import get_cityscapse_dataset
+from nnet_training.datasets import get_dataset
 from nnet_training.loss_functions import get_loss_function
 from nnet_training.utilities.model_trainer import ModelTrainer
 
@@ -29,13 +28,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     Sets up the network and training configurations
     Returns initialised training framework class
     """
-
-    if config_json.dataset.type == "Kitti":
-        datasets = get_kitti_dataset(config_json.dataset)
-    elif config_json.dataset.type == "Cityscapes":
-        datasets = get_cityscapse_dataset(config_json.dataset)
-    else:
-        raise NotImplementedError(config_json.dataset.type)
+    datasets = get_dataset(config_json.dataset)
 
     model = get_model(config_json.model)
 
