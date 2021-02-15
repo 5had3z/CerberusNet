@@ -40,10 +40,7 @@ class ModelTrainer():
         Initialize the Model trainer giving it a nn.Model, nn.Optimizer and dataloaders as
         a dictionary with Training, Validation and Testing loaders
         '''
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        self._training_loader = dataloaders["Training"]
-        self._validation_loader = dataloaders["Validation"]
+        self._dataloaders = dataloaders
 
         self.epoch = 0
 
@@ -90,7 +87,8 @@ class ModelTrainer():
         '''
         if os.path.isfile(path):
             #Load Checkpoint
-            checkpoint = torch.load(path, map_location=torch.device(self._device))
+            checkpoint = torch.load(path,
+                map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
             self._model.load_state_dict(checkpoint['model_state_dict'])
             self._optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.epoch = checkpoint['epochs']
@@ -134,7 +132,8 @@ class ModelTrainer():
 
         max_epoch = self.epoch + n_epochs
 
-        self._lr_manager.set_epochs(nepochs=n_epochs, iters_per_epoch=len(self._training_loader))
+        self._lr_manager.set_epochs(
+            nepochs=n_epochs, iters_per_epoch=len(self._dataloaders["Training"]))
 
         while self.epoch < max_epoch:
             self.epoch += 1
@@ -183,8 +182,9 @@ class ModelTrainer():
     def _train_epoch(self, max_epoch):
         self._model.train()
         start_time = time.time()
+        dataloader = self._dataloaders["Training"]
 
-        for batch_idx, batch_data in enumerate(self._training_loader):
+        for batch_idx, batch_data in enumerate(dataloader):
             cur_lr = self._lr_manager(batch_idx)
             for param_group in self._optimizer.param_groups:
                 param_group['lr'] = cur_lr
@@ -212,10 +212,10 @@ class ModelTrainer():
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed / (batch_idx + 1) * \
-                    (len(self._training_loader) - (batch_idx + 1))
+                    (len(dataloader) - (batch_idx + 1))
 
                 sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
-                                 f'Iter [{batch_idx + 1:4d}/{len(self._training_loader):4d}] || '
+                                 f'Iter [{batch_idx + 1:4d}/{len(dataloader):4d}] || '
                                  f'lr: {self._lr_manager.get_lr():.2e} || '
                                  f'Loss: {loss.item():.4f} || '
                                  f'Time Elapsed: {time_elapsed:.2f} s '
@@ -225,11 +225,12 @@ class ModelTrainer():
 
     @torch.no_grad()
     def _validate_model(self, max_epoch):
-        # TODO Fix bbox issues when using model.eval()
-        self._model.train()
+        # TODO Fix bbox issues when using model.eval() for DETR model
+        self._model.eval()
         start_time = time.time()
+        dataloader = self._dataloaders["Validation"]
 
-        for batch_idx, batch_data in enumerate(self._validation_loader):
+        for batch_idx, batch_data in enumerate(dataloader):
             # Put both image and target onto device
             self._data_to_gpu(batch_data)
 
@@ -242,14 +243,14 @@ class ModelTrainer():
 
             if not batch_idx % 10:
                 sys.stdout.write(f'\rValidaton Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
-                                 f'Iter: [{batch_idx+1:4d}/{len(self._validation_loader):4d}]')
+                                 f'Iter: [{batch_idx+1:4d}/{len(dataloader):4d}]')
 
                 for logger in self.metric_loggers.values():
                     sys.stdout.write(f" || {logger.main_metric}: {logger.get_last_batch():.4f}")
 
                 time_elapsed = time.time() - start_time
                 time_remain = time_elapsed/(batch_idx+1)*\
-                    (len(self._validation_loader)-batch_idx+1)
+                    (len(dataloader)-batch_idx+1)
                 sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
                                  f' Remain: {time_remain:.1f} s')
                 sys.stdout.write("\033[K")
@@ -300,15 +301,16 @@ class ModelTrainer():
         """
         Displays the outputs of the network
         """
-        # TODO Fix bbox issues when using model.eval()
-        self._model.train()
+        # TODO Fix bbox issues when using model.eval() for DETR model
+        self._model.eval()
 
-        batch_data = next(iter(self._validation_loader))
+        dataloader = self._dataloaders["Validation"]
+        batch_data = next(iter(dataloader))
         self._data_to_gpu(batch_data)
 
         start_time = time.time()
         forward = self._model(**batch_data)
-        propagation_time = (time.time() - start_time) / self._validation_loader.batch_size
+        propagation_time = (time.time() - start_time) / dataloader.batch_size
 
         if 'depth' in forward and 'l_disp' in batch_data:
             if isinstance(forward['depth'], list):
@@ -325,16 +327,16 @@ class ModelTrainer():
         if 'flow' in forward:
             np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
 
-        if 'img_normalize' in self._validation_loader.dataset.augmentations:
-            img_mean = self._validation_loader.dataset.augmentations['img_normalize'].mean
-            img_std = self._validation_loader.dataset.augmentations['img_normalize'].std
+        if 'img_normalize' in dataloader.dataset.augmentations:
+            img_mean = dataloader.dataset.augmentations['img_normalize'].mean
+            img_std = dataloader.dataset.augmentations['img_normalize'].std
             img_norm = torchvision.transforms.Normalize(
                 [-mean / std for mean, std in zip(img_mean, img_std)],
                 [1 / std for std in img_std])
         else:
             img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
 
-        for i in range(self._validation_loader.batch_size):
+        for i in range(dataloader.batch_size):
             plt.subplot(2, 5, 1)
             plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
             plt.xlabel("Base Image")
