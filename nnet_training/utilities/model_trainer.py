@@ -325,12 +325,12 @@ class ModelTrainer():
         if 'flow' in forward:
             np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
 
-        if hasattr(self._validation_loader.dataset, 'img_normalize'):
-            img_mean = self._validation_loader.dataset.img_normalize.mean
-            img_std = self._validation_loader.dataset.img_normalize.std
-            inv_mean = [-mean / std for mean, std in zip(img_mean, img_std)]
-            inv_std = [1 / std for std in img_std]
-            img_norm = torchvision.transforms.Normalize(inv_mean, inv_std)
+        if 'img_normalize' in self._validation_loader.dataset.augmentations:
+            img_mean = self._validation_loader.dataset.augmentations['img_normalize'].mean
+            img_std = self._validation_loader.dataset.augmentations['img_normalize'].std
+            img_norm = torchvision.transforms.Normalize(
+                [-mean / std for mean, std in zip(img_mean, img_std)],
+                [1 / std for std in img_std])
         else:
             img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
 

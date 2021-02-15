@@ -96,6 +96,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     id_mapping = np.array(range(-1, len(train_ids) - 1)).astype('int32')
 
+    valid_augmentations = set(
+        ["crop_fraction", "rand_rotation", "rand_brightness", "img_normalize", "rand_flip"])
+
     @staticmethod
     def replace_filename(root_dir, filename, old_str: str, new_str: str) -> str:
         return os.path.join(root_dir, filename.replace(old_str, new_str))
@@ -131,24 +134,20 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.output_size = output_size # (width, height)
         self.scale_factor = 1
 
-        if 'crop_fraction' in kwargs:
-            self.crop_fraction = kwargs['crop_fraction']
-        if 'rand_rotation' in kwargs:
-            self.rand_rot = kwargs['rand_rotation']
-        if 'rand_brightness' in kwargs:
-            self.brightness = kwargs['rand_brightness']
-        if 'rand_scale' in kwargs:
-            assert len(kwargs['rand_scale']) == 2
-            self.scale_range = kwargs['rand_scale']
-        if 'img_normalize' in kwargs:
-            # Typical normalisation parameters:
-            # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
-            self.img_normalize = torchvision.transforms.Normalize(
+        self.augmentations = {}
+        for k, v in kwargs.items():
+            if k == 'img_normalize':
+                # Typical normalisation parameters:
+                # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
+                self.augmentations[k] = torchvision.transforms.Normalize(
                 kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
+            elif k in CityScapesDataset.valid_augmentations:
+                self.augmentations[k] = v
+            else:
+                Warning(f"Invalid Augmentation: {k}, {v}")
+
         if 'box_type' in kwargs:
             self.bbox_type = kwargs['box_type']
-
-        self.rand_flip = True 
 
     def _validate_dataset(self, root_dir, subsets, **kwargs):
         """
@@ -313,23 +312,25 @@ class CityScapesDataset(torch.utils.data.Dataset):
         output_shape = [scale_func(x) for x in self.output_size]
 
         # random mirror
-        if random.random() < 0.5 and self.rand_flip:
+        if self.augmentations.get('rand_flip', False) and random.random() < 0.5:
             for key, data in epoch_data.items():
                 if key not in ['labels', 'bboxes']:
                     epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
                 elif key == 'bboxes':
                     epoch_data[key] = self._mirror_bbox(data, CityScapesDataset.base_size)
 
-        if hasattr(self, 'brightness'):
-            brightness_scale = random.uniform(1-self.brightness/100, 1+self.brightness/100)
+        if 'rand_brightness' in self.augmentations:
+            brightness_scale = random.uniform(
+                1-self.augmentations['rand_brightness']/100,
+                1+self.augmentations['rand_brightness']/100)
             for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.adjust_brightness(
                         data, brightness_scale)
 
-        if hasattr(self, 'rand_rot'):
+        if 'rand_rot' in self.augmentations:
             # TODO Add mask for bboxes which is required for attention head
-            angle = random.uniform(0, self.rand_rot)
+            angle = random.uniform(0, self.augmentations['rand_rot'])
             for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
@@ -353,10 +354,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif key == "bboxes":
                 epoch_data[key] = self._scale_bbox(data, output_shape)
 
-        if hasattr(self, 'crop_fraction'):
+        if 'crop_fraction' in self.augmentations:
             # random crop
-            crop_h = int(epoch_data["l_img"].shape[1] / self.crop_fraction / 32.0) * 32
-            crop_w = int(epoch_data["l_img"].shape[2] / self.crop_fraction / 32.0) * 32
+            crop_fraction = self.augmentations['crop_fraction']
+            crop_h = int(epoch_data["l_img"].shape[1] / crop_fraction / 32.0) * 32
+            crop_w = int(epoch_data["l_img"].shape[2] / crop_fraction / 32.0) * 32
             crop_x = random.randint(0, epoch_data["l_img"].shape[2] - crop_w)
             crop_y = random.randint(0, epoch_data["l_img"].shape[1] - crop_h)
 
@@ -378,8 +380,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
     def _img_transform(self, img):
         img = torchvision.transforms.functional.to_tensor(img)
-        if hasattr(self, 'img_normalize'):
-            img = self.img_normalize(img)
+        if 'img_normalize' in self.augmentations:
+            img = self.augmentations['img_normalize'](img)
         return img
 
     def _seg_transform(self, seg):
