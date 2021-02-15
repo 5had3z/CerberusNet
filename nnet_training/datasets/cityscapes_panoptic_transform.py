@@ -26,6 +26,10 @@ class PanopticTargetGenerator():
         ignore_crowd_in_semantic: Boolean, whether to ignore crowd region in semantic segmentation
             branch, crowd region is ignored in the original TensorFlow implementation.
     """
+    generated_items = [
+        'semantic', 'foreground', 'center', 'offset', 'semantic_mask', 'center_mask', 'offset_mask'
+    ]
+
     def __init__(self, ignore_label, thing_list, sigma=8, ignore_stuff_in_offset=False,
                  small_instance_area=0, small_instance_weight=1, ignore_crowd_in_semantic=False):
         self.ignore_label = ignore_label

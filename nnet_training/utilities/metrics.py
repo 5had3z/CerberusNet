@@ -496,7 +496,7 @@ class SegmentationMetric(MetricBase):
         self.metric_data["Batch_Loss"].append(loss)
 
         labels = targets['seg'].type(torch.int32).cuda()
-        preds = torch.argmax(predictions['seg'], dim=1).type(torch.int32)
+        preds = torch.argmax(predictions['seg'], dim=1, keepdim=True).type(torch.int32)
 
         batch_pix_acc = np.zeros((preds.shape[0], 1))
         batch_iou = np.zeros((preds.shape[0], self._n_classes))

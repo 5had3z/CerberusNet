@@ -262,12 +262,11 @@ class ModelTrainer():
         cuda_s = torch.cuda.Stream()
         with torch.cuda.stream(cuda_s):
             for key in data:
-                if key in ['l_img', 'l_seq', 'seg', 'l_disp', 'r_img',
-                           'r_seq', 'r_disp', 'flow', 'flow_mask']:
-                    data[key] = data[key].cuda(non_blocking=True)
-                elif key in ['bboxes', 'labels']:
+                if key in ['bboxes', 'labels']:
                     for i, elem in enumerate(data[key]):
                         data[key][i] = elem.cuda(non_blocking=True)
+                elif isinstance(data[key], torch.Tensor):
+                    data[key] = data[key].cuda(non_blocking=True)
         cuda_s.synchronize()
 
     def calculate_losses(self, nnet_outputs: Dict[str, torch.Tensor],

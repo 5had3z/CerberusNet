@@ -112,6 +112,8 @@ class CerberusBase(torch.nn.Module):
         forward = self.segmentation(enc_features)
 
         forward['seg'] = scale_as(forward['seg'], l_img)
+        forward['center'] = scale_as(forward['center'], l_img)
+        forward['offset'] = scale_as(forward['offset'], l_img)
 
         # Depth pass with first image
         forward['depth'] = self.depth(enc_features)

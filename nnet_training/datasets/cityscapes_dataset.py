@@ -210,7 +210,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif subset in ['seg', 'l_disp', 'r_disp']:
                 img_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, foldername, filename)
-                epoch_data[subset] = Image.open(img_pth)
+                epoch_data[subset] = torchvision.transforms.functional.to_tensor(
+                    np.asarray(Image.open(img_pth), dtype=np.int32))
             elif subset == "bbox":
                 bbox_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, foldername, filename)
@@ -227,6 +228,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
 
         self._sync_transform(epoch_data)
+
+        if 'panoptic' in self.subsets:
+            for key in self.panoptic_gen.generated_items:
+                epoch_data[key] = epoch_data[key].squeeze(0)
 
         if 'cam' in self.subsets:
             cam_pth = CityScapesDataset.sub_directories['cam'](
@@ -369,10 +374,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
         for key, data in epoch_data.items():
             if key in ["l_img", "r_img", "l_seq", "r_seq", 'center', 'offset']:
                 epoch_data[key] = torchvision.transforms.functional.resize(
-                    data, tuple(output_shape), Image.BILINEAR)
+                    data, tuple(output_shape[::-1]), Image.BILINEAR)
             elif key in ["l_disp", 'r_disp', "seg", 'foreground'] or key.endswith('mask'):
                 epoch_data[key] = torchvision.transforms.functional.resize(
-                    data, tuple(output_shape), Image.NEAREST)
+                    data, tuple(output_shape[::-1]), Image.NEAREST)
             elif key == "center_points":
                 new_points = []
                 rescale_func = lambda x: [tgt * new / old for (tgt, new, old) \

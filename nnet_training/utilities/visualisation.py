@@ -35,7 +35,8 @@ def get_color_pallete(npimg):
     out_img : PIL.Image
         Image with color pallete
     """
-
+    if len(npimg.shape) == 3:
+        npimg = npimg[0]    # squeeze first dim
     out_img = Image.fromarray(npimg.astype('uint8'))
     out_img.putpalette(CITYSPALLETTE)
     return out_img
