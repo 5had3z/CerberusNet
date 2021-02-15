@@ -17,8 +17,8 @@ from shutil import copy
 from easydict import EasyDict
 
 import torch
-from nnet_training.nnet_models import get_model
 
+from nnet_training.nnet_models import get_model
 from nnet_training.datasets import get_dataset
 from nnet_training.loss_functions import get_loss_function
 from nnet_training.utilities.model_trainer import ModelTrainer

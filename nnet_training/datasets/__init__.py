@@ -11,6 +11,8 @@ from .kitti_dataset import Kitti2015Dataset
 from .custom_batch_sampler import BatchSamplerRandScale
 from .custom_batch_sampler import collate_w_bboxes
 
+__all__ = ['get_dataset']
+
 def id_vec_generator(train_ratio, directory):
     """
     Generates the training and validation split of a monlitic dataset.\n
@@ -36,7 +38,7 @@ def get_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     if platform.system() == 'Windows':
         n_workers = 0
     else:
-        n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
+        n_workers = min(multiprocessing.cpu_count()-2, dataset_config.batch_size)
 
     aux_aug = {}
     if 'img_normalize' in dataset_config.augmentations:

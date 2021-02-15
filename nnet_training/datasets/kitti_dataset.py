@@ -19,8 +19,6 @@ import numpy as np
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.utilities.visualisation import flow_to_image
 
-from . import get_dataset
-
 __all__ = ['Kitti2015Dataset']
 
 class Kitti2015Dataset(torch.utils.data.Dataset):
@@ -321,6 +319,7 @@ def test_kitti_loading():
     """
     from easydict import EasyDict
     import matplotlib.pyplot as plt
+    from . import get_dataset
 
     with open("configs/Kitti_test.json") as f:
         cfg = EasyDict(json.load(f))
