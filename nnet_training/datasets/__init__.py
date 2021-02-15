@@ -11,8 +11,6 @@ from .kitti_dataset import Kitti2015Dataset
 from .custom_batch_sampler import BatchSamplerRandScale
 from .custom_batch_sampler import collate_w_bboxes
 
-IMG_EXT = '.png'
-
 def id_vec_generator(train_ratio, directory):
     """
     Generates the training and validation split of a monlitic dataset.\n
@@ -20,7 +18,7 @@ def id_vec_generator(train_ratio, directory):
     """
     num_images = 0
     for file in os.listdir(directory):
-        num_images += file.endswith(IMG_EXT)
+        num_images += file.endswith('.png')
 
     print(f"Number of Images:\t{num_images}")
     n_train = int(num_images * train_ratio)

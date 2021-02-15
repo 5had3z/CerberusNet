@@ -23,8 +23,6 @@ from . import get_dataset
 
 __all__ = ['Kitti2015Dataset']
 
-IMG_EXT = '.png'
-
 class Kitti2015Dataset(torch.utils.data.Dataset):
     """
     Cityscapes Dataset\n
@@ -70,7 +68,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         # Get all file names
         for filename in sorted(os.listdir(os.path.join(directory, 'image_2'))):
             frame_n = int(re.split("_", filename)[1][:2])
-            if filename.endswith(IMG_EXT) and frame_n == 10:
+            if filename.endswith('.png') and frame_n == 10:
                 l_imgpath = os.path.join(directory, 'image_2', filename)
                 self.l_img.append(l_imgpath)
 
