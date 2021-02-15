@@ -8,8 +8,8 @@ from torch.utils.data import RandomSampler
 
 from .cityscapes_dataset import CityScapesDataset
 from .kitti_dataset import Kitti2015Dataset
-from .custom_batch_sampler import BatchSamplerRandScale
-from .custom_batch_sampler import collate_w_bboxes
+from .daterloader_utils import BatchSamplerRandScale
+from .daterloader_utils import collate_w_bboxes
 
 __all__ = ['get_dataset']
 

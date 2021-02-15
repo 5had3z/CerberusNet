@@ -166,12 +166,12 @@ class PanopticTargetGenerator():
                 offset[offset_x_index] = center_x - x_coord[mask_index]
 
         return dict(
-            semantic=torch.as_tensor(semantic.astype('long')),
-            foreground=torch.as_tensor(foreground.astype('long')),
-            center=torch.as_tensor(center.astype(np.float32)),
+            semantic=torch.as_tensor(semantic.astype('long')).unsqueeze(0),
+            foreground=torch.as_tensor(foreground.astype('long')).unsqueeze(0),
+            center=torch.as_tensor(center.astype(np.float32)).unsqueeze(0),
             center_points=center_pts,
-            offset=torch.as_tensor(offset.astype(np.float32)),
-            semantic_mask=torch.as_tensor(semantic_mask.astype(np.float32)),
-            center_mask=torch.as_tensor(center_mask.astype(np.float32)),
-            offset_mask=torch.as_tensor(offset_mask.astype(np.float32))
+            offset=torch.as_tensor(offset.astype(np.float32)).unsqueeze(0),
+            semantic_mask=torch.as_tensor(semantic_mask.astype(np.float32)).unsqueeze(0),
+            center_mask=torch.as_tensor(center_mask.astype(np.float32)).unsqueeze(0),
+            offset_mask=torch.as_tensor(offset_mask.astype(np.float32)).unsqueeze(0)
         )

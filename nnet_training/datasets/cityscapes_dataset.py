@@ -220,7 +220,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     self.root_dir, f"cityscapes_panoptic_{self.split}", filename)
                 panoptic_img = np.asarray(Image.open(img_pth))
                 segments_info = self.panoptic_json[filename.replace("_leftImg8bit.png", '')]
-                ret_dict = self.panoptic_gen(panoptic_img, segments_info)
+                epoch_data.update(self.panoptic_gen(panoptic_img, segments_info))
+
+        for key, data in epoch_data.items():
+            if isinstance(data, Image.Image):
+                epoch_data[key] = torchvision.transforms.functional.to_tensor(data)
 
         self._sync_transform(epoch_data)
 
@@ -324,6 +328,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                             bbox[2] * x_scale, bbox[3] * y_scale])
         return ret_val
 
+    @torch.no_grad()
     def _sync_transform(self, epoch_data: Dict[str, Union[Image.Image, List]]) -> None:
         """
         Augments and formats all the batch data in a synchronised manner
@@ -335,7 +340,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if self.augmentations.get('rand_flip', False) and random.random() < 0.5:
             for key, data in epoch_data.items():
                 if key not in ['labels', 'bboxes']:
-                    epoch_data[key] = data.transpose(Image.FLIP_LEFT_RIGHT)
+                    epoch_data[key] = torchvision.transforms.functional.hflip(data)
                 elif key == 'bboxes':
                     epoch_data[key] = self._mirror_bbox(data, CityScapesDataset.base_size)
 
@@ -362,17 +367,33 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     self._rotate_bbox(epoch_data, angle)
 
         for key, data in epoch_data.items():
-            if key in ["l_img", "r_img", "l_seq", "r_seq"]:
-                data = data.resize(output_shape, Image.BILINEAR)
-                epoch_data[key] = self._img_transform(data)
-            elif key in ["l_disp", 'r_disp']:
-                data = data.resize(output_shape, Image.NEAREST)
-                epoch_data[key] = self._depth_transform(data)
-            elif key == "seg":
-                data = data.resize(output_shape, Image.NEAREST)
-                epoch_data[key] = self._seg_transform(data)
+            if key in ["l_img", "r_img", "l_seq", "r_seq", 'center', 'offset']:
+                epoch_data[key] = torchvision.transforms.functional.resize(
+                    data, tuple(output_shape), Image.BILINEAR)
+            elif key in ["l_disp", 'r_disp', "seg", 'foreground'] or key.endswith('mask'):
+                epoch_data[key] = torchvision.transforms.functional.resize(
+                    data, tuple(output_shape), Image.NEAREST)
+            elif key == "center_points":
+                new_points = []
+                rescale_func = lambda x: [tgt * new / old for (tgt, new, old) \
+                                in zip(x, output_shape, CityScapesDataset.base_size)]
+                for points in data:
+                    new_points.append(rescale_func(points))
+                epoch_data[key] = new_points
             elif key == "bboxes":
                 epoch_data[key] = self._scale_bbox(data, output_shape)
+
+        for key in ["l_img", "r_img", "l_seq", "r_seq"]:
+            if key in epoch_data:
+                epoch_data[key] = self._img_transform(epoch_data[key])
+
+        for key in ["l_disp", 'r_disp']:
+            if key in epoch_data:
+                epoch_data[key] = self._depth_transform(epoch_data[key])
+
+        if 'seg' in epoch_data:
+            epoch_data['seg'] = self._seg_transform(epoch_data['seg'])
+
 
         if 'crop_fraction' in self.augmentations:
             # random crop
@@ -399,7 +420,6 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return CityScapesDataset.train_ids[index].reshape(seg.shape)
 
     def _img_transform(self, img):
-        img = torchvision.transforms.functional.to_tensor(img)
         if 'img_normalize' in self.augmentations:
             img = self.augmentations['img_normalize'](img)
         return img

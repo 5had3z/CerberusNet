@@ -69,11 +69,14 @@ class BatchSamplerRandScale(Sampler):
 
 def collate_w_bboxes(batch):
     coll_tensors = default_collate(
-        [{k:v for (k,v) in sample.items() if k not in ['labels', 'bboxes']} for sample in batch])
+        [{k:v for (k,v) in sample.items() if k not in \
+            ['labels', 'bboxes', 'center_points']} for sample in batch])
 
     if all(key in batch[0].keys() for key in ['labels', 'bboxes']):
         coll_tensors['labels'] = [sample['labels'] for sample in batch]
         coll_tensors['bboxes'] = [sample['bboxes'] for sample in batch]
+    if 'center_points' in batch[0].keys():
+        coll_tensors['center_points'] = [sample['center_points'] for sample in batch]
     return coll_tensors
 
 if __name__ == "__main__":
