@@ -28,6 +28,8 @@ from nnet_training.nnet_models.detr.box_ops import box_xyxy_to_cxcywh
 from nnet_training.nnet_models.detr.box_ops import normalize_boxes
 from nnet_training.utilities.visualisation import get_color_pallete
 
+from .cityscapes_panoptic_transform import PanopticTargetGenerator
+
 __all__ = ['CityScapesDataset']
 
 IMG_EXT = '.png'
@@ -99,6 +101,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
     valid_augmentations = set(
         ["crop_fraction", "rand_rotation", "rand_brightness", "img_normalize", "rand_flip"])
 
+    cityscapes_things = [11, 12, 13, 14, 15, 16, 17, 18]
+
     @staticmethod
     def replace_filename(root_dir, filename, old_str: str, new_str: str) -> str:
         return os.path.join(root_dir, filename.replace(old_str, new_str))
@@ -127,6 +131,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         self.root_dir = directory
         self.split = split
         self.l_img = []
+        self.panoptic_json = {}
 
         self._validate_dataset(directory, subsets, **kwargs)
 
@@ -148,6 +153,11 @@ class CityScapesDataset(torch.utils.data.Dataset):
 
         if 'box_type' in kwargs:
             self.bbox_type = kwargs['box_type']
+        if 'panoptic' in subsets:
+            self.panoptic_gen = PanopticTargetGenerator(
+                ignore_label=255, thing_list=CityScapesDataset.cityscapes_things)
+            self.init_panoptic_json(
+                f"{self.root_dir}gtFine/cityscapes_panoptic_{self.split}.json")
 
     def _validate_dataset(self, root_dir, subsets, **kwargs):
         """
@@ -163,8 +173,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 self.l_img.append(l_imgpath)
 
                 for subset in subsets:
-                    target_pth = CityScapesDataset.sub_directories[subset](
-                            root_dir, foldername, filename)
+                    if subset == "panoptic":
+                        target_pth = CityScapesDataset.sub_directories[subset](
+                                root_dir, f"cityscapes_panoptic_{self.split}", filename)
+                    else:
+                        target_pth = CityScapesDataset.sub_directories[subset](
+                                root_dir, foldername, filename)
                     assert os.path.isfile(target_pth), \
                         f"Error target {target_pth} corresponding to {l_imgpath}"
 
@@ -201,6 +215,12 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 bbox_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, foldername, filename)
                 epoch_data['labels'], epoch_data['bboxes'] = self.bbox_json_parse(bbox_pth)
+            elif subset == "panoptic":
+                img_pth = CityScapesDataset.sub_directories[subset](
+                    self.root_dir, f"cityscapes_panoptic_{self.split}", filename)
+                panoptic_img = np.asarray(Image.open(img_pth))
+                segments_info = self.panoptic_json[filename.replace("_leftImg8bit.png", '')]
+                ret_dict = self.panoptic_gen(panoptic_img, segments_info)
 
         self._sync_transform(epoch_data)
 
@@ -446,6 +466,15 @@ class CityScapesDataset(torch.utils.data.Dataset):
                     bboxes.append(bbox['bbox'])
 
         return labels, bboxes
+
+    def init_panoptic_json(self, json_path: str):
+        """
+        Loads the annotation data into the panoptic_json dictonary for fast lookup during training.
+        """
+        with open(json_path) as json_file:
+            json_data = json.load(json_file)
+            for entry in json_data['annotations']:
+                self.panoptic_json[entry['image_id']] = entry['segments_info']
 
 
 def copy_cityscapes(src_dir: Path, datasets: Dict[str, Path], subsets: List[str], dst_dir: Path):
