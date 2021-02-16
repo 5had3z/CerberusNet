@@ -21,6 +21,8 @@ from nnet_training.utilities.lr_scheduler import LRScheduler
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.utilities.visualisation import apply_bboxes
+from nnet_training.utilities.panoptic_post_processing import get_panoptic_segmentation
+from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
 __all__ = ['ModelTrainer']
 
@@ -311,6 +313,7 @@ class ModelTrainer():
         """
         Displays Segmentation Prediction versus ground truth in window
         """
+        plt.figure("Semantic Segmentation Estimation")
         seg_pred_cpu = torch.argmax(nnet_outputs['seg'], dim=1).cpu().numpy()
 
         for i in range(batch_size):
@@ -334,6 +337,7 @@ class ModelTrainer():
         """
         Displays flow prediction versus ground truth in window
         """
+        plt.figure("Optical Flow Estimation")
         if isinstance(nnet_outputs['flow'], list):
             np_flow_12 = batch_data['flow'][0].cpu().numpy()
         else:
@@ -367,6 +371,7 @@ class ModelTrainer():
         """
         Displays depth prediction versus ground truth in window
         """
+        plt.figure("Depth Estimation")
         if isinstance(nnet_outputs['depth'], list):
             depth_pred_cpu = nnet_outputs['depth'][0].cpu().numpy()
         else:
@@ -395,6 +400,7 @@ class ModelTrainer():
         """
         Object detection versus ground truth in window
         """
+        plt.figure("Object Detection Estimation")
         class_pred_cpu = torch.argmax(nnet_outputs['logits'], dim=2).cpu().numpy()
 
         for i in range(batch_size):
@@ -419,7 +425,36 @@ class ModelTrainer():
         """
         Panoptic Prediction versus ground truth in window
         """
-        raise NotImplementedError
+        plt.figure("Panoptic Prediction Estimation")
+        seg_pred = torch.argmax(nnet_outputs['seg'], dim=1)
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            panoptic_gt, _ = get_panoptic_segmentation(
+                batch_data['seg'][i].unsqueeze(0),
+                batch_data['center'][i].unsqueeze(0),
+                batch_data['offset'][i].unsqueeze(0),
+                CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(panoptic_gt.squeeze(0).cpu().numpy())
+            plt.xlabel("Ground Truth Panoptic")
+
+            panoptic_pred, _ = get_panoptic_segmentation(
+                seg_pred[i].unsqueeze(0),
+                nnet_outputs['center'][i].unsqueeze(0),
+                nnet_outputs['offset'][i].unsqueeze(0),
+                CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(panoptic_pred.squeeze(0).cpu().numpy())
+            plt.xlabel("Predicted Panoptic")
+
+        plt.suptitle("Panoptic Prediction versus Ground Truth")
+        plt.show(block=False)
 
     @torch.no_grad()
     def visualize_output(self):
@@ -458,6 +493,9 @@ class ModelTrainer():
         if all(key in batch_data for key in ['bboxes', 'labels']) and \
             all(key in forward for key in ['bboxes', 'logits']):
             self.show_bboxes(batch_data, forward, dataloader.batch_size, img_norm)
+
+        if all(key in batch_data for key in ['center', 'offset', 'seg']):
+            self.show_panoptic(batch_data, forward, dataloader.batch_size, img_norm)
 
         plt.show(block=True)
 
