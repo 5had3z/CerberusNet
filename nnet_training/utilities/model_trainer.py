@@ -295,6 +295,132 @@ class ModelTrainer():
             self.metric_loggers['seg'].plot_classwise_iou()
             self.metric_loggers['seg'].display_conf_mat()
 
+    @staticmethod
+    def col_maj_2_row_maj(rows, cols, col_maj_idx):
+        """
+        Converts a column major index to a row major index for matplotlib.pyplot.subplot.
+        Row = index // columns, Column = index % columns
+        """
+        crow = (col_maj_idx-1) % rows
+        ccol = (col_maj_idx-1) // rows
+        new_idx = crow * cols + ccol
+        return rows, cols, new_idx + 1
+
+    @staticmethod
+    def show_segmentation(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Displays Segmentation Prediction versus ground truth in window
+        """
+        seg_pred_cpu = torch.argmax(nnet_outputs['seg'], dim=1).cpu().numpy()
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
+            plt.xlabel("Ground Truth Segmentation")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(get_color_pallete(seg_pred_cpu[i]))
+            plt.xlabel("Predicted Segmentation")
+
+        plt.suptitle("Segmentation Prediction versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_flow(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Displays flow prediction versus ground truth in window
+        """
+        if isinstance(nnet_outputs['flow'], list):
+            np_flow_12 = batch_data['flow'][0].cpu().numpy()
+        else:
+            np_flow_12 = batch_data['flow'].cpu().numpy()
+
+        plt_cols = batch_size * 2
+        for i in range(plt_cols):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image @ t")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image @ t + 1")
+
+            if 'flow' in batch_data:
+                plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+                plt.imshow(flow_to_image(
+                        batch_data['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
+                plt.xlabel("Ground Truth Flow")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
+            plt.xlabel("Predicted Flow")
+
+        plt.suptitle("Optical Flow predictions versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_depth(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Displays depth prediction versus ground truth in window
+        """
+        if isinstance(nnet_outputs['depth'], list):
+            depth_pred_cpu = nnet_outputs['depth'][0].cpu().numpy()
+        else:
+            depth_pred_cpu = nnet_outputs['depth'].cpu().numpy()
+
+        depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(depth_gt_cpu[i], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+            plt.xlabel("Ground Truth Disparity")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(depth_pred_cpu[i, 0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
+            plt.xlabel("Predicted Depth")
+
+        plt.suptitle("Depth predictions versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_bboxes(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Object detection versus ground truth in window
+        """
+        class_pred_cpu = torch.argmax(nnet_outputs['logits'], dim=2).cpu().numpy()
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, batch_size, 2*i+1))
+            base_img = np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2)
+            plt.imshow(apply_bboxes(base_img,
+                batch_data['bboxes'][i].cpu().numpy(),
+                batch_data['labels'][i].cpu().numpy()))
+            plt.xlabel("Ground Truth Objects")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, batch_size, 2*i+2))
+            pred_labels = class_pred_cpu[i]
+            pred_boxes = nnet_outputs['bboxes'][i].cpu().numpy()
+            plt.imshow(apply_bboxes(base_img, pred_boxes, pred_labels))
+            plt.xlabel("Predicted Objects")
+
+        plt.suptitle("Boundary Box Predictions versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_panoptic(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Panoptic Prediction versus ground truth in window
+        """
+        raise NotImplementedError
+
     @torch.no_grad()
     def visualize_output(self):
         """
@@ -309,22 +435,7 @@ class ModelTrainer():
 
         start_time = time.time()
         forward = self._model(**batch_data)
-        propagation_time = (time.time() - start_time) / dataloader.batch_size
-
-        if 'depth' in forward and 'l_disp' in batch_data:
-            if isinstance(forward['depth'], list):
-                forward['depth'] = forward['depth'][0]
-            depth_pred_cpu = forward['depth'].type(torch.float32).detach().cpu().numpy()
-            depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
-
-        if 'seg' in forward:
-            seg_pred_cpu = torch.argmax(forward['seg'], dim=1).cpu().numpy()
-
-        if 'logits' in forward:
-            class_pred_cpu = torch.argmax(forward['logits'], dim=2).cpu().numpy()
-
-        if 'flow' in forward:
-            np_flow_12 = forward['flow'][0].detach().type(torch.float32).cpu().numpy()
+        print(f"Propagation time {(time.time() - start_time) / dataloader.batch_size:.3f}")
 
         if 'img_normalize' in dataloader.dataset.augmentations:
             img_mean = dataloader.dataset.augmentations['img_normalize'].mean
@@ -333,64 +444,22 @@ class ModelTrainer():
                 [-mean / std for mean, std in zip(img_mean, img_std)],
                 [1 / std for std in img_std])
         else:
-            img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
+            img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])    
 
-        for i in range(dataloader.batch_size):
-            plt.subplot(2, 5, 1)
-            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
-            plt.xlabel("Base Image")
+        if 'depth' in forward and 'l_disp' in batch_data:
+            self.show_depth(batch_data, forward, dataloader.batch_size, img_norm)
 
-            if 'l_seq' in batch_data:
-                plt.subplot(2, 5, 2)
-                plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
-                plt.xlabel("Sequential Image")
+        if all('seg' in data for data in [forward, batch_data]):
+            self.show_segmentation(batch_data, forward, dataloader.batch_size, img_norm)
 
-            if 'seg' in forward and 'seg' in batch_data:
-                plt.subplot(2, 5, 5)
-                plt.imshow(get_color_pallete(batch_data['seg'].cpu().numpy()[i]))
-                plt.xlabel("Ground Truth Segmentation")
+        if 'flow' in forward:
+            self.show_flow(batch_data, forward, dataloader.batch_size, img_norm)
 
-                plt.subplot(2, 5, 6)
-                plt.imshow(get_color_pallete(seg_pred_cpu[i]))
-                plt.xlabel("Predicted Segmentation")
+        if all(key in batch_data for key in ['bboxes', 'labels']) and \
+            all(key in forward for key in ['bboxes', 'logits']):
+            self.show_bboxes(batch_data, forward, dataloader.batch_size, img_norm)
 
-            if 'flow' in batch_data:
-                plt.subplot(2, 5, 3)
-                plt.imshow(flow_to_image(
-                    batch_data['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
-                plt.xlabel("Ground Truth Flow")
-
-            if 'flow' in forward:
-                plt.subplot(2, 5, 7)
-                plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
-                plt.xlabel("Predicted Flow")
-
-            if 'depth' in forward and 'l_disp' in batch_data:
-                plt.subplot(2, 5, 4)
-                plt.imshow(depth_gt_cpu[i], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                plt.xlabel("Ground Truth Disparity")
-
-                plt.subplot(2, 5, 8)
-                plt.imshow(depth_pred_cpu[i, 0], cmap='magma', vmin=MIN_DEPTH, vmax=MAX_DEPTH)
-                plt.xlabel("Predicted Depth")
-
-            if all(key in batch_data for key in ['bboxes', 'labels']) and \
-                all(key in forward for key in ['bboxes', 'logits']):
-                plt.subplot(2, 5, 9)
-                base_img = np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2)
-                plt.imshow(apply_bboxes(base_img,
-                    batch_data['bboxes'][i].cpu().numpy(),
-                    batch_data['labels'][i].cpu().numpy()))
-                plt.xlabel("Ground Truth Objects")
-
-                plt.subplot(2, 5, 10)
-                pred_labels = class_pred_cpu[i]
-                pred_boxes = forward['bboxes'][i].cpu().numpy()
-                plt.imshow(apply_bboxes(base_img, pred_boxes, pred_labels))
-                plt.xlabel("Predicted Objects")
-
-            plt.suptitle(f"Propagation time: {propagation_time}")
-            plt.show()
+        plt.show(block=True)
 
 if __name__ == "__main__":
     raise NotImplementedError
