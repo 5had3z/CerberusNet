@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw
 from matplotlib.colors import hsv_to_rgb
+from cityscapesscripts.helpers import labels as cs_labels
 
 __all__ = ['flow_to_image', 'get_color_pallete', ]
 
@@ -69,6 +70,36 @@ def apply_bboxes(npimg: np.ndarray, bboxes: np.ndarray, labels: np.ndarray) -> I
             draw.rectangle(bbox_shape, outline=CITYSPALLETTE[label])
     return img_out
 
+def get_panoptic_image(panoptic_img, label_divisor):
+    colormap = [list(label.color) for label in cs_labels.labels if label.trainId != 255]
+
+    # Add colormap to label.
+    colored_label = np.zeros((panoptic_img.shape[0], panoptic_img.shape[1], 3), dtype=np.uint8)
+    taken_colors = set([0, 0, 0])
+
+    def _random_color(base, max_dist=30):
+        new_color = base + np.random.randint(low=-max_dist,
+                                             high=max_dist + 1,
+                                             size=3)
+        return tuple(np.maximum(0, np.minimum(255, new_color)))
+
+    for lab in np.unique(panoptic_img):
+        if lab // label_divisor == 255:
+            continue
+        mask = panoptic_img == lab
+        base_color = colormap[lab // label_divisor]
+        if tuple(base_color) not in taken_colors:
+            taken_colors.add(tuple(base_color))
+            color = base_color
+        else:
+            while True:
+                color = _random_color(base_color)
+                if color not in taken_colors:
+                    taken_colors.add(color)
+                    break
+        colored_label[mask] = color
+
+    return colored_label.astype(dtype=np.uint8)
 
 CITYSPALLETTE = [
     128, 64, 128,

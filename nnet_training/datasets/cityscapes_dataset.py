@@ -155,9 +155,10 @@ class CityScapesDataset(torch.utils.data.Dataset):
             self.bbox_type = kwargs['box_type']
         if 'panoptic' in subsets:
             self.panoptic_gen = PanopticTargetGenerator(
-                ignore_label=255, thing_list=CityScapesDataset.cityscapes_things)
+                ignore_label=255, thing_list=CityScapesDataset.cityscapes_things,
+                ignore_stuff_in_offset=True, small_instance_area=4096, small_instance_weight=3)
             self.init_panoptic_json(
-                f"{self.root_dir}gtFine/cityscapes_panoptic_{self.split}.json")
+                f"{self.root_dir}gtFine/cityscapes_panoptic_{self.split}_trainId.json")
 
     def _validate_dataset(self, root_dir, subsets, **kwargs):
         """
@@ -175,7 +176,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 for subset in subsets:
                     if subset == "panoptic":
                         target_pth = CityScapesDataset.sub_directories[subset](
-                                root_dir, f"cityscapes_panoptic_{self.split}", filename)
+                                root_dir, f"cityscapes_panoptic_{self.split}_trainId", filename)
                     else:
                         target_pth = CityScapesDataset.sub_directories[subset](
                                 root_dir, foldername, filename)
@@ -219,7 +220,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             elif subset == "panoptic":
                 img_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, f"cityscapes_panoptic_{self.split}", filename)
-                panoptic_img = np.asarray(Image.open(img_pth))
+                panoptic_img = np.asarray(Image.open(img_pth), dtype=np.int32)
                 segments_info = self.panoptic_json[filename.replace("_leftImg8bit.png", '')]
                 epoch_data.update(self.panoptic_gen(panoptic_img, segments_info))
 

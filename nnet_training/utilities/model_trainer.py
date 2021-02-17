@@ -21,6 +21,7 @@ from nnet_training.utilities.lr_scheduler import LRScheduler
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.utilities.visualisation import apply_bboxes
+from nnet_training.utilities.visualisation import get_panoptic_image
 from nnet_training.utilities.panoptic_post_processing import get_panoptic_segmentation
 from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
@@ -220,8 +221,8 @@ class ModelTrainer():
                                  f'Iter [{batch_idx + 1:4d}/{len(dataloader):4d}] || '
                                  f'lr: {self._lr_manager.get_lr():.2e} || '
                                  f'Loss: {loss.item():.4f} || '
-                                 f'Time Elapsed: {time_elapsed:.2f} s '
-                                 f'Remain: {time_remain:.2f} s')
+                                 f'Time Elapsed: {time_elapsed:.1f} s '
+                                 f'Remain: {time_remain:.1f} s')
                 sys.stdout.write("\033[K")
                 sys.stdout.flush()
 
@@ -434,13 +435,13 @@ class ModelTrainer():
             plt.xlabel("Input Image")
 
             panoptic_gt, _ = get_panoptic_segmentation(
-                batch_data['seg'][i].unsqueeze(0),
+                batch_data['seg'][i],
                 batch_data['center'][i].unsqueeze(0),
                 batch_data['offset'][i].unsqueeze(0),
                 CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
-            plt.imshow(panoptic_gt.squeeze(0).cpu().numpy())
+            plt.imshow(get_panoptic_image(panoptic_gt.squeeze(0).cpu().numpy(), 1000))
             plt.xlabel("Ground Truth Panoptic")
 
             panoptic_pred, _ = get_panoptic_segmentation(
@@ -450,7 +451,7 @@ class ModelTrainer():
                 CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
-            plt.imshow(panoptic_pred.squeeze(0).cpu().numpy())
+            plt.imshow(get_panoptic_image(panoptic_pred.squeeze(0).cpu().numpy(), 1000))
             plt.xlabel("Predicted Panoptic")
 
         plt.suptitle("Panoptic Prediction versus Ground Truth")
