@@ -23,6 +23,7 @@ from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.utilities.visualisation import apply_bboxes
 from nnet_training.utilities.visualisation import get_panoptic_image
 from nnet_training.utilities.panoptic_post_processing import get_panoptic_segmentation
+from nnet_training.utilities.panoptic_post_processing import get_instance_segmentation
 from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
 __all__ = ['ModelTrainer']
@@ -422,6 +423,62 @@ class ModelTrainer():
         plt.show(block=False)
 
     @staticmethod
+    def show_instance(batch_data, nnet_outputs, batch_size, img_norm):
+        plt.figure("Instance Prediction Estimation")
+        seg_pred = torch.argmax(nnet_outputs['seg'], dim=1)
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            instance_gt, _ = get_instance_segmentation(
+                batch_data['seg'][i],
+                batch_data['center'][i].unsqueeze(0),
+                batch_data['offset'][i].unsqueeze(0),
+                CityScapesDataset.cityscapes_things)
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(instance_gt.squeeze(0).cpu().numpy())
+            plt.xlabel("Ground Truth Instances")
+
+            instance_pred, _ = get_instance_segmentation(
+                seg_pred[i].unsqueeze(0),
+                nnet_outputs['center'][i].unsqueeze(0),
+                nnet_outputs['offset'][i].unsqueeze(0),
+                CityScapesDataset.cityscapes_things)
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(instance_pred.squeeze(0).cpu().numpy())
+            plt.xlabel("Predicted Instances")
+
+        plt.suptitle("Instance Prediction versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_offsets(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Center Prediction versus ground truth in window
+        """
+        plt.figure("Offset Estimation")
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(flow_to_image(batch_data['offset'][i].cpu().numpy().transpose([1, 2, 0])))
+            plt.xlabel("Ground Truth Offsets")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(flow_to_image(nnet_outputs['offset'][i].cpu().numpy().transpose([1, 2, 0])))
+            plt.xlabel("Predicted Offsets")
+
+        plt.suptitle("Instance Center versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
     def show_panoptic(batch_data, nnet_outputs, batch_size, img_norm):
         """
         Panoptic Prediction versus ground truth in window
@@ -497,6 +554,8 @@ class ModelTrainer():
 
         if all(key in batch_data for key in ['center', 'offset', 'seg']):
             self.show_panoptic(batch_data, forward, dataloader.batch_size, img_norm)
+            self.show_instance(batch_data, forward, dataloader.batch_size, img_norm)
+            self.show_offsets(batch_data, forward, dataloader.batch_size, img_norm)
 
         plt.show(block=True)
 
