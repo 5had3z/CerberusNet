@@ -436,7 +436,7 @@ class ModelTrainer():
                 batch_data['seg'][i],
                 batch_data['center'][i].unsqueeze(0),
                 batch_data['offset'][i].unsqueeze(0),
-                CityScapesDataset.cityscapes_things)
+                CityScapesDataset.cityscapes_things, nms_kernel=7)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
             plt.imshow(instance_gt.squeeze(0).cpu().numpy())
@@ -446,7 +446,7 @@ class ModelTrainer():
                 seg_pred[i].unsqueeze(0),
                 nnet_outputs['center'][i].unsqueeze(0),
                 nnet_outputs['offset'][i].unsqueeze(0),
-                CityScapesDataset.cityscapes_things)
+                CityScapesDataset.cityscapes_things, nms_kernel=7)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
             plt.imshow(instance_pred.squeeze(0).cpu().numpy())
@@ -475,7 +475,30 @@ class ModelTrainer():
             plt.imshow(flow_to_image(nnet_outputs['offset'][i].cpu().numpy().transpose([1, 2, 0])))
             plt.xlabel("Predicted Offsets")
 
-        plt.suptitle("Instance Center versus Ground Truth")
+        plt.suptitle("Instance Offset from Center versus Ground Truth")
+        plt.show(block=False)
+
+    @staticmethod
+    def show_centers(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Center Prediction versus ground truth in window
+        """
+        plt.figure("Center Point Estimation")
+
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
+            plt.xlabel("Input Image")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+            plt.imshow(batch_data['center'][i].squeeze(0).cpu().numpy())
+            plt.xlabel("Ground Truth Centers")
+
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.imshow(nnet_outputs['center'][i].squeeze(0).cpu().numpy())
+            plt.xlabel("Predicted Centers")
+
+        plt.suptitle("Instance Center Prediction versus Ground Truth")
         plt.show(block=False)
 
     @staticmethod
@@ -495,7 +518,8 @@ class ModelTrainer():
                 batch_data['seg'][i],
                 batch_data['center'][i].unsqueeze(0),
                 batch_data['offset'][i].unsqueeze(0),
-                CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
+                CityScapesDataset.cityscapes_things,
+                1000, 2048, 1000*255, nms_kernel=7)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
             plt.imshow(get_panoptic_image(panoptic_gt.squeeze(0).cpu().numpy(), 1000))
@@ -505,7 +529,8 @@ class ModelTrainer():
                 seg_pred[i].unsqueeze(0),
                 nnet_outputs['center'][i].unsqueeze(0),
                 nnet_outputs['offset'][i].unsqueeze(0),
-                CityScapesDataset.cityscapes_things, 1000, 2048, 1000*255)
+                CityScapesDataset.cityscapes_things,
+                1000, 2048, 1000*255, nms_kernel=7)
 
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
             plt.imshow(get_panoptic_image(panoptic_pred.squeeze(0).cpu().numpy(), 1000))
@@ -537,7 +562,7 @@ class ModelTrainer():
                 [-mean / std for mean, std in zip(img_mean, img_std)],
                 [1 / std for std in img_std])
         else:
-            img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])    
+            img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
 
         if 'depth' in forward and 'l_disp' in batch_data:
             self.show_depth(batch_data, forward, dataloader.batch_size, img_norm)
@@ -556,6 +581,7 @@ class ModelTrainer():
             self.show_panoptic(batch_data, forward, dataloader.batch_size, img_norm)
             self.show_instance(batch_data, forward, dataloader.batch_size, img_norm)
             self.show_offsets(batch_data, forward, dataloader.batch_size, img_norm)
+            self.show_centers(batch_data, forward, dataloader.batch_size, img_norm)
 
         plt.show(block=True)
 

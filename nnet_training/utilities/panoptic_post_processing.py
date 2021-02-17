@@ -58,12 +58,13 @@ def find_instance_center(ctr_hmp, threshold=0.1, nms_kernel=3, top_k=None):
     ctr_all = torch.nonzero(ctr_hmp > 0)
     if top_k is None:
         return ctr_all
-    elif ctr_all.size(0) < top_k:
+
+    if ctr_all.size(0) < top_k:
         return ctr_all
-    else:
-        # find top k centers.
-        top_k_scores, _ = torch.topk(torch.flatten(ctr_hmp), top_k)
-        return torch.nonzero(ctr_hmp > top_k_scores[-1])
+
+    # find top k centers.
+    top_k_scores, _ = torch.topk(torch.flatten(ctr_hmp), top_k)
+    return torch.nonzero(ctr_hmp > top_k_scores[-1])
 
 
 def group_pixels(ctr, offsets):
