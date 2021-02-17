@@ -15,8 +15,10 @@ from easydict import EasyDict
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
-from nnet_training.utilities.metrics import MetricBase, get_loggers
-from nnet_training.utilities.cityscapes_labels import trainId2name
+from cityscapesscripts.helpers.labels import trainId2label
+
+from nnet_training.statistics import MetricBase
+from nnet_training.statistics import get_loggers
 
 STATISTIC_2_TYPE = {
     "Batch_IoU": "seg",
@@ -96,7 +98,7 @@ def segmentation_comparison(experiment_dict: Dict[str, Union[EasyDict, MetricBas
 
     for statistic, (fig, axis) in plots.items():
         for idx in range(19):
-            axis[idx%3][idx//3].set_title(f'{trainId2name[idx]}')
+            axis[idx%3][idx//3].set_title(f'{trainId2label[idx].name}')
 
         fig.legend(*fig.axes[0].get_legend_handles_labels(),
                    loc='lower center', ncol=min(len(experiment_data), 4))

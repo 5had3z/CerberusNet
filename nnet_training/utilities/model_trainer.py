@@ -16,7 +16,7 @@ import torchvision
 
 import matplotlib.pyplot as plt
 
-from nnet_training.utilities.metrics import get_loggers
+from nnet_training.statistics import get_loggers
 from nnet_training.utilities.lr_scheduler import LRScheduler
 from nnet_training.utilities.visualisation import get_color_pallete
 from nnet_training.utilities.visualisation import flow_to_image
