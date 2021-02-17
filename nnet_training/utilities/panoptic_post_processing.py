@@ -38,8 +38,11 @@ def find_instance_center(ctr_hmp, threshold=0.1, nms_kernel=3, top_k=None):
         A Tensor of shape [K, 2] where K is the number of center points. The order of
         second dim is (y, x).
     """
-    if ctr_hmp.size(0) != 1:
+    if len(ctr_hmp.shape) == 4 and ctr_hmp.size(0) != 1:
         raise ValueError('Only supports inference for batch size = 1')
+
+    if len(ctr_hmp.shape) == 3:
+        ctr_hmp = ctr_hmp.unsqueeze(0)
 
     # thresholding, setting values below threshold to -1
     ctr_hmp = F.threshold(ctr_hmp, threshold, -1)

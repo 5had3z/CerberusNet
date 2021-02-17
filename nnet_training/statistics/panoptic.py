@@ -8,6 +8,7 @@ from typing import Dict
 
 import torch
 from scipy.optimize import linear_sum_assignment
+from nnet_training.utilities.panoptic_post_processing import find_instance_center
 
 from .base import MetricBase
 
@@ -35,12 +36,26 @@ class PanopticMetric(MetricBase):
         # TODO Fix Batch PQ after fixing instance post processing
         self.metric_data["Batch_PQ"].append(0)
 
-        offset_mse = torch.linalg.norm(predictions['offset'] - targets['offset'], dim=1)
-        offset_mse = offset_mse.mean()
-        self.metric_data["Batch_Offset_MSE"].append(offset_mse.cpu().numpy())
+        self.metric_data["Batch_Offset_MSE"].append(
+            torch.linalg.norm(predictions['offset']-targets['offset'], dim=1).mean().cpu().item()
+        )
 
-        # TODO Hungarian matcher for centeroids and find mse
-        self.metric_data["Batch_Center_MSE"].append(0)
+        total_mse = 0
+        batch_size = predictions['center'].shape[0]
+        for idx in range(predictions['center'].shape[0]):
+            if not targets['center_points'][idx]:
+                batch_size -= 1
+                continue
+            center_preds = find_instance_center(
+                predictions['center'][idx], nms_kernel=7).type(torch.float32)
+            center_gt = torch.as_tensor(
+                targets['center_points'][idx], device=center_preds.device, dtype=torch.float32)
+            cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()
+            indicies = linear_sum_assignment(cost_mat)
+            total_mse += cost_mat[indicies].mean()
+
+        if batch_size > 0:
+            self.metric_data["Batch_Center_MSE"].append(total_mse.item() / batch_size)
 
 
     def max_accuracy(self, main_metric=True):
