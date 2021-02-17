@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict
 
 import torch
+from scipy.optimize import linear_sum_assignment
 
 from .base import MetricBase
 
@@ -24,13 +25,34 @@ class PanopticMetric(MetricBase):
 
     def add_sample(self, predictions: Dict[str, torch.Tensor],
                    targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
-        raise NotImplementedError
+        assert all(key in predictions for key in ['center', 'offset', 'seg']), \
+            "Missing key in predictions required for panoptic caluclations."
+        assert all(key in targets for key in ['center', 'offset', 'seg', 'center_points']), \
+            "Missing key in targets required for panoptic caluclations."
+
+        self.metric_data["Batch_Loss"].append(loss)
+
+        # TODO Fix Batch PQ after fixing instance post processing
+        self.metric_data["Batch_PQ"].append(0)
+
+        offset_mse = torch.linalg.norm(predictions['offset'] - targets['offset'], dim=1)
+        offset_mse = offset_mse.mean()
+        self.metric_data["Batch_Offset_MSE"].append(offset_mse.cpu().numpy())
+
+        # TODO Hungarian matcher for centeroids and find mse
+        self.metric_data["Batch_Center_MSE"].append(0)
+
 
     def max_accuracy(self, main_metric=True):
         raise NotImplementedError
 
     def _reset_metric(self):
-        raise NotImplementedError
+        self.metric_data = dict(
+            Batch_Loss=[],
+            Batch_Center_MSE=[],
+            Batch_Offset_MSE=[],
+            Batch_PQ=[]
+        )
 
 if __name__ == "__main__":
     pass

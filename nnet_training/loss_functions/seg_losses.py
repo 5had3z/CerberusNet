@@ -180,5 +180,11 @@ class SegCrossEntropy(nn.Module):
             weights[class_ids] = self.scale_factor / \
                     (self.scale_factor + counts / float(seg_gt.nelement()))
 
+        if len(seg_gt.shape) == 4:
+            if seg_gt.shape[1] == 1:
+                seg_gt = seg_gt.squeeze(1)
+            else:
+                raise ValueError(f"Invalid ground truth shape {seg_gt.shape}")
+
         return self.weight * F.cross_entropy(
             predictions['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)

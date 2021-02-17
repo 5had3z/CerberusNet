@@ -215,16 +215,13 @@ class ModelTrainer():
 
             if not batch_idx % 10:
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed / (batch_idx + 1) * \
-                    (len(dataloader) - (batch_idx + 1))
+                time_remain = time_elapsed/(batch_idx+1)*(len(dataloader)-(batch_idx+1))
 
-                sys.stdout.write(f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
-                                 f'Iter [{batch_idx + 1:4d}/{len(dataloader):4d}] || '
-                                 f'lr: {self._lr_manager.get_lr():.2e} || '
-                                 f'Loss: {loss.item():.4f} || '
-                                 f'Time Elapsed: {time_elapsed:.1f} s '
-                                 f'Remain: {time_remain:.1f} s')
-                sys.stdout.write("\033[K")
+                sys.stdout.write(
+                    f'\rTrain Epoch: [{self.epoch:2d}/{max_epoch:2d}] || '
+                    f'Iter [{batch_idx+1:4d}/{len(dataloader):4d}] || '
+                    f'lr: {self._lr_manager.get_lr():.2e} || Loss: {loss.item():.3f} || '
+                    f'Time Elapsed: {time_elapsed:.1f} s || Remain: {time_remain:.1f} s\033[K')
                 sys.stdout.flush()
 
     @torch.no_grad()
@@ -250,14 +247,12 @@ class ModelTrainer():
                                  f'Iter: [{batch_idx+1:4d}/{len(dataloader):4d}]')
 
                 for logger in self.metric_loggers.values():
-                    sys.stdout.write(f" || {logger.main_metric}: {logger.get_last_batch():.4f}")
+                    sys.stdout.write(f" || {logger.main_metric}: {logger.get_last_batch():.3f}")
 
                 time_elapsed = time.time() - start_time
-                time_remain = time_elapsed/(batch_idx+1)*\
-                    (len(dataloader)-batch_idx+1)
-                sys.stdout.write(f' || Time Elapsed: {time_elapsed:.1f} s'\
-                                 f' Remain: {time_remain:.1f} s')
-                sys.stdout.write("\033[K")
+                time_remain = time_elapsed/(batch_idx+1)*(len(dataloader)-batch_idx+1)
+                sys.stdout.write(
+                    f' || Time Elapsed: {time_elapsed:.1f} s || Remain: {time_remain:.1f} s\033[K')
                 sys.stdout.flush()
 
     @staticmethod

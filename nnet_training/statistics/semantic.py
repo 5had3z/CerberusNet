@@ -268,10 +268,10 @@ class SegmentationMetric(MetricBase):
 
             sort_lmbda = lambda x: int(x[6:])
             for idx, epoch in enumerate(sorted(list(hfile['training']), key=sort_lmbda)):
-                training_data[idx] = hfile['training/'+epoch+'/Confusion_Mat'][:]
+                training_data[idx] = hfile[f'training/{epoch}/Confusion_Mat'][:]
 
             for idx, epoch in enumerate(sorted(list(hfile['validation']), key=sort_lmbda)):
-                testing_data[idx] = hfile['validation/'+epoch+'/Confusion_Mat'][:]
+                testing_data[idx] = hfile[f'validation/{epoch}/Confusion_Mat'][:]
 
         test['iou'] = np.zeros((num_epochs, self._n_classes))
         train['iou'] = np.zeros((num_epochs, self._n_classes))
@@ -302,10 +302,10 @@ class SegmentationMetric(MetricBase):
         """
         assert dataset in ['validation', 'training']
         with h5py.File(self._path, 'r') as hfile:
-            num_epochs = len(list(hfile[dataset]))
-            assert index < num_epochs
-            epoch_name = f'Epoch_{index}' if index > 0 else f'Epoch_{num_epochs}'
-            epoch_data = hfile[dataset][epoch_name+'/Confusion_Mat'][:]
+            n_epochs = len(list(hfile[dataset]))
+            assert index < n_epochs, f"Index {index} exceeds number of epochs {n_epochs}"
+            epoch_idx = index if index > 0 else n_epochs
+            epoch_data = hfile[dataset][f'Epoch_{epoch_idx}/Confusion_Mat'][:]
 
         plt.figure(figsize=(18, 5))
         plt.suptitle("Class Confusion Matrix")
@@ -323,7 +323,7 @@ class SegmentationMetric(MetricBase):
         """
         test, train = self.conf_summary_data()
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' IoU')
+        plt.suptitle(f'{self._path.name} IoU')
 
         for idx in range(self._n_classes):
             plt.subplot(3, self._n_classes//3+1, idx+1)
@@ -337,7 +337,7 @@ class SegmentationMetric(MetricBase):
         plt.show(block=False)
 
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Precision')
+        plt.suptitle(f'{self._path.name} Precision')
 
         for idx in range(self._n_classes):
             plt.subplot(3, self._n_classes//3+1, idx+1)
@@ -351,7 +351,7 @@ class SegmentationMetric(MetricBase):
         plt.show(block=False)
 
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Recall')
+        plt.suptitle(f'{self._path.name} Recall')
 
         for idx in range(self._n_classes):
             plt.subplot(3, self._n_classes//3+1, idx+1)

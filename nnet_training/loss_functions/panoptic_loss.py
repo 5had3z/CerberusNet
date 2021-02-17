@@ -8,7 +8,6 @@ class DeeplabPanopticLoss(nn.Module):
         super().__init__()
         self.weight = weight
 
-        self.semantic_weight = kwargs.get('segmentation_weight', 1.)
         self.center_weight = kwargs.get('center_weight', 200.)
         self.offset_weight = kwargs.get('offset_weight', .1)
 
@@ -19,13 +18,6 @@ class DeeplabPanopticLoss(nn.Module):
     def forward(self, predictions: Dict[str, torch.Tensor],
                 targets: Dict[str, torch.Tensor]) -> torch.Tensor:
         loss = 0
-
-        if 'semantic_mask' in targets.keys() and False:
-            semantic_loss = self.semantic_loss(predictions['seg'], targets['seg'].squeeze(1),
-                                               semantic_weights=targets['semantic_mask'])
-        else:
-            semantic_loss = self.semantic_loss(predictions['seg'], targets['seg'].squeeze(1))
-        loss += self.semantic_weight * semantic_loss
 
         # Pixel-wise loss weight
         if 'center_mask' in targets.keys():

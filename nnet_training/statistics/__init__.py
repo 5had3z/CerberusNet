@@ -30,6 +30,9 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
         elif logger_type == 'bbox':
             loggers['bbox'] = BoundaryBoxMetric(
                 19, 'bbox_data', main_metric=main_metric, base_dir=basepath)
+        elif logger_type == 'panoptic':
+            loggers['panoptic'] = PanopticMetric(
+                19, 'panoptic_data', main_metric=main_metric, base_dir=basepath)
         else:
             raise NotImplementedError(logger_type)
 
