@@ -3,6 +3,7 @@
 __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
+import sys
 from pathlib import Path
 from typing import Dict
 
@@ -57,9 +58,27 @@ class PanopticMetric(MetricBase):
         if batch_size > 0:
             self.metric_data["Batch_Center_MSE"].append(total_mse.item() / batch_size)
 
-
     def max_accuracy(self, main_metric=True):
-        raise NotImplementedError
+        """
+        Returns highest centeroid mse, offset map mse, panoptic quality
+        from per epoch summarised data.\n
+        @param  main_metric, if true only returns scale invariant\n
+        @output if main metric, will return its name and value
+        @output loss, centeroid mse, offset map mse, panoptic quality
+        """
+        cost_func = {
+            'Batch_Loss': [min, sys.float_info.max],
+            'Batch_Center_MSE': [min, sys.float_info.max],
+            'Batch_Offset_MSE': [min, sys.float_info.max],
+            'Batch_PQ': [max, sys.float_info.min],
+        }
+
+        if self._path is not None:
+            ret_type = self.main_metric if main_metric else None
+            return self._max_accuracy_lambda(cost_func, self._path, ret_type)
+
+        print("No File Specified for Panoptic Statistics Manager")
+        return None
 
     def _reset_metric(self):
         self.metric_data = dict(

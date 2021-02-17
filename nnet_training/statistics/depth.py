@@ -103,7 +103,7 @@ class DepthMetric(MetricBase):
             ret_type = self.main_metric if main_metric else None
             return self._max_accuracy_lambda(cost_func, self._path, ret_type)
 
-        print("No File Specified for Segmentation Metric Manager")
+        print("No File Specified for Depth Statistics Manager")
         return None
 
     def _reset_metric(self):
