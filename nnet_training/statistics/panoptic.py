@@ -49,6 +49,9 @@ class PanopticMetric(MetricBase):
                 continue
             center_preds = find_instance_center(
                 predictions['center'][idx], nms_kernel=7).type(torch.float32)
+            if not center_preds.shape[0]:
+                batch_size -= 1
+                continue
             center_gt = torch.as_tensor(
                 targets['center_points'][idx], device=center_preds.device, dtype=torch.float32)
             cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()

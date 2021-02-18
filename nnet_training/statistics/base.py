@@ -224,7 +224,7 @@ class MetricBase():
 
     def get_n_samples(self, dataset='validation'):
         """
-        Returns the number of samples in the validation set
+        Returns the number of samples in the dataset type
         """
         assert dataset in ['validation', 'training']
 
