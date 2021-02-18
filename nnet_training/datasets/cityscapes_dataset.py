@@ -400,6 +400,9 @@ class CityScapesDataset(torch.utils.data.Dataset):
         if 'seg' in epoch_data:
             epoch_data['seg'] = self._seg_transform(epoch_data['seg'])
 
+        if 'offset' in epoch_data:
+            epoch_data['offset'][:,0,:,:] *= output_shape[0] / CityScapesDataset.base_size[0]
+            epoch_data['offset'][:,1,:,:] *= output_shape[1] / CityScapesDataset.base_size[1]
 
         if 'crop_fraction' in self.augmentations:
             # random crop
