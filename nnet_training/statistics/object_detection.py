@@ -4,7 +4,6 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
 import sys
-from pathlib import Path
 from typing import Dict
 from typing import Tuple
 from typing import List
@@ -22,10 +21,8 @@ class BoundaryBoxMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for nnets with boundary box output
     """
-    def __init__(self, n_classes: int, savefile: str, base_dir: Path,
-                 main_metric: str, mode='training'):
-        super().__init__(
-            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+    def __init__(self, n_classes: int, **kwargs):
+        super().__init__(savefile="bbox_data", **kwargs)
         self._n_classes = n_classes
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
@@ -163,9 +160,8 @@ class ClassificationMetric(MetricBase):
     """
     Accuracy/Error and Loss Staticstics tracking for classification problems
     """
-    def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super().__init__(savefile=savefile, base_dir=base_dir,
-                                                   main_metric=main_metric, mode=mode)
+    def __init__(self, **kwargs):
+        super().__init__(savefile="classification_data", **kwargs)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 

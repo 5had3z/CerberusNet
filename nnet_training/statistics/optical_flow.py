@@ -4,7 +4,6 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
 import sys
-from pathlib import Path
 from typing import Dict
 
 import torch
@@ -20,9 +19,8 @@ class OpticFlowMetric(MetricBase):
     Tracks Flow rnd point error (EPE) and sum absolute difference between
     warped image sequence (SAD).
     """
-    def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super().__init__(
-            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 

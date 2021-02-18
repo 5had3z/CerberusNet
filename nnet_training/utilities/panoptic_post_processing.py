@@ -3,11 +3,15 @@
 # Written by Bowen Cheng (bcheng9@illinois.edu)
 # ------------------------------------------------------------------------------
 
+from typing import List
+from typing import Union
+
 import torch
 import torch.nn.functional as F
+from scipy.optimize import linear_sum_assignment
 
 __all__ = ['find_instance_center', 'get_instance_segmentation', 'get_panoptic_segmentation',
-    'get_semantic_segmentation']
+    'get_semantic_segmentation', 'compare_centers']
 
 def get_semantic_segmentation(sem):
     """
@@ -45,7 +49,7 @@ def find_instance_center(ctr_hmp, threshold=0.1, nms_kernel=3, top_k=None):
         ctr_hmp = ctr_hmp.unsqueeze(0)
 
     # thresholding, setting values below threshold to -1
-    ctr_hmp = F.threshold(ctr_hmp, threshold, -1)
+    F.threshold(ctr_hmp, threshold, -1, inplace=True)
 
     # NMS
     nms_padding = (nms_kernel - 1) // 2
@@ -264,3 +268,39 @@ def get_panoptic_segmentation(sem, ctr_hmp, offsets, thing_list, label_divisor,
         semantic, instance, label_divisor, thing_list, stuff_area, void_label)
 
     return panoptic, center
+
+def compare_centers(center_list: Union[List[int], List[List[int]]],
+                    center_heatmap: torch.Tensor) -> float:
+    """
+    Finds the mse between the ground truth center list and generated heatmap.
+    Supports both batched and unbatched data and empty sets/images.
+    """
+    if len(center_heatmap.shape) == 4:
+        batch_size = center_heatmap.shape[0]
+    else:
+        batch_size = 1
+        center_list = [center_list]
+
+    mean_div = batch_size
+    total_mse = 0
+    for idx in range(batch_size):
+        if not center_list[idx]:
+            mean_div -= 1
+            continue
+        center_preds = find_instance_center(
+            center_heatmap[idx], nms_kernel=7).type(torch.float32)
+
+        if not center_preds.shape[0]:
+            batch_size -= 1
+            continue
+        center_gt = torch.as_tensor(
+            center_list[idx], device=center_preds.device, dtype=torch.float32)
+
+        cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()
+        indicies = linear_sum_assignment(cost_mat)
+        total_mse += cost_mat[indicies].mean()
+
+    center_mse = total_mse.item() / mean_div
+    print(f"MSE Between Centers and Heatmap: {center_mse:.2f}")
+
+    return center_mse

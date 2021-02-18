@@ -24,6 +24,7 @@ from nnet_training.utilities.visualisation import apply_bboxes
 from nnet_training.utilities.visualisation import get_panoptic_image
 from nnet_training.utilities.panoptic_post_processing import get_panoptic_segmentation
 from nnet_training.utilities.panoptic_post_processing import get_instance_segmentation
+from nnet_training.utilities.panoptic_post_processing import compare_centers
 from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
 __all__ = ['ModelTrainer']
@@ -419,6 +420,9 @@ class ModelTrainer():
 
     @staticmethod
     def show_instance(batch_data, nnet_outputs, batch_size, img_norm):
+        """
+        Instance segmentation versus ground truth in window
+        """
         plt.figure("Instance Prediction Estimation")
         seg_pred = torch.argmax(nnet_outputs['seg'], dim=1)
 
@@ -453,9 +457,9 @@ class ModelTrainer():
     @staticmethod
     def show_offsets(batch_data, nnet_outputs, batch_size, img_norm):
         """
-        Center Prediction versus ground truth in window
+        Center Offset Prediction versus ground truth in window
         """
-        plt.figure("Offset Estimation")
+        plt.figure("Center Offset Estimation")
 
         for i in range(batch_size):
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
@@ -476,7 +480,7 @@ class ModelTrainer():
     @staticmethod
     def show_centers(batch_data, nnet_outputs, batch_size, img_norm):
         """
-        Center Prediction versus ground truth in window
+        Center Point Prediction versus ground truth in window
         """
         plt.figure("Center Point Estimation")
 
@@ -577,6 +581,7 @@ class ModelTrainer():
             self.show_instance(batch_data, forward, dataloader.batch_size, img_norm)
             self.show_offsets(batch_data, forward, dataloader.batch_size, img_norm)
             self.show_centers(batch_data, forward, dataloader.batch_size, img_norm)
+            compare_centers(batch_data['center_points'], batch_data['center'])
 
         plt.show(block=True)
 

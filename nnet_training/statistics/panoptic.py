@@ -4,7 +4,6 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
 import sys
-from pathlib import Path
 from typing import Dict
 
 import torch
@@ -17,10 +16,8 @@ class PanopticMetric(MetricBase):
     """
     Accuracy and Loss Staticstics tracking for panoptic segmentation networks.\n
     """
-    def __init__(self, num_classes, savefile: str, base_dir: Path,
-                 main_metric: str, mode='training'):
-        super().__init__(
-            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+    def __init__(self, num_classes, **kwargs):
+        super().__init__(savefile="panoptic_data", **kwargs)
         self._n_classes = num_classes
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()

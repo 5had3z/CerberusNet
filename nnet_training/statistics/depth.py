@@ -4,7 +4,6 @@ __author__ = "Bryce Ferenczi"
 __email__ = "bryce.ferenczi@monash.edu"
 
 import sys
-from pathlib import Path
 from typing import Dict
 
 import torch
@@ -16,9 +15,8 @@ class DepthMetric(MetricBase):
     Accuracy/Error and Loss Staticstics tracking for depth based networks.\n
     Tracks Invariant, RMSE Linear, RMSE Log, Squared Relative and Absolute Relative.
     """
-    def __init__(self, savefile: str, base_dir: Path, main_metric: str, mode='training'):
-        super().__init__(
-            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+    def __init__(self, **kwargs):
+        super().__init__(savefile="depth_Data", **kwargs)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 

@@ -18,21 +18,17 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
     loggers = {}
 
     for logger_type, main_metric in logger_cfg.items():
+        logger_args = dict(main_metric=main_metric, base_dir=basepath)
         if logger_type == 'flow':
-            loggers['flow'] = OpticFlowMetric(
-                'flow_data', main_metric=main_metric, base_dir=basepath)
+            loggers['flow'] = OpticFlowMetric()
         elif logger_type == 'seg':
-            loggers['seg'] = SegmentationMetric(
-                19, 'seg_data', main_metric=main_metric, base_dir=basepath)
+            loggers['seg'] = SegmentationMetric(19, **logger_args)
         elif logger_type == 'depth':
-            loggers['depth'] = DepthMetric(
-                'depth_data', main_metric=main_metric, base_dir=basepath)
+            loggers['depth'] = DepthMetric(**logger_args)
         elif logger_type == 'bbox':
-            loggers['bbox'] = BoundaryBoxMetric(
-                19, 'bbox_data', main_metric=main_metric, base_dir=basepath)
+            loggers['bbox'] = BoundaryBoxMetric(19, **logger_args)
         elif logger_type == 'panoptic':
-            loggers['panoptic'] = PanopticMetric(
-                19, 'panoptic_data', main_metric=main_metric, base_dir=basepath)
+            loggers['panoptic'] = PanopticMetric(19, **logger_args)
         else:
             raise NotImplementedError(logger_type)
 

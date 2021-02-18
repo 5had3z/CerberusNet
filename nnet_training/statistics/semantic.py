@@ -24,10 +24,8 @@ class SegmentationMetric(MetricBase):
     Accuracy and Loss Staticstics tracking for semantic segmentation networks.\n
     Tracks pixel wise accuracy (PixelAcc) and intersection over union (IoU).
     """
-    def __init__(self, num_classes, savefile: str, base_dir: Path,
-                 main_metric: str, mode='training'):
-        super().__init__(
-            savefile=savefile, base_dir=base_dir, main_metric=main_metric, mode=mode)
+    def __init__(self, num_classes: int, **kwargs):
+        super().__init__(savefile="seg_data", **kwargs)
         self._n_classes = num_classes
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
