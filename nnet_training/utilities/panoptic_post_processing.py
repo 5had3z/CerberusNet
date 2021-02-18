@@ -5,6 +5,7 @@
 
 from typing import List
 from typing import Union
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -270,10 +271,10 @@ def get_panoptic_segmentation(sem, ctr_hmp, offsets, thing_list, label_divisor,
     return panoptic, center
 
 def compare_centers(center_list: Union[List[int], List[List[int]]],
-                    center_heatmap: torch.Tensor) -> float:
+                    center_heatmap: torch.Tensor) -> Tuple[float, float]:
     """
-    Finds the mse between the ground truth center list and generated heatmap.
-    Supports both batched and unbatched data and empty sets/images.
+    Finds the mse between a center list and heatmap.
+    Supports both batched and unbatched data and empty sets/images (no instances in image).
     """
     if len(center_heatmap.shape) == 4:
         batch_size = center_heatmap.shape[0]
@@ -281,17 +282,18 @@ def compare_centers(center_list: Union[List[int], List[List[int]]],
         batch_size = 1
         center_list = [center_list]
 
-    mean_div = batch_size
+    divisor = batch_size
     total_mse = 0
+    total_var = 0
     for idx in range(batch_size):
         if not center_list[idx]:
-            mean_div -= 1
+            divisor -= 1
             continue
         center_preds = find_instance_center(
             center_heatmap[idx], nms_kernel=7).type(torch.float32)
 
         if not center_preds.shape[0]:
-            batch_size -= 1
+            divisor -= 1
             continue
         center_gt = torch.as_tensor(
             center_list[idx], device=center_preds.device, dtype=torch.float32)
@@ -299,8 +301,10 @@ def compare_centers(center_list: Union[List[int], List[List[int]]],
         cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()
         indicies = linear_sum_assignment(cost_mat)
         total_mse += cost_mat[indicies].mean()
+        total_var += cost_mat[indicies].var()
 
-    center_mse = total_mse.item() / mean_div
-    print(f"MSE Between Centers and Heatmap: {center_mse:.2f}")
+    center_mse = total_mse.item() / divisor
+    center_var = total_var.item()
+    print(f"MSE Between Centers and Heatmap: {center_mse:.2f}, {center_var}")
 
-    return center_mse
+    return center_mse, center_var
