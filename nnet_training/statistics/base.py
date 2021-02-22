@@ -75,9 +75,10 @@ class MetricBase():
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
-                    data = np.asarray(data)
-                    if name.startswith("Batch_") and len(data.shape) > 1:
-                        data = data.reshape(data.shape[0] * data.shape[1], -1)
+                    if name.startswith("Batch_") and isinstance(data[0], np.ndarray):
+                        data = np.concatenate(data)
+                    else:
+                        data = np.asarray(data)
                     top_group.create_dataset(name, data=data)
 
                 mean, variance = np.asarray(self.get_current_statistics(main_only=False))
@@ -126,15 +127,14 @@ class MetricBase():
         This plots all the statistics for an epoch
         """
         plt.figure(figsize=(18, 5))
-        plt.suptitle(self._path.name + ' Training and Validation Results Epoch' + str(epoch_idx))
+        plt.suptitle(f'{self._path.name} Training and Validation Results Epoch {epoch_idx}')
 
-        group_name = 'Epoch_' + str(epoch_idx)
         with h5py.File(self._path, 'r') as hfile:
-            num_metrics = len(list(hfile[f'training/{group_name}']))
-            for idx, metric in enumerate(list(hfile[f'training/{group_name}'])):
+            num_metrics = len(list(hfile[f'training/Epoch_{epoch_idx}']))
+            for idx, metric in enumerate(list(hfile[f'training/Epoch_{epoch_idx}'])):
                 plt.subplot(1, num_metrics, idx+1)
-                plt.plot(hfile[f'training/{group_name}/{metric}'][:])
-                plt.plot(hfile[f'validation/{group_name}/{metric}'][:])
+                plt.plot(hfile[f'training/Epoch_{epoch_idx}/{metric}'][:])
+                plt.plot(hfile[f'validation/Epoch_{epoch_idx}/{metric}'][:])
                 plt.legend(["Training", "Validation"])
                 plt.title(f'Batch {metric} over Epochs')
                 plt.ylabel(str(metric))
@@ -159,9 +159,10 @@ class MetricBase():
 
                 top_group = hfile.create_group(group_name)
                 for name, data in self.metric_data.items():
-                    data = np.asarray(data)
-                    if name.startswith("Batch_") and len(data.shape) > 1:
-                        data = data.reshape(data.shape[0] * data.shape[1], -1)
+                    if name.startswith("Batch_") and isinstance(data[0], np.ndarray):
+                        data = np.concatenate(data)
+                    else:
+                        data = np.asarray(data)
                     top_group.create_dataset(name, data=data)
 
                 mean, variance = np.asarray(self.get_current_statistics(main_only=False))
@@ -242,16 +243,17 @@ class MetricBase():
         plt.figure(figsize=(18, 5))
         plt.suptitle(self._path.name + ' Summary Training and Validation Results')
 
-        n_training = self.get_n_samples('training')
-        n_validation = self.get_n_samples('validation')
+        n_train = self.get_n_samples('training')
+        n_val = self.get_n_samples('validation')
         summary_data = self.get_summary_data()
+
+        conf_width = lambda var, n: stats.t.ppf(0.95, n-1) * var / np.sqrt(n)
 
         for idx, metric in enumerate(summary_data):
             plt.subplot(1, len(summary_data), idx+1)
 
             data_mean = summary_data[metric]["Training_Mean"]
-            data_conf = stats.t.ppf(0.95, n_training-1) * \
-                summary_data[metric]["Training_Variance"] / np.sqrt(n_training)
+            data_conf = conf_width(summary_data[metric]["Training_Variance"], n_train)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -259,8 +261,7 @@ class MetricBase():
                 alpha=0.2)
 
             data_mean = summary_data[metric]["Validation_Mean"]
-            data_conf = stats.t.ppf(0.95, n_validation-1) * \
-                summary_data[metric]["Validation_Variance"] / np.sqrt(n_validation)
+            data_conf = conf_width(summary_data[metric]["Validation_Variance"], n_val)
             plt.plot(data_mean)
             plt.fill_between(
                 np.arange(0, data_mean.shape[0]),
@@ -337,7 +338,10 @@ class MetricBase():
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if (key != "Batch_Loss" or return_loss) and key.startswith('Batch'):
-                    data = np.asarray(data).flatten()
+                    if isinstance(data[0], np.ndarray):
+                        data = np.concatenate(data)
+                    else:
+                        data = np.asarray(data).ravel()
                     ret_mean += (data.mean(),)
                     ret_var += (data.var(ddof=1),)
         return ret_mean, ret_var
