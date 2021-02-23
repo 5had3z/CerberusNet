@@ -77,6 +77,9 @@ class RMILoss(nn.Module):
                 labels_4D 	:	[N, H, W], dtype=long
                 do_rmi          :       bool
         """
+        if len(labels_4D.shape) == 4:
+            labels_4D = labels_4D.squeeze(1)
+
         # label mask -- [N, H, W, 1]
         label_mask_3d = labels_4D < self.num_classes
 

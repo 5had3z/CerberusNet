@@ -105,7 +105,7 @@ class OCRNetHead(nn.Module):
     """
     def __init__(self, channels_in: List[int], **kwargs):
         super().__init__()
-        self.ocr = OCR_block(sum(channels_in), **kwargs['ocr_config'])
+        self.ocr = OCR_block(sum(channels_in), **kwargs)
 
     def forward(self, features_in: List[torch.Tensor]):
         """

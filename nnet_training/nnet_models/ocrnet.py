@@ -131,6 +131,8 @@ class OCR_block(nn.Module):
                                self.aux_head)
 
     def forward(self, high_level_features):
+        if isinstance(high_level_features, tuple):
+            high_level_features = high_level_features[0]
         feats = self.conv3x3_ocr(high_level_features)
         aux_out = self.aux_head(high_level_features)
         context = self.ocr_gather_head(feats, aux_out)

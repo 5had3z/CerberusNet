@@ -343,25 +343,6 @@ class MetricBase():
                     ret_var += (data.var(ddof=1),)
         return ret_mean, ret_var
 
-    def _reset_metric(self):
-        """
-        Reset/clear accumulated statistics.
-        """
-        raise NotImplementedError
-
-    def max_accuracy(self, main_metric=True):
-        """
-        Return the max accuracy from all epochs
-        """
-        raise NotImplementedError
-
-    def add_sample(self, predictions: Dict[str, torch.Tensor],
-                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
-        """
-        Add a sample of nnet outputs and ground truth to calculate statistics.
-        """
-        raise NotImplementedError
-
     @staticmethod
     def _max_accuracy_lambda(
             criterion_dict: Dict[str, List[Union[Callable[[float, float], bool], float]]],
@@ -468,10 +449,29 @@ class MetricBase():
         cls_recall = np.diag(conf_mat) / np.sum(conf_mat, axis=1)
         return cls_precision, cls_recall
 
+    def _reset_metric(self):
+        """
+        Reset/clear accumulated statistics.
+        """
+        raise NotImplementedError
+
+    def max_accuracy(self, main_metric=True):
+        """
+        Return the max accuracy from all epochs
+        """
+        raise NotImplementedError
+
+    def add_sample(self, predictions: Dict[str, torch.Tensor],
+                   targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
+        """
+        Add a sample of nnet outputs and ground truth to calculate statistics.
+        """
+        raise NotImplementedError
+
 
 if __name__ == "__main__":
     FILENAME = "MonoSF_SegNet3_FlwExt1_FlwEst1_CtxNet1_Adam_Fcl_Uflw_HRes_seg"
     TEST = MetricBase(savefile=FILENAME, main_metric="Batch_EPE",
                       base_dir=Path.cwd()/"torch_models")
     TEST.plot_summary_data()
-    input("Press enter to leave")
+    plt.show(block=True)
