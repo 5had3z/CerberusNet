@@ -35,7 +35,7 @@ class PanopticMetric(MetricBase):
         tgt_inst_ids, tgt_areas = np.unique(target_inst, return_counts=True)
 
         if pred_inst_ids.size == 1 and tgt_inst_ids.size == 1:
-            return np.nan # returns nan if no predictions or targets (only 0 label)
+            return np.nan, np.nan, np.nan # returns nans if no predictions or targets (only 0 label)
 
         correlated_instances = set()
         iou_sum = 0
@@ -69,16 +69,25 @@ class PanopticMetric(MetricBase):
                 true_positives -= 1
                 false_positives += 1
 
-        return iou_sum / (true_positives + 0.5 * false_positives + 0.5 * false_negatives)
+        panoptic_quality = iou_sum / \
+            (true_positives + 0.5 * false_positives + 0.5 * false_negatives)
+        segmentation_quality = iou_sum / true_positives if true_positives != 0 else true_positives
+        recognition_quality = true_positives / \
+            (true_positives + 0.5 * false_positives + 0.5 * false_negatives)
+
+        return panoptic_quality, segmentation_quality, recognition_quality
 
     @staticmethod
     def batch_process_pq(predictions: Dict[str, torch.tensor],
                          targets: Dict[str, torch.tensor]) -> np.ndarray:
         """
-        Process batched predictions and targets
+        Process batched predictions and targets and generate panoptic quality,
+        segmentation quality and recognition quality statistics.
         """
         batch_size = predictions['center'].shape[0]
         pq_results = []
+        sq_results = []
+        rq_results = []
         seg_pred = torch.argmax(predictions['seg'], dim=1)
 
         for idx in range(batch_size):
@@ -86,22 +95,47 @@ class PanopticMetric(MetricBase):
                 seg_pred[idx].unsqueeze(0),
                 predictions['center'][idx].unsqueeze(0),
                 predictions['offset'][idx].unsqueeze(0),
-                CityScapesDataset.cityscapes_things, nms_kernel=7)
+                CityScapesDataset.cityscapes_things, nms_kernel=7, top_k=100)
 
             tgt_inst, _ = get_instance_segmentation(
                 targets['seg'][idx],
                 targets['center'][idx].unsqueeze(0),
                 targets['offset'][idx].unsqueeze(0),
-                CityScapesDataset.cityscapes_things, nms_kernel=7)
+                CityScapesDataset.cityscapes_things, nms_kernel=7, top_k=100)
 
-            sample_pq = PanopticMetric.calculate_pq(
+            pq_metrics = PanopticMetric.calculate_pq(
                 pred_inst.cpu().numpy(), seg_pred[idx].unsqueeze(0).cpu().numpy(),
                 tgt_inst.cpu().numpy(), targets['seg'][idx].cpu().numpy())
 
-            if not np.isnan(sample_pq):
-                pq_results.append(sample_pq)
+            if not any(np.isnan(pq_metrics)):
+                pq_results.append(pq_metrics[0])
+                sq_results.append(pq_metrics[1])
+                rq_results.append(pq_metrics[2])
 
-        return np.asarray(pq_results)
+        return np.asarray(pq_results), np.asarray(sq_results), np.asarray(rq_results)
+
+    @staticmethod
+    def batch_process_center_mse(predictions: Dict[str, torch.tensor],
+                         targets: Dict[str, torch.tensor]) -> np.ndarray:
+        """
+        Process batch of predictions and targets and find the mse of the
+        center point predictions.
+        """
+        mse_results = []
+        for idx in range(predictions['center'].shape[0]):
+            if not targets['center_points'][idx]:
+                continue
+            center_preds = find_instance_center(
+                predictions['center'][idx], nms_kernel=7).type(torch.float32)
+            if not center_preds.shape[0]:
+                continue
+            center_gt = torch.as_tensor(
+                targets['center_points'][idx], device=center_preds.device, dtype=torch.float32)
+            cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()
+            indicies = linear_sum_assignment(cost_mat)
+            mse_results.append(cost_mat[indicies].mean())
+
+        return np.asarray(mse_results)
 
     def add_sample(self, predictions: Dict[str, torch.Tensor],
                    targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
@@ -112,31 +146,19 @@ class PanopticMetric(MetricBase):
 
         self.metric_data["Batch_Loss"].append(loss)
 
-        self.metric_data["Batch_PQ"].append(self.batch_process_pq(predictions, targets))
+        pq_stats, sq_stats, rq_stats = self.batch_process_pq(predictions, targets)
+        self.metric_data["Batch_PQ"].append(pq_stats)
+        self.metric_data["Batch_SQ"].append(sq_stats)
+        self.metric_data["Batch_RQ"].append(rq_stats)
 
         self.metric_data["Batch_Offset_MSE"].append(
-            torch.linalg.norm(predictions['offset']-targets['offset'], dim=1).mean().cpu().item()
+            torch.linalg.norm(
+                predictions['offset'] - targets['offset'],
+                dim=1).mean(dim=(1,2)).cpu().numpy()
         )
 
-        total_mse = 0
-        batch_size = predictions['center'].shape[0]
-        for idx in range(predictions['center'].shape[0]):
-            if not targets['center_points'][idx]:
-                batch_size -= 1
-                continue
-            center_preds = find_instance_center(
-                predictions['center'][idx], nms_kernel=7).type(torch.float32)
-            if not center_preds.shape[0]:
-                batch_size -= 1
-                continue
-            center_gt = torch.as_tensor(
-                targets['center_points'][idx], device=center_preds.device, dtype=torch.float32)
-            cost_mat = torch.cdist(center_preds, center_gt, p=2).cpu()
-            indicies = linear_sum_assignment(cost_mat)
-            total_mse += cost_mat[indicies].mean()
-
-        if batch_size > 0:
-            self.metric_data["Batch_Center_MSE"].append(total_mse.item() / batch_size)
+        self.metric_data["Batch_Center_MSE"].append(
+            self.batch_process_center_mse(predictions, targets))
 
     def max_accuracy(self, main_metric=True):
         """
@@ -151,6 +173,8 @@ class PanopticMetric(MetricBase):
             'Batch_Center_MSE': [min, sys.float_info.max],
             'Batch_Offset_MSE': [min, sys.float_info.max],
             'Batch_PQ': [max, sys.float_info.min],
+            'Batch_SQ': [max, sys.float_info.min],
+            'Batch_RQ': [max, sys.float_info.min],
         }
 
         if self._path is not None:
@@ -165,7 +189,9 @@ class PanopticMetric(MetricBase):
             Batch_Loss=[],
             Batch_Center_MSE=[],
             Batch_Offset_MSE=[],
-            Batch_PQ=[]
+            Batch_PQ=[],
+            Batch_SQ=[],
+            Batch_RQ=[]
         )
 
 if __name__ == "__main__":
