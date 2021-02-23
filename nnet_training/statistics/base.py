@@ -316,9 +316,6 @@ class MetricBase():
 
         plt.show()
 
-    def _reset_metric(self):
-        raise NotImplementedError
-
     def get_current_statistics(self, main_only=True, return_loss=True):
         """
         Returns Accuracy and Loss Metrics from an Epoch\n
@@ -329,7 +326,9 @@ class MetricBase():
         ret_mean = ()
         ret_var = ()
         if main_only:
-            data = np.asarray(self.metric_data[self.main_metric]).flatten()
+            data = self.metric_data[self.main_metric]
+            data = np.concatenate(data) if isinstance(data[0], np.ndarray) \
+                    else np.asarray(data).ravel()
             ret_mean += (data.mean(),)
             ret_var += (data.var(ddof=1),)
             if return_loss:
@@ -338,13 +337,17 @@ class MetricBase():
         else:
             for key, data in sorted(self.metric_data.items(), key=lambda x: x[0]):
                 if (key != "Batch_Loss" or return_loss) and key.startswith('Batch'):
-                    if isinstance(data[0], np.ndarray):
-                        data = np.concatenate(data)
-                    else:
-                        data = np.asarray(data).ravel()
+                    data = np.concatenate(data) if isinstance(data[0], np.ndarray) \
+                            else np.asarray(data).ravel()
                     ret_mean += (data.mean(),)
                     ret_var += (data.var(ddof=1),)
         return ret_mean, ret_var
+
+    def _reset_metric(self):
+        """
+        Reset/clear accumulated statistics.
+        """
+        raise NotImplementedError
 
     def max_accuracy(self, main_metric=True):
         """
