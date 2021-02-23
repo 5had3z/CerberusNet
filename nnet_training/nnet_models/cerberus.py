@@ -87,7 +87,8 @@ def get_flow_dec(in_channels, **kwargs):
 
 class CerberusBase(torch.nn.Module):
     """
-    HRNetV2 with Segmentation + Optic Flow Output
+    Base implementation for CerberusNet which uses configuration dictonary
+    for backbone, segmentation, depth and flow decoding heads.
     """
     def __init__(self, **kwargs):
         super().__init__()
@@ -104,16 +105,14 @@ class CerberusBase(torch.nn.Module):
         Forward method for HRNetV2 with segmentation, flow and depth, returns dictionary \
         of outputs.\n During onnx export, consistency becomes the sequential image argument \
         because onnx export is not compatible with keyword aruments.
+        Network outputs that are tensors will be scaled up automatically to the input size,
+        other decoders with more unique outputs will need custom scaling.
         """
         # Backbone Forward pass on first image
         enc_features = self.backbone(l_img)
 
         # Segmentation pass with first image
         forward = self.segmentation(enc_features)
-
-        forward['seg'] = scale_as(forward['seg'], l_img)
-        forward['center'] = scale_as(forward['center'], l_img)
-        forward['offset'] = scale_as(forward['offset'], l_img)
 
         # Depth pass with first image
         forward['depth'] = self.depth(enc_features)
@@ -139,5 +138,9 @@ class CerberusBase(torch.nn.Module):
                 # Estimate seg and depth
                 forward['depth_b'] = self.depth(enc_features_bw)
                 forward['seg_b'] = self.segmentation(enc_features_bw)
+
+        for key, data in forward.items():
+            if isinstance(data, torch.Tensor):
+                forward[key] = scale_as(data, l_img)
 
         return forward
