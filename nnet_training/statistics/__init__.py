@@ -20,7 +20,7 @@ def get_loggers(logger_cfg: Dict[str, str], basepath: Path) -> Dict[str, MetricB
     for logger_type, main_metric in logger_cfg.items():
         logger_args = dict(main_metric=main_metric, base_dir=basepath)
         if logger_type == 'flow':
-            loggers['flow'] = OpticFlowMetric()
+            loggers['flow'] = OpticFlowMetric(**logger_args)
         elif logger_type == 'seg':
             loggers['seg'] = SegmentationMetric(19, **logger_args)
         elif logger_type == 'depth':

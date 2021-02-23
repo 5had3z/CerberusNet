@@ -22,12 +22,12 @@ class DepthMetric(MetricBase):
 
     def add_sample(self, predictions: Dict[str, torch.Tensor],
                    targets: Dict[str, torch.Tensor], loss: int=0, **kwargs) -> None:
-        assert all('depth' in keys for keys in [predictions.keys(), targets.keys()])
+        assert 'depth' in predictions.keys() and 'disparity' in targets.keys()
         self.metric_data["Batch_Loss"].append(loss)
 
-        gt_depth = targets['l_disp']
+        gt_depth = targets['disparity']
 
-        if isinstance(pred_depth, list):
+        if isinstance(predictions['depth'], list):
             pred_depth = predictions['depth'][0]
         else:
             pred_depth = predictions['depth']

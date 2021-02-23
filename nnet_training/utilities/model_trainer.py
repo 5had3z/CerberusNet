@@ -337,27 +337,27 @@ class ModelTrainer():
         """
         plt.figure("Optical Flow Estimation")
         if isinstance(nnet_outputs['flow'], list):
-            np_flow_12 = batch_data['flow'][0].cpu().numpy()
+            np_flow_12 = nnet_outputs['flow'][0].cpu().numpy()
         else:
-            np_flow_12 = batch_data['flow'].cpu().numpy()
+            np_flow_12 = nnet_outputs['flow'].cpu().numpy()
 
         plt_cols = batch_size * 2
-        for i in range(plt_cols):
-            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+        for i in range(batch_size):
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, plt_cols, 4*i+1))
             plt.imshow(np.moveaxis(img_norm(batch_data['l_img'][i]).cpu().numpy(), 0, 2))
             plt.xlabel("Input Image @ t")
 
-            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, plt_cols, 4*i+2))
             plt.imshow(np.moveaxis(img_norm(batch_data['l_seq'][i]).cpu().numpy(), 0, 2))
             plt.xlabel("Input Image @ t + 1")
 
             if 'flow' in batch_data:
-                plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+2))
+                plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, plt_cols, 4*i+3))
                 plt.imshow(flow_to_image(
                         batch_data['flow'].cpu().numpy()[i].transpose([1, 2, 0])))
                 plt.xlabel("Ground Truth Flow")
 
-            plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+3))
+            plt.subplot(*ModelTrainer.col_maj_2_row_maj(2, plt_cols, 4*i+4))
             plt.imshow(flow_to_image(np_flow_12[i].transpose([1, 2, 0])))
             plt.xlabel("Predicted Flow")
 
@@ -375,7 +375,7 @@ class ModelTrainer():
         else:
             depth_pred_cpu = nnet_outputs['depth'].cpu().numpy()
 
-        depth_gt_cpu = batch_data['l_disp'].cpu().numpy()
+        depth_gt_cpu = batch_data['disparity'].squeeze(1).cpu().numpy()
 
         for i in range(batch_size):
             plt.subplot(*ModelTrainer.col_maj_2_row_maj(3, batch_size, 3*i+1))
@@ -563,7 +563,7 @@ class ModelTrainer():
         else:
             img_norm = torchvision.transforms.Normalize([0, 0, 0], [1, 1, 1])
 
-        if 'depth' in forward and 'l_disp' in batch_data:
+        if 'depth' in forward and 'disparity' in batch_data:
             self.show_depth(batch_data, forward, dataloader.batch_size, img_norm)
 
         if all('seg' in data for data in [forward, batch_data]):

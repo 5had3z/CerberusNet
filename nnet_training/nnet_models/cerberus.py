@@ -121,18 +121,18 @@ class CerberusBase(torch.nn.Module):
         if isinstance(consistency, torch.Tensor):
             enc_features_bw = self.backbone(consistency)
             # Flow pass with image 1
-            forward['flow'] = self.flow(enc_features)
+            forward['flow'] = self.flow(enc_features, enc_features_bw)
 
-        if kwargs.get('l_seq', False):
+        if 'l_seq' in kwargs:
             # Backbone Forward pass on sequential image
             enc_features_bw = self.backbone(kwargs['l_seq'])
 
             # Flow pass with image 1 -> 2
-            forward['flow'] = self.flow_forward(enc_features, enc_features_bw)
+            forward['flow'] = self.flow(enc_features, enc_features_bw)
 
             if consistency:
                 # Flow pass with image 2 -> 1
-                forward['flow_b'] = self.flow_forward(enc_features_bw, enc_features)
+                forward['flow_b'] = self.flow(enc_features_bw, enc_features)
 
             if kwargs.get('slam', False):
                 # Estimate seg and depth

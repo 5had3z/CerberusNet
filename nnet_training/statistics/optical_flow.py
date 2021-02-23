@@ -20,7 +20,7 @@ class OpticFlowMetric(MetricBase):
     warped image sequence (SAD).
     """
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(savefile="flow_data", **kwargs)
         self._reset_metric()
         assert self.main_metric in self.metric_data.keys()
 

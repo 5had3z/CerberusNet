@@ -20,9 +20,9 @@ class DepthAwareLoss(nn.Module):
 
     def forward(self, predictions: Dict[str, torch.Tensor],
                 targets: Dict[str, torch.Tensor]) -> torch.Tensor:
-        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        assert 'depth' in predictions.keys() and 'disparity' in targets.keys()
         disp_pred = predictions['depth']
-        disp_gt = targets['l_disp']
+        disp_gt = targets['disparity']
 
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
@@ -47,9 +47,9 @@ class ScaleInvariantError(nn.Module):
 
     def forward(self, predictions: Dict[str, torch.Tensor],
                 targets: Dict[str, torch.Tensor]) -> torch.Tensor:
-        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        assert 'depth' in predictions.keys() and 'disparity' in targets.keys()
         disp_pred = predictions['depth']
-        disp_gt = targets['l_disp']
+        disp_gt = targets['disparity']
 
         disp_pred = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         disp_pred[disp_pred == 0] += 0.001 # prevent nans during log
@@ -71,9 +71,9 @@ class InvHuberLoss(nn.Module):
 
     def forward(self, predictions: Dict[str, torch.Tensor],
                 targets: Dict[str, torch.Tensor]) -> torch.Tensor:
-        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        assert 'depth' in predictions.keys() and 'disparity' in targets.keys()
         disp_pred = predictions['depth']
-        disp_gt = targets['l_disp']
+        disp_gt = targets['disparity']
 
         pred_relu = F.relu(disp_pred.squeeze(dim=1)) # depth predictions must be >=0
         diff = pred_relu - disp_gt
@@ -96,9 +96,9 @@ class InvHuberLossPyr(nn.Module):
 
     def forward(self, predictions: Dict[str, torch.Tensor],
                 targets: Dict[str, torch.Tensor]) -> torch.Tensor:
-        assert 'depth' in predictions.keys() and 'l_disp' in targets.keys()
+        assert 'depth' in predictions.keys() and 'disparity' in targets.keys()
         disp_pred = predictions['depth']
-        disp_gt = targets['l_disp']
+        disp_gt = targets['disparity']
 
         loss = 0
         for lvl, pred in enumerate(disp_pred):

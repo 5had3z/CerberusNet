@@ -193,7 +193,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         '''
         Returns relevant training data as a dict
-        @output l_img, r_img, seg, l_disp, l_seq, r_seq, cam, pose
+        @output l_img, r_img, seg, disparity, l_seq, r_seq, cam, pose
         '''
         if isinstance(idx, tuple):
             idx, self.scale_factor = idx
@@ -208,7 +208,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 img_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, foldername, filename)
                 epoch_data[subset] = Image.open(img_pth).convert('RGB')
-            elif subset in ['seg', 'l_disp', 'r_disp']:
+            elif subset in ['seg', 'disparity']:
                 img_pth = CityScapesDataset.sub_directories[subset](
                     self.root_dir, foldername, filename)
                 epoch_data[subset] = torchvision.transforms.functional.to_tensor(
@@ -366,7 +366,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.BILINEAR)
-                elif key in ['l_disp', 'r_disp', 'seg']:
+                elif key in ['disparity', 'seg']:
                     epoch_data[key] = torchvision.transforms.functional.rotate(
                         data, angle, resample=Image.NEAREST, fill=-1)
                 elif key == 'bboxes':
@@ -376,7 +376,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             if key in ["l_img", "r_img", "l_seq", "r_seq", 'center', 'offset']:
                 epoch_data[key] = torchvision.transforms.functional.resize(
                     data, tuple(output_shape[::-1]), Image.BILINEAR)
-            elif key in ["l_disp", 'r_disp', "seg", 'foreground'] or key.endswith('mask'):
+            elif key in ['disparity', 'seg', 'foreground'] or key.endswith('mask'):
                 epoch_data[key] = torchvision.transforms.functional.resize(
                     data, tuple(output_shape[::-1]), Image.NEAREST)
             elif key == "center_points":
@@ -393,9 +393,8 @@ class CityScapesDataset(torch.utils.data.Dataset):
             if key in epoch_data:
                 epoch_data[key] = self._img_transform(epoch_data[key])
 
-        for key in ["l_disp", 'r_disp']:
-            if key in epoch_data:
-                epoch_data[key] = self._depth_transform(epoch_data[key])
+        if 'disparity' in epoch_data:
+            epoch_data['disparity'] = self._depth_transform(epoch_data['disparity'])
 
         if 'seg' in epoch_data:
             epoch_data['seg'] = self._seg_transform(epoch_data['seg'])
@@ -415,7 +414,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
             for key, data in epoch_data.items():
                 if key in ["l_img", "r_img", "l_seq", "r_seq"]:
                     epoch_data[key] = data[:, crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
-                elif key in ["seg", "l_disp", "r_disp"]:
+                elif key in ["seg", "disparity"]:
                     epoch_data[key] = data[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
                 elif key == 'bboxes':
                     self._crop_bbox(data, (crop_x, crop_y, crop_w, crop_h))
@@ -438,7 +437,7 @@ class CityScapesDataset(torch.utils.data.Dataset):
         return torch.LongTensor(target.astype('int32'))
 
     def _depth_transform(self, disparity):
-        disparity = np.array(disparity).astype('float32')
+        disparity = np.array(disparity.squeeze(0).cpu().numpy()).astype('float32')
         disparity[disparity > 0] = self.scale_factor * (disparity[disparity > 0] - 1) / 256.
         if not self.disparity_out:
             disparity[disparity > 0] = (0.209313 * 2262.52) / disparity[disparity > 0]
