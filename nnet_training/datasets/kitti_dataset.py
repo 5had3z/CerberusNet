@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
 
 __author__ = "Bryce Ferenczi"
-__email__ = "bryce.ferenczi@monashmotorsport.com"
+__email__ = "bryce.ferenczi@monash.edu"
 
-import platform
 import os
 import re
 import random
 import json
-import multiprocessing
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
+from typing import List
 import cv2
 
 import torch
 import torchvision
 from PIL import Image
-
 import numpy as np
 
-from torch.utils.data import RandomSampler
-from nnet_training.utilities.visualisation import get_color_pallete, flow_to_image
-from nnet_training.utilities.custom_batch_sampler import BatchSamplerRandScale
+from nnet_training.utilities.visualisation import get_color_pallete
+from nnet_training.utilities.visualisation import flow_to_image
 
-__all__ = ['Kitti2015Dataset', 'get_kitti_dataset']
-
-IMG_EXT = '.png'
+__all__ = ['Kitti2015Dataset']
 
 class Kitti2015Dataset(torch.utils.data.Dataset):
     """
@@ -35,6 +30,24 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     Get Item will return the corresponding dictionary with keys:
         [l_img, r_img, l_seq", r_seq, cam, pose, disparity]
     """
+    width_to_focal = {
+        1242: 721.5377,
+        1241: 718.856,
+        1238: 718.3351,
+        1224: 707.0493
+    }
+
+    # valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22,
+    #                       23, 24, 25, 26, 27, 28, 31, 32, 33]
+    train_ids = np.array([255, 255, 255, 255, 255, 255,
+                          255, 255, 0, 1, 255, 255,
+                          2, 3, 4, 255, 255, 255,
+                          5, 255, 6, 7, 8, 9,
+                          10, 11, 12, 13, 14, 15,
+                          255, 255, 16, 17, 18])
+
+    id_mapping = np.array(range(-1, len(train_ids) - 1)).astype('int32')
+
     def __init__(self, directory: Path, objectives: List[str], id_vector=None,
                  output_size=(1274, 375), disparity_out=True, **kwargs):
         '''
@@ -72,70 +85,53 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         # Get all file names
         for filename in sorted(os.listdir(os.path.join(directory, 'image_2'))):
             frame_n = int(re.split("_", filename)[1][:2])
-            if filename.endswith(IMG_EXT) and frame_n == 10:
-                read_check = True
+            if filename.endswith('.png') and frame_n == 10:
                 l_imgpath = os.path.join(directory, 'image_2', filename)
+                self.l_img.append(l_imgpath)
 
                 if hasattr(self, 'r_img'):
                     r_imgpath = os.path.join(directory, 'image_3', filename)
-                    if not os.path.isfile(r_imgpath):
-                        read_check = False
-                        print("Error finding corresponding right image to ", l_imgpath)
+                    assert os.path.isfile(r_imgpath), \
+                        f"Error finding corresponding right image to {l_imgpath}"
+                    self.r_img.append(r_imgpath)
 
                 if hasattr(self, 'seg'):
                     seg_path = os.path.join(directory, 'semantic', filename)
-                    if not os.path.isfile(seg_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(seg_path), \
+                        f"Error finding corresponding segmentation image to {l_imgpath}"
+                    self.seg.append(seg_path)
 
                 if hasattr(self, 'l_disp'):
                     left_disp_path = os.path.join(directory, 'disp_noc_0', filename)
-                    if not os.path.isfile(left_disp_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(left_disp_path), \
+                        f"Error finding corresponding left disparity image to {l_imgpath}"
+                    self.l_disp.append(left_disp_path)
 
                 if hasattr(self, 'r_disp'):
                     right_disp_path = os.path.join(directory, 'disp_noc_1', filename)
-                    if not os.path.isfile(right_disp_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
+                    assert os.path.isfile(right_disp_path), \
+                        f"Error finding corresponding right disparity image to {l_imgpath}"
+                    self.r_disp.append(right_disp_path)
 
                 if hasattr(self, 'l_seq'):
                     seq_name = filename.replace('10.png', '11.png')
                     left_seq_path = os.path.join(directory, 'image_2', seq_name)
-                    if not os.path.isfile(left_seq_path):
-                        read_check = False
-                        print("Error finding corresponding left sequence image to ", l_imgpath)
+                    assert os.path.isfile(left_seq_path), \
+                        f"Error finding corresponding left sequence image to {l_imgpath}"
+                    self.l_seq.append(left_seq_path)
 
                 if hasattr(self, 'r_seq'):
                     seq_name = filename.replace('10.png', '11.png')
                     right_seq_path = os.path.join(directory, 'image_3', seq_name)
-                    if not os.path.isfile(right_seq_path):
-                        read_check = False
-                        print("Error finding corresponding right sequence image to ", l_imgpath)
+                    assert os.path.isfile(right_seq_path), \
+                        f"Error finding corresponding right sequence image to {l_imgpath}"
+                    self.r_seq.append(right_seq_path)
 
                 if hasattr(self, 'flow'):
                     flow_path = os.path.join(directory, 'flow_noc', filename)
-                    if not os.path.isfile(flow_path):
-                        read_check = False
-                        print("Error finding corresponding segmentation image to ", l_imgpath)
-
-                if read_check:
-                    self.l_img.append(l_imgpath)
-                    if hasattr(self, 'r_img'):
-                        self.r_img.append(r_imgpath)
-                    if hasattr(self, 'seg'):
-                        self.seg.append(seg_path)
-                    if hasattr(self, 'l_disp'):
-                        self.l_disp.append(left_disp_path)
-                    if hasattr(self, 'r_disp'):
-                        self.r_disp.append(right_disp_path)
-                    if hasattr(self, 'l_seq'):
-                        self.l_seq.append(left_seq_path)
-                    if hasattr(self, 'r_seq'):
-                        self.r_seq.append(right_seq_path)
-                    if hasattr(self, 'flow'):
-                        self.flow.append(flow_path)
+                    assert os.path.isfile(flow_path), \
+                        f"Error finding corresponding flow image to {l_imgpath}"
+                    self.flow.append(flow_path)
 
         # Create dataset from specified ids if id_vector given else use all
         if id_vector is not None:
@@ -160,13 +156,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         self.output_shape = output_size
         self.scale_factor = 1
 
-        self.width_to_focal = {
-            1242: 721.5377,
-            1241: 718.856,
-            1238: 718.3351,
-            1224: 707.0493
-        }
-
         self.mirror_x = 1.0
 
         if 'crop_fraction' in kwargs:
@@ -180,15 +169,6 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
             # "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]
             self.img_normalize = torchvision.transforms.Normalize(
                 kwargs['img_normalize']['mean'], kwargs['img_normalize']['std'])
-
-        self._key = np.array([255, 255, 255, 255, 255, 255,
-                              255, 255, 0, 1, 255, 255,
-                              2, 3, 4, 255, 255, 255,
-                              5, 255, 6, 7, 8, 9,
-                              10, 11, 12, 13, 14, 15,
-                              255, 255, 16, 17, 18])
-
-        self._mapping = np.array(range(-1, len(self._key) - 1)).astype('int32')
 
     def __len__(self):
         return len(self.l_img)
@@ -292,7 +272,7 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
     def _depth_transform(self, disparity):
         disparity = self.scale_factor * np.array(disparity).astype('float32') / 256.0
         if not self.disparity_out:
-            focal = self.width_to_focal[self.std_kitti_dims[0]]
+            focal = Kitti2015Dataset.width_to_focal[self.std_kitti_dims[0]]
             disparity[disparity > 0] = focal * 0.54 / disparity[disparity > 0]
         return torch.FloatTensor(disparity)
 
@@ -319,12 +299,13 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         ])
         epoch_data["flow_mask"] = torchvision.transforms.functional.to_tensor(bitmask)
 
-    def _class_to_index(self, seg):
+    @staticmethod
+    def _class_to_index(seg):
         values = np.unique(seg)
         for value in values:
-            assert value in self._mapping
-        index = np.digitize(seg.ravel(), self._mapping, right=True)
-        return self._key[index].reshape(seg.shape)
+            assert value in Kitti2015Dataset.id_mapping
+        index = np.digitize(seg.ravel(), Kitti2015Dataset.id_mapping, right=True)
+        return Kitti2015Dataset.train_ids[index].reshape(seg.shape)
 
     def _img_transform(self, img):
         img = torchvision.transforms.functional.to_tensor(img)
@@ -336,98 +317,18 @@ class Kitti2015Dataset(torch.utils.data.Dataset):
         target = self._class_to_index(np.array(segmentaiton).astype('int32'))
         return torch.LongTensor(target.astype('int32'))
 
-def id_vec_generator(train_ratio, directory):
-    """
-    Generates the training and validation split of a monlitic dataset.\n
-    Ensures that you are always using the same testing and training data for a given set and ratio.
-    """
-    num_images = 0
-    for file in os.listdir(directory):
-        num_images += file.endswith(IMG_EXT)
-
-    print("Number of Images:\t", num_images)
-    n_train = int(num_images * train_ratio)
-
-    train_ids = list(range(n_train))
-    val_ids = list(range(n_train, num_images))
-
-    return train_ids, val_ids
-
-def get_kitti_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
-    """
-    Input configuration json for kitti dataset
-    Output dataloaders for training and validation
-    """
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = min(multiprocessing.cpu_count(), dataset_config.batch_size)
-
-    # Using the segmentaiton gt dir to count the number of images
-    seg_dir = os.path.join(dataset_config.rootdir, "semantic")
-    train_ids, val_ids = id_vec_generator(dataset_config.train_ratio, seg_dir)
-
-    aux_aug = {}
-    if 'img_normalize' in dataset_config.augmentations:
-        aux_aug['img_normalize'] = dataset_config.augmentations.img_normalize
-    if 'disparity_out' in dataset_config.augmentations:
-        aux_aug['disparity_out'] = dataset_config.augmentations.disparity_out
-
-    datasets = {
-        'Training'   : Kitti2015Dataset(
-            dataset_config.rootdir, dataset_config.objectives,
-            **dataset_config.augmentations, id_vector=train_ids),
-        'Validation' : Kitti2015Dataset(
-            dataset_config.rootdir, dataset_config.objectives,
-            output_size=dataset_config.augmentations.output_size,
-            id_vector=val_ids, **aux_aug)
-    }
-
-    dataloaders = {
-        'Validation' : torch.utils.data.DataLoader(
-            datasets["Validation"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        )
-    }
-
-    if hasattr(dataset_config.augmentations, 'rand_scale'):
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"], num_workers=n_workers, pin_memory=True,
-            batch_sampler=BatchSamplerRandScale(
-                sampler=RandomSampler(datasets["Training"]),
-                batch_size=dataset_config.batch_size,
-                drop_last=dataset_config.drop_last,
-                scale_range=dataset_config.augmentations.rand_scale)
-        )
-    else:
-        torch.backends.cudnn.benchmark = True
-
-        dataloaders['Training'] = torch.utils.data.DataLoader(
-            datasets["Training"],
-            batch_size=dataset_config.batch_size,
-            shuffle=dataset_config.shuffle,
-            num_workers=n_workers,
-            drop_last=dataset_config.drop_last,
-            pin_memory=True
-        )
-
-    return dataloaders
-
 def test_kitti_loading():
     """
     Get kitti dataset for testing
     """
     from easydict import EasyDict
     import matplotlib.pyplot as plt
+    from . import get_dataset
 
     with open("configs/Kitti_test.json") as f:
         cfg = EasyDict(json.load(f))
 
-    dataloaders = get_kitti_dataset(cfg['dataset'])
+    dataloaders = get_dataset(cfg['dataset'])
 
     data = next(iter(dataloaders['Validation']))
     left     = data['l_img']

@@ -47,7 +47,12 @@ import torch.nn.functional as F
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
-from .pwcnet_modules import *
+from .pwcnet_modules import pwc_conv
+from .pwcnet_modules import FeatureExtractor
+from .pwcnet_modules import FlowEstimatorDense
+from .pwcnet_modules import FlowEstimatorLite
+from .pwcnet_modules import ContextNetwork
+
 from .fast_scnn import Classifer
 from .nnet_ops import LinearBottleneck, LinearBottleneckAGN
 
@@ -58,7 +63,7 @@ class SegmentationNet1(nn.Module):
     Module for extracting semantic segmentation from encoding pyramid
     '''
     def __init__(self, input_ch: List[int], classes=19, interm_ch=32, **kwargs):
-        super(SegmentationNet1, self).__init__()
+        super().__init__()
         self.classifier = Classifer(interm_ch, classes)
 
         if 'g_noise' in kwargs and kwargs['g_noise'] != 0.0:
@@ -94,8 +99,8 @@ class DepthEstimator1(nn.Module):
     """
     Simple Prototype Depth Estimation Module
     """
-    def __init__(self, in_channels: int, pre_out_ch: 32, **kwargs):
-        super(DepthEstimator1, self).__init__()
+    def __init__(self, in_channels: int, pre_out_ch: 32, **_kwargs):
+        super().__init__()
         in_int_mean = (in_channels + pre_out_ch) // 2
         self.network = nn.Sequential(
             nn.Conv2d(in_channels, in_int_mean, 3),
@@ -109,12 +114,100 @@ class DepthEstimator1(nn.Module):
         out = F.interpolate(out, size=tuple(x.size()[2:]), mode='nearest')
         return out
 
+class PWCNetHead(nn.Module):
+    """
+    Self contained PWC head for use with CerberusBase
+    """
+    def __init__(self, channels_in: List[int], upsample=True, **kwargs):
+        super().__init__()
+        self.upsample = upsample
+        self.output_level = kwargs.get("output_level", 4)
+
+        if 'correlation_args' in kwargs:
+            search_range = kwargs['correlation_args']['max_displacement']
+            self.corr = Correlation(**kwargs['correlation_args'])
+        else:
+            search_range = 4
+            self.corr = Correlation(pad_size=search_range, kernel_size=1,
+                                    max_displacement=search_range, stride1=1,
+                                    stride2=1, corr_multiply=1)
+
+        out_1x1 = kwargs.get('1x1_conv_out', 32)
+
+        self.conv_1x1 = nn.ModuleList()
+        for channels in reversed(channels_in):
+            self.conv_1x1.append(
+                pwc_conv(channels, out_1x1, kernel_size=1, stride=1, dilation=1)
+            )
+
+        dim_corr = (search_range * 2 + 1) ** 2
+        num_ch_in = out_1x1 + dim_corr + 2 # 1x1 conv, correlation, previous flow
+        if 'flow_est_network' in kwargs:
+            if kwargs['flow_est_network']['type'] == 'FlowEstimatorDense':
+                self.flow_estimator = FlowEstimatorDense(num_ch_in)
+            elif kwargs['flow_est_network']['type'] == 'FlowEstimatorLite':
+                self.flow_estimator = FlowEstimatorLite(num_ch_in)
+            else:
+                raise NotImplementedError(kwargs['flow_est_network']['type'])
+        else:
+            self.flow_estimator = FlowEstimatorDense(num_ch_in)
+
+        if 'context_network' in kwargs:
+            if kwargs['context_network']['type'] == 'ContextNetwork':
+                self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
+            else:
+                raise NotImplementedError(kwargs['context_network']['type'])
+        else:
+            self.context_networks = ContextNetwork(self.flow_estimator.feat_dim + 2)
+
+    def forward(self, im1_pyr: List[torch.Tensor],
+                im2_pyr: List[torch.Tensor]) -> List[torch.Tensor]:
+        flows = []
+
+        # init
+        b_size, _, h_x1, w_x1, = im1_pyr[1][0].size()
+        flow = im1_pyr[1][0].new_zeros((b_size, 2, h_x1, w_x1))
+
+        for level, (im1, im2) in enumerate(zip(im1_pyr[1], im2_pyr[1])):
+            # warping
+            if level == 0:
+                im2_warp = im2
+            else:
+                flow = F.interpolate(flow * 2, scale_factor=2,
+                                     mode='bilinear', align_corners=True)
+                im2_warp = flow_warp(im2, flow).type(im1.dtype)
+
+            # correlation
+            out_corr = self.corr(im1, im2_warp)
+            nn.functional.leaky_relu(out_corr, 0.1, inplace=True)
+
+            # concat and estimate flow
+            im1_1by1 = self.conv_1x1[level](im1)
+            im1_intm, flow_res = self.flow_estimator(
+                torch.cat([out_corr, im1_1by1, flow], dim=1))
+            flow += flow_res
+
+            flow_fine = self.context_networks(torch.cat([im1_intm, flow], dim=1))
+            flow += flow_fine
+
+            flows.append(flow)
+
+            # upsampling or post-processing
+            if level == self.output_level:
+                break
+
+        if self.upsample:
+            flows = [F.interpolate(flow * 4, scale_factor=4, mode='bilinear',
+                                   align_corners=True) for flow in flows]
+
+        return flows[::-1]
+
 class MonoSFDNet(nn.Module):
     '''
     Monocular image sequence to segmentation, depth and optic flow
     '''
     def __init__(self, upsample=True, **kwargs):
-        super(MonoSFDNet, self).__init__()
+        super().__init__()
         self.upsample = upsample
         self.output_level = 4
         self.modelname = "MonoSFDNet"

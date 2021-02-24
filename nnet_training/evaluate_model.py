@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 __author__ = "Bryce Ferenczi"
-__email__ = "bryce.ferenczi@monashmotorsport.com"
+__email__ = "bryce.ferenczi@monash.edu"
 
 import os
 import sys
@@ -9,8 +9,6 @@ import json
 import time
 import argparse
 import hashlib
-import platform
-import multiprocessing
 
 from typing import Tuple
 from pathlib import Path
@@ -23,10 +21,12 @@ import torch
 import torchvision
 from nnet_training.nnet_models import get_model
 
-from nnet_training.utilities.visualisation import flow_to_image, get_color_pallete
-from nnet_training.utilities.kitti_dataset import Kitti2015Dataset
-from nnet_training.utilities.cityscapes_dataset import CityScapesDataset
-from nnet_training.utilities.metrics import SegmentationMetric, DepthMetric, OpticFlowMetric
+from nnet_training.utilities.visualisation import flow_to_image
+from nnet_training.utilities.visualisation import get_color_pallete
+from nnet_training.datasets import get_dataloader
+from nnet_training.statistics.semantic import SegmentationMetric
+from nnet_training.statistics.depth import DepthMetric
+from nnet_training.statistics.optical_flow import OpticFlowMetric
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MIN_DEPTH = 0.
@@ -54,35 +54,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
     Sets up the network and dataloader configurations
     Returns dataloader and model
     """
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = min(multiprocessing.cpu_count(), config_json.dataset.batch_size)
-
-    if config_json.dataset.type == "Kitti":
-        dataset = Kitti2015Dataset(
-            config_json.dataset.rootdir, config_json.dataset.objectives,
-            output_size=config_json.dataset.augmentations.output_size,
-            disparity_out=config_json.dataset.augmentations.disparity_out,
-            img_normalize=config_json.dataset.augmentations.img_normalize)
-    elif config_json.dataset.type == "Cityscapes":
-        validation_dirs = {}
-        for subset in config_json.dataset.val_subdirs:
-            validation_dirs[str(subset)] = config_json.dataset.rootdir +\
-                                            config_json.dataset.val_subdirs[str(subset)]
-        dataset = CityScapesDataset(
-            validation_dirs, output_size=config_json.dataset.augmentations.output_size,
-            disparity_out=config_json.dataset.augmentations.disparity_out,
-            img_normalize=config_json.dataset.augmentations.img_normalize)
-    else:
-        raise NotImplementedError(config_json.dataset.type)
-
-    dataloader = torch.utils.data.DataLoader(
-        dataset, num_workers=n_workers,
-        batch_size=config_json.dataset.batch_size,
-        drop_last=config_json.dataset.drop_last,
-        shuffle=config_json.dataset.shuffle
-    )
+    dataloader = get_dataloader(config_json.dataset)
 
     model = get_model(config_json.model).to(DEVICE)
 
@@ -121,15 +93,9 @@ def run_evaluation(model, dataloader, loggers):
         if not batch_idx % 10:
             sys.stdout.write(f'\rValidaton Iter: [{batch_idx+1:4d}/{len(dataloader):4d}]')
 
-            if 'seg' in forward.keys():
-                sys.stdout.write(f" || {loggers['seg'].main_metric}: "\
-                                 f"{loggers['seg'].get_last_batch():.4f}")
-            if 'l_disp' in data.keys() and 'depth' in forward.keys():
-                sys.stdout.write(f" || {loggers['depth'].main_metric}: "\
-                                 f"{loggers['depth'].get_last_batch():.4f}")
-            if 'flow' in forward.keys():
-                sys.stdout.write(f" || {loggers['flow'].main_metric}: "\
-                                 f"{loggers['flow'].get_last_batch():.4f}")
+            for logger in loggers:
+                sys.stdout.write(f" || {logger.main_metric}: "\
+                                 f"{logger.get_last_batch():.4f}")
 
             time_elapsed = time.time() - start_time
             time_remain = time_elapsed/(batch_idx+1)*(len(dataloader)-(batch_idx+1))

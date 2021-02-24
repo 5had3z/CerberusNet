@@ -5,7 +5,7 @@ Main File for executing training loop
 """
 
 __author__ = "Bryce Ferenczi"
-__email__ = "bryce.ferenczi@monashmotorsport.com"
+__email__ = "bryce.ferenczi@monash.edu"
 
 import os
 import sys
@@ -17,10 +17,9 @@ from shutil import copy
 from easydict import EasyDict
 
 import torch
-from nnet_training.nnet_models import get_model
 
-from nnet_training.utilities.kitti_dataset import get_kitti_dataset
-from nnet_training.utilities.cityscapes_dataset import get_cityscapse_dataset
+from nnet_training.nnet_models import get_model
+from nnet_training.datasets import get_dataloader
 from nnet_training.loss_functions import get_loss_function
 from nnet_training.utilities.model_trainer import ModelTrainer
 
@@ -29,25 +28,20 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     Sets up the network and training configurations
     Returns initialised training framework class
     """
-
-    if config_json.dataset.type == "Kitti":
-        datasets = get_kitti_dataset(config_json.dataset)
-    elif config_json.dataset.type == "Cityscapes":
-        datasets = get_cityscapse_dataset(config_json.dataset)
-    else:
-        raise NotImplementedError(config_json.dataset.type)
+    dataloaders = get_dataloader(config_json.dataset)
 
     model = get_model(config_json.model)
 
     loss_fns = get_loss_function(config_json.loss_functions)
 
-    if config_json.optimiser.type in ['adam', 'Adam']:
-        optimiser = torch.optim.Adam(
-            model.parameters(),
-            **config_json.optimiser.args
-        )
-    elif config_json.optimiser.type in ['sgd', 'SGD']:
-        optimiser = torch.optim.SGD(
+    optim_map = {
+        'Adam'  : torch.optim.Adam,
+        'SGD'   : torch.optim.SGD,
+        'AdamW' : torch.optim.AdamW
+    }
+
+    if optim_map.get(config_json.optimiser.type, False):
+        optimiser = optim_map[config_json.optimiser.type](
             model.parameters(),
             **config_json.optimiser.args
         )
@@ -56,14 +50,14 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
     trainer = ModelTrainer(
         model=model, optimizer=optimiser, loss_fn=loss_fns,
-        dataloaders=datasets, lr_cfg=config_json.lr_scheduler,
+        dataloaders=dataloaders, lr_cfg=config_json.lr_scheduler,
         basepath=train_path, logger_cfg=config_json.logger_cfg)
 
     return trainer
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default='configs/MonoSFD_cs.json')
+    parser.add_argument('-c', '--config', default='configs/DeeplabPanoptic_cs.json')
     parser.add_argument('-e', '--epochs', default=0)
     args = parser.parse_args()
 

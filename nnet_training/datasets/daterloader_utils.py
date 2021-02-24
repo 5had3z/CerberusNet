@@ -1,4 +1,4 @@
-r"""
+"""
 Extension to pytorch batch sampler to also yield a random scalar between a given range.
 """
 
@@ -6,6 +6,7 @@ import random
 
 from torch.utils.data import Sampler
 from torch.utils.data import SequentialSampler
+from torch.utils.data._utils.collate import default_collate
 from torch._six import int_classes as _int_classes
 
 class BatchSamplerRandScale(Sampler):
@@ -65,6 +66,18 @@ class BatchSamplerRandScale(Sampler):
         if self.drop_last:
             return len(self.sampler) // self.batch_size
         return (len(self.sampler) + self.batch_size - 1) // self.batch_size
+
+def collate_w_bboxes(batch):
+    coll_tensors = default_collate(
+        [{k:v for (k,v) in sample.items() if k not in \
+            ['labels', 'bboxes', 'center_points']} for sample in batch])
+
+    if all(key in batch[0].keys() for key in ['labels', 'bboxes']):
+        coll_tensors['labels'] = [sample['labels'] for sample in batch]
+        coll_tensors['bboxes'] = [sample['bboxes'] for sample in batch]
+    if 'center_points' in batch[0].keys():
+        coll_tensors['center_points'] = [sample['center_points'] for sample in batch]
+    return coll_tensors
 
 if __name__ == "__main__":
     test = list(BatchSamplerRandScale(SequentialSampler(range(10)),

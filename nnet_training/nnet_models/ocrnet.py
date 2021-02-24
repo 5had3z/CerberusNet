@@ -35,17 +35,7 @@ from torch import nn
 from .hrnetv2 import get_seg_model
 
 from .nnet_ops import initialize_weights
-from .ocr_utils import BNReLU, SpatialGather_Module, SpatialOCR_Module, get_aspp
-
-def scale_as(x, y):
-    '''
-    scale x to the same size as y
-    '''
-    y_size = y.size(2), y.size(3)
-    x_scaled = nn.functional.interpolate(x, size=y_size, mode='bilinear',
-                                         align_corners=True)
-
-    return x_scaled
+from .ocr_utils import BNReLU, SpatialGather_Module, SpatialOCR_Module, get_aspp, scale_as
 
 def init_attn(m):
     for module in m.modules():
@@ -141,6 +131,8 @@ class OCR_block(nn.Module):
                                self.aux_head)
 
     def forward(self, high_level_features):
+        if isinstance(high_level_features, tuple):
+            high_level_features = high_level_features[0]
         feats = self.conv3x3_ocr(high_level_features)
         aux_out = self.aux_head(high_level_features)
         context = self.ocr_gather_head(feats, aux_out)

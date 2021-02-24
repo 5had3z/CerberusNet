@@ -1,6 +1,6 @@
 """Various Segmentation losses."""
 
-from typing import Dict, List
+from typing import Dict
 
 import numpy as np
 
@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 __all__ = ['MixSoftmaxCrossEntropyLoss', 'MixSoftmaxCrossEntropyOHEMLoss',
-           'FocalLoss2D']
+           'FocalLoss2D', 'SegCrossEntropy']
 
 ### MixSoftmaxCrossEntropyLoss etc from F-SCNN Repo
 class MixSoftmaxCrossEntropyLoss(nn.CrossEntropyLoss):
@@ -97,16 +97,16 @@ class SoftmaxCrossEntropyOHEMLoss(nn.Module):
 
 class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
     def __init__(self, aux=False, aux_weight=0.2, ignore_index=255, **kwargs):
-        super(MixSoftmaxCrossEntropyOHEMLoss, self).__init__(ignore_label=ignore_index, **kwargs)
+        super().__init__(ignore_label=ignore_index, **kwargs)
         self.aux = aux
         self.aux_weight = aux_weight
 
     def _aux_forward(self, *inputs, **kwargs):
         *preds, target = tuple(inputs)
 
-        loss = super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(preds[0], target)
+        loss = super().forward(preds[0], target)
         for i in range(1, len(preds)):
-            aux_loss = super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(preds[i], target)
+            aux_loss = super().forward(preds[i], target)
             loss += self.aux_weight * aux_loss
         return loss
 
@@ -116,7 +116,7 @@ class MixSoftmaxCrossEntropyOHEMLoss(SoftmaxCrossEntropyOHEMLoss):
         if self.aux:
             return self._aux_forward(*inputs)
         else:
-            return super(MixSoftmaxCrossEntropyOHEMLoss, self).forward(*inputs)
+            return super().forward(*inputs)
 
 class FocalLoss2D(nn.Module):
     """
@@ -124,7 +124,7 @@ class FocalLoss2D(nn.Module):
     """
     def __init__(self, weight=1.0, gamma=2.0, ignore_index=255, dynamic_weights=False,
                  scale_factor=0.125, **kwargs):
-        super(FocalLoss2D, self).__init__()
+        super().__init__()
 
         self.weight = weight
         self.gamma = gamma
@@ -132,14 +132,15 @@ class FocalLoss2D(nn.Module):
         self.dynamic_weights = dynamic_weights
         self.scale_factor = scale_factor
 
-    def forward(self, seg_pred: Dict[str, torch.Tensor],
-                seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: torch.Tensor) -> torch.Tensor:
         '''
         Forward implementation that returns focal loss between prediciton and target
         '''
-        assert 'seg' in seg_pred.keys()
+        assert all('seg' in dict_ for dict_ in [predictions.keys(), targets.keys()])
+        seg_gt = targets['seg']
 
-        weights = torch.ones(seg_pred['seg'].shape[1]).to(seg_pred['seg'].get_device())
+        weights = torch.ones(predictions['seg'].shape[1]).to(predictions['seg'].get_device())
         if self.dynamic_weights:
             class_ids, counts = seg_gt[seg_gt != self.ignore_index].unique(return_counts=True)
             weights[class_ids] = self.scale_factor / \
@@ -147,7 +148,7 @@ class FocalLoss2D(nn.Module):
 
         # compute the negative likelyhood
         ce_loss = F.cross_entropy(
-            seg_pred['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)
+            predictions['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)
 
         # compute the loss
         focal_loss = torch.pow(1 - torch.exp(-ce_loss), self.gamma) * ce_loss
@@ -158,25 +159,32 @@ class FocalLoss2D(nn.Module):
 class SegCrossEntropy(nn.Module):
     def __init__(self, weight=1.0, ignore_index=255, dynamic_weights=False,
                  scale_factor=0.125, **kwargs):
-        super(SegCrossEntropy, self).__init__()
+        super().__init__()
 
         self.weight = weight
         self.ignore_index = ignore_index
         self.dynamic_weights = dynamic_weights
         self.scale_factor = scale_factor
 
-    def forward(self, seg_pred: Dict[str, torch.Tensor],
-                seg_gt: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
         '''
         Forward implementation that returns cross entropy between prediciton and target
         '''
-        assert 'seg' in seg_pred.keys()
+        assert all('seg' in dict_ for dict_ in [predictions.keys(), targets.keys()])
+        seg_gt = targets['seg']
 
-        weights = torch.ones(seg_pred['seg'].shape[1]).to(seg_pred['seg'].get_device())
+        weights = torch.ones(predictions['seg'].shape[1]).to(predictions['seg'].get_device())
         if self.dynamic_weights:
             class_ids, counts = seg_gt[seg_gt != self.ignore_index].unique(return_counts=True)
             weights[class_ids] = self.scale_factor / \
                     (self.scale_factor + counts / float(seg_gt.nelement()))
 
+        if len(seg_gt.shape) == 4:
+            if seg_gt.shape[1] == 1:
+                seg_gt = seg_gt.squeeze(1)
+            else:
+                raise ValueError(f"Invalid ground truth shape {seg_gt.shape}")
+
         return self.weight * F.cross_entropy(
-            seg_pred['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)
+            predictions['seg'], seg_gt, ignore_index=self.ignore_index, weight=weights)

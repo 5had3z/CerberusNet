@@ -15,7 +15,7 @@ class PWCNet(nn.Module):
     PWCNet implementation from ARFlow-Net
     '''
     def __init__(self, lite=False, upsample=True):
-        super(PWCNet, self).__init__()
+        super().__init__()
         self.upsample = upsample
         self.output_level = 4
 

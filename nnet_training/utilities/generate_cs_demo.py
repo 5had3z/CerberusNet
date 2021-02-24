@@ -1,5 +1,9 @@
 #!/usr/bin/env python3.8
 
+"""
+Generates a demonstration for qualitative analysis of nnet model performance in each task.
+"""
+
 import os
 import re
 import sys
@@ -16,13 +20,13 @@ import cv2
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from cityscapesscripts.helpers.labels import labels
 
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.evaluate_model import data_to_gpu
 from nnet_training.nnet_models import get_model
-from nnet_training.utilities.cityscapes_dataset import CityScapesDataset
 from nnet_training.utilities.visualisation import flow_to_image, CITYSPALLETTE
-from nnet_training.utilities.cityscapes_labels import labels
+from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
 
 IMG_EXT = '.png'
 MIN_DEPTH = 0.
@@ -256,7 +260,7 @@ def generate_video(model: torch.nn.Module, dataloader: torch.utils.data.DataLoad
         batch_flow = forward['flow'][0].detach().cpu().numpy()
 
         for i in range(batch_seg.shape[0]):
-            seg_frame = np.empty(shape=(resolution[1], resolution[0], 3), dtype=np.uint8)
+            seg_frame = np.empty(shape=(y_res, x_res, 3), dtype=np.uint8)
             for j in range(3):
                 seg_frame[..., j] = cv2.LUT(batch_seg[i].astype(np.uint8), color_lut[:, j])
             cv2.cvtColor(seg_frame, cv2.COLOR_RGB2BGR, dst=seg_frame)

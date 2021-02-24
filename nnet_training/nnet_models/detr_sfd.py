@@ -2,10 +2,18 @@
 Example Config Structure
 
 "model" : {
-    "name" : "OCRNetSFD",
+    "name" : "DetrNetSFD",
     "args" : {
-        "ocr_config" : {
-            "mid_channels" : 512, "key_channels" : 256, "classes" : 19
+        "detr_config" : {
+            "num_channels" : 720, "num_classes" : 19, "num_queries" : 100,
+            "aux_loss" : false
+        },
+        "transformer_config" : {
+            "dropout" : 0.1, "enc_layers" : 6, "dec_layers" : 6,
+            "dim_feedforward" : 2048, "d_model" : 256, "n_heads" : 8
+        },
+        "position_embedding_config" : {
+            "type" : "sine", "hidden_dim" : 256
         },
         "hrnetv2_config" : {
             "pretrained" : "hrnetv2_w48_imagenet_pretrained.pth",
@@ -30,10 +38,6 @@ Example Config Structure
                 "FUSE_METHOD" : "SUM"
             }
         },
-        "depth_est_network" : {
-            "type" : "DepthEstimator1",
-            "args" : { "pre_out_ch" : 32 }
-        },
         "correlation_args" : {
             "pad_size" : 4, "max_displacement" : 4,
             "kernel_size" : 1, "stride1" : 1,
@@ -57,8 +61,8 @@ Example Config Structure
 
 """
 
-from collections import OrderedDict
-from typing import List, Dict
+from typing import List
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -67,75 +71,123 @@ import torch.nn.functional as F
 from nnet_training.loss_functions.UnFlowLoss import flow_warp
 from nnet_training.correlation_package.correlation import Correlation
 
+from nnet_training.nnet_models.detr.detr import MLP
+from nnet_training.nnet_models.detr.transformer import Transformer
+from nnet_training.nnet_models.detr.segmentation import MaskHeadSmallConv
+from nnet_training.nnet_models.detr.segmentation import MHAttentionMap
+from nnet_training.nnet_models.detr.position_encoding import build_position_encoding
+
 from .hrnetv2 import get_seg_model
-from .ocrnet import OCR_block, scale_as
 from .pwcnet_modules import FlowEstimatorDense, FlowEstimatorLite, ContextNetwork, pwc_conv
+from .ocrnet_sfd import DepthHeadV1, scale_as
 
-class DepthHeadV1(nn.Module):
-    """
-    Ultra basic to get things started
-    """
-    def __init__(self, channels_in: List[int], inter_ch: List[int], **_kwargs):
+class DetrSegmHead(nn.Module):
+    """ This is the DETR module that performs object detection """
+    def __init__(self, num_channels, num_classes, num_queries, position_embedding_config,
+                 transformer_config, aux_loss:bool=False, seg_enable:bool=False):
+        """ Initializes the model.
+        Parameters:
+            num_channels: the number of channels from the backbone. See backbone.py
+            transformer: torch module of the transformer architecture. See transformer.py
+            num_classes: number of object classes
+            num_queries: number of object queries, ie detection slot. This is the maximal number of
+                         objects DETR can detect in a single image.
+                         For COCO, we recommend 100 queries.
+            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+        """
         super().__init__()
-        mod_list = OrderedDict({"conv0": nn.Conv2d(sum(channels_in), inter_ch[0], 1)})
-        mod_list["relu0"] = nn.ReLU(True)
+        self.pos_embed = build_position_encoding(
+            **position_embedding_config, **transformer_config)
+        self.transformer = Transformer(**transformer_config)
 
-        for idx in range(1, len(inter_ch)):
-            mod_list[f"conv{idx}"] = nn.Conv2d(inter_ch[idx-1], inter_ch[idx], 3)
-            mod_list[f"relu{idx}"] = nn.ReLU(True)
+        hidden_dim = self.transformer.d_model
+        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.query_embed = nn.Embedding(num_queries, hidden_dim)
+        self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
+        self.aux_loss = aux_loss
 
-        mod_list[f"conv{len(inter_ch)}"] = nn.Conv2d(inter_ch[-1], 1, 3)
-        mod_list[f"relu{len(inter_ch)}"] = nn.ReLU(True)
+        if seg_enable:
+            self.bbox_attention = MHAttentionMap(
+                hidden_dim, hidden_dim, self.transformer.nhead, dropout=0.0)
+            self.mask_head = MaskHeadSmallConv(
+                hidden_dim + self.transformer.nhead, [1024, 512, 256], hidden_dim)
 
-        self.net = nn.Sequential(mod_list)
+    def forward(self, features: torch.Tensor):
+        """ The forward expects a NestedTensor, which consists of:
+               - samples.tensor:    batched images, of shape [batch_size x 3 x H x W]
+               - samples.mask:      a binary mask of shape [batch_size x H x W], containing 1 on
+                                    padded pixels
 
-    def forward(self, features_in: List[torch.Tensor]):
+            It returns a dict with the following elements:
+               - "logits": the classification logits (including no-object) for all queries.
+                                Shape= [batch_size x num_queries x (num_classes + 1)]
+               - "bboxes": The normalized boxes coordinates for all queries, represented as
+                               (center_x, center_y, height, width). These values are normalized in
+                               [0, 1], relative to the size of each individual image (disregarding
+                               possible padding).
+                               See PostProcess for information on how to retrieve the unnormalized
+                               bounding box.
+               - "masks": Segmentation masks for the predicted bboxes
+               - "detr_aux": Optional, only returned when auxilary losses are activated. It is a
+                                list of dictionnaries containing the two above keys for each decoder
+                                layer.
         """
-        Simple forward for Depth Head that matches input size.
-        """
-        out = self.net(features_in[0])
-        out = nn.functional.interpolate(
-            out, size=tuple(features_in[0].size()[2:]),
-            mode="bilinear", align_corners=True)
+        # TODO Intergrate in rotation for dataloader
+        mask_size = list(features.shape)
+        del mask_size[1]
+        mask = torch.zeros(mask_size, dtype=torch.bool, device=features.device)
+
+        pos_embeddings = self.pos_embed(features)
+        src_proj = self.input_proj(features)
+        hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos_embeddings)
+
+        outputs_class = self.class_embed(hs)
+        outputs_coord = self.bbox_embed(hs).sigmoid()
+        out = {'logits': outputs_class[-1], 'bboxes': outputs_coord[-1]}
+        if self.aux_loss:
+            out['detr_aux'] = self._set_aux_loss(outputs_class, outputs_coord)
+
+        if hasattr(self, 'bbox_attention') and hasattr(self, 'mask_head'):
+            bbox_mask = self.bbox_attention(hs[-1], memory, mask=mask)
+            seg_masks = self.mask_head(
+                src_proj, bbox_mask, [features[2], features[1], features[0]])
+            out["masks"] = seg_masks.view(
+                features[-1].shape[0], self.detr.num_queries,
+                seg_masks.shape[-2], seg_masks.shape[-1])
+
         return out
 
-class OCRNetHead(nn.Module):
-    """
-    Self contained OCR head for use with CerberusBase
-    """
-    def __init__(self, channels_in: List[int], **kwargs):
-        super().__init__()
-        self.ocr = OCR_block(sum(channels_in), **kwargs)
+    @staticmethod
+    @torch.jit.unused
+    def _set_aux_loss(outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{'pred_logits': a, 'pred_boxes': b}
+                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
-    def forward(self, features_in: List[torch.Tensor]):
-        """
-        Simple forward for OCR
-        """
-        forward = {}
-        forward['seg'], forward['seg_aux'], _ = self.ocr(features_in)
-        return forward
-
-class OCRNetSFD(nn.Module):
+class DetrNetSFD(nn.Module):
     """
-    OCRNet with Segmentation + Optic Flow Output
+    HRNetV2 with Segmentation + Optic Flow Output
     """
     def __init__(self, **kwargs):
         super().__init__()
-        self.modelname = "OCRNetSFD"
+        self.modelname = "DetrNetSFD"
 
         self.backbone = get_seg_model(**kwargs['hrnetv2_config'])
-        self.ocr = OCR_block(self.backbone.high_level_ch, **kwargs['ocr_config'])
+        self.detr = DetrSegmHead(**kwargs['detr_config'])
 
         if 'correlation_args' in kwargs:
             search_range = kwargs['correlation_args']['max_displacement']
             self.corr = Correlation(**kwargs['correlation_args'])
         else:
             search_range = 4
-            self.corr = Correlation(pad_size=search_range, kernel_size=1,
-                                    max_displacement=search_range, stride1=1,
-                                    stride2=1, corr_multiply=1)
+            self.corr = Correlation(
+                pad_size=search_range, kernel_size=1, max_displacement=search_range,
+                stride1=1, stride2=1, corr_multiply=1)
 
-        out_1x1 = 32 if '1x1_conv_out' not in kwargs else kwargs['1x1_conv_out']
+        out_1x1 = kwargs.get('1x1_conv_out', 32)
         self.conv_1x1 = nn.ModuleList()
 
         for channels in reversed(kwargs['hrnetv2_config']['STAGE4']['NUM_CHANNELS']):
@@ -165,12 +217,12 @@ class OCRNetSFD(nn.Module):
 
         if 'depth_network' in kwargs:
             if kwargs['depth_network']['type'] == 'DepthHeadV1':
-                self.depth_head = DepthHeadV1(self.backbone.high_level_ch,
-                                              **kwargs['depth_network']['args'])
+                self.depth_head = DepthHeadV1(
+                    self.backbone.out_channels, **kwargs['depth_network']['args'])
             else:
                 raise NotImplementedError(kwargs['depth_network']['type'])
         else:
-            self.depth_head = DepthHeadV1(self.backbone.high_level_ch, 32)
+            self.depth_head = DepthHeadV1(self.backbone.out_channels, 32)
 
     def flow_forward(self, im1_pyr: List[torch.Tensor], im2_pyr: List[torch.Tensor],
                      final_scale: float):
@@ -215,18 +267,15 @@ class OCRNetSFD(nn.Module):
 
     def forward(self, l_img: torch.Tensor, consistency=True, **kwargs) -> Dict[str, torch.Tensor]:
         """
-        Forward method for OCRNet with segmentation, flow and depth, returns dictionary of outputs.
-        \nDuring onnx export, consistency becomes the sequential image argument because onnx\
-        export is not compatible with keyword aruments.
+        Forward method for HRNetV2 with segmentation, flow and depth, returns dictionary \
+        of outputs.\n During onnx export, consistency becomes the sequential image argument \
+        because onnx export is not compatible with keyword aruments.
         """
-        forward = {}
-
         # Backbone Forward pass on image 1 and 2
         high_level_features, im1_pyr = self.backbone(l_img)
 
         # Segmentation pass with image 1
-        forward['seg'], forward['seg_aux'], _ = self.ocr(high_level_features)
-        forward['seg_aux'] = scale_as(forward['seg_aux'], l_img)
+        forward = self.detr(high_level_features)
 
         # Depth pass with image 1
         forward['depth'] = self.depth_head(high_level_features)
@@ -262,7 +311,8 @@ class OCRNetSFD(nn.Module):
                 forward['seg_b'] = scale_as(forward['seg_b'], l_img)
                 forward['depth_b'] = scale_as(forward['depth_b'], l_img)
 
-        forward['seg'] = scale_as(forward['seg'], l_img)
+        if 'seg' in forward.keys():
+            forward['seg'] = scale_as(forward['seg'], l_img)
         forward['depth'] = scale_as(forward['depth'], l_img)
 
         return forward

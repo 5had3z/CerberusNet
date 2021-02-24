@@ -38,7 +38,7 @@ class RMILoss(nn.Module):
     """
     def __init__(self, num_classes=21, rmi_radius=3, rmi_pool_way=1, rmi_pool_size=4,
                  rmi_pool_stride=4, loss_weight_lambda=0.5, lambda_way=1, ignore_index=255):
-        super(RMILoss, self).__init__()
+        super().__init__()
         self.num_classes = num_classes
         # radius choices
         assert rmi_radius in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -77,6 +77,9 @@ class RMILoss(nn.Module):
                 labels_4D 	:	[N, H, W], dtype=long
                 do_rmi          :       bool
         """
+        if len(labels_4D.shape) == 4:
+            labels_4D = labels_4D.squeeze(1)
+
         # label mask -- [N, H, W, 1]
         label_mask_3d = labels_4D < self.num_classes
 
@@ -205,7 +208,7 @@ class RMILoss(nn.Module):
 
 class MultiScaleRMILoss(nn.Module):
     def __init__(self, ocr_aux_rmi=False, supervised_mscale_wt=0.0, alpha=0.4, **kwargs):
-        super(MultiScaleRMILoss, self).__init__()
+        super().__init__()
         self.alpha = alpha
         self.ocr_aux_rmi = ocr_aux_rmi
         self.supervised_mscale_wt = supervised_mscale_wt
@@ -236,18 +239,20 @@ class MultiScaleRMILoss(nn.Module):
         return loss
 
 class RMILossAux(nn.Module):
-    def __init__(self, weight=1, aux_weight=0.4, **kwargs):
-        super(RMILossAux, self).__init__()
+    def __init__(self, weight=1., aux_weight=0.4, **kwargs):
+        super().__init__()
         self.rmi = RMILoss(**kwargs)
         self.aux_weight = aux_weight
         self.weight = weight
 
-    def forward(self, seg_pred: Dict[str, torch.Tensor], seg_gt: torch.Tensor, **kwargs):
-        assert 'seg' in seg_pred.keys()
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+        assert all('seg' in dict_ for dict_ in [predictions.keys(), targets.keys()])
+        seg_gt = targets['seg']
 
-        seg_loss = self.rmi(seg_pred['seg'], seg_gt)
+        seg_loss = self.rmi(predictions['seg'], seg_gt)
 
-        if 'seg_aux' in seg_pred.keys():
-            seg_loss += (self.aux_weight * self.rmi(seg_pred['seg_aux'], seg_gt))
+        if 'seg_aux' in predictions.keys():
+            seg_loss += (self.aux_weight * self.rmi(predictions['seg_aux'], seg_gt))
 
         return self.weight * seg_loss

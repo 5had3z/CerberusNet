@@ -2,7 +2,7 @@
 import math
 
 
-class LRScheduler(object):
+class LRScheduler():
     r"""Learning Rate Scheduler
 
     Parameters
@@ -35,7 +35,7 @@ class LRScheduler(object):
 
     def __init__(self, mode, base_lr=0.01, target_lr=0, niters=0, nepochs=0, iters_per_epoch=0,
                  offset=0, power=2, step_iter=None, step_epoch=None, step_factor=0.1):
-        super(LRScheduler, self).__init__()
+        super().__init__()
         assert (mode in ['constant', 'step', 'linear', 'poly', 'cosine'])
 
         self.mode = mode
@@ -103,5 +103,4 @@ if __name__ == '__main__':
     lr_scheduler = LRScheduler(mode='poly', base_lr=0.01, nepochs=60,
                                iters_per_epoch=176, power=0.9)
     for i in range(60 * 176):
-        lr = lr_scheduler(i)
-        print(lr)
+        print(lr_scheduler(i))

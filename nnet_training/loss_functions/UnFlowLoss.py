@@ -1,3 +1,4 @@
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -190,7 +191,7 @@ class unFlowLoss(nn.modules.Module):
     Loss function adopted by ARFlow from originally Unflow.
     """
     def __init__(self, weight=1.0, weights=None, consistency=True, back_occ_only=False, **kwargs):
-        super(unFlowLoss, self).__init__()
+        super().__init__()
         self.weight = weight
 
         if "l1" in weights:
@@ -251,14 +252,18 @@ class unFlowLoss(nn.modules.Module):
         loss += [func_smooth(flow, im_scaled, self.smooth_args['alpha'])]
         return sum([l.mean() for l in loss])
 
-    def forward(self, pred_flow_fw, pred_flow_bw, im1_origin, im2_origin):
+    def forward(self, predictions: Dict[str, torch.Tensor],
+                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         :param output: Multi-scale forward/backward flows n * [B x 4 x h x w]
         :param target: image pairs Nx6xHxW
         :return:
         """
+        assert all(key in predictions for key in ['flow', 'flow_b']) and \
+            all(key in targets for key in ['l_img', 'l_seq'])
+
         pyramid_flows = [torch.cat([flo12, flo21], 1) for flo12, flo21 in
-                         zip(pred_flow_fw, pred_flow_bw)]
+                         zip(predictions['flow'], predictions['flow_b'])]
 
         pyramid_warp_losses = []
         pyramid_smooth_losses = []
@@ -271,8 +276,8 @@ class unFlowLoss(nn.modules.Module):
                 continue
 
             # resize images to match the size of layer
-            im1_scaled = F.interpolate(im1_origin, tuple(flow.size()[2:]), mode='area')
-            im2_scaled = F.interpolate(im2_origin, tuple(flow.size()[2:]), mode='area')
+            im1_scaled = F.interpolate(targets['l_img'], tuple(flow.size()[2:]), mode='area')
+            im2_scaled = F.interpolate(targets['l_seq'], tuple(flow.size()[2:]), mode='area')
 
             im1_recons = flow_warp(im2_scaled, flow[:, :2], pad='border')
             im2_recons = flow_warp(im1_scaled, flow[:, 2:], pad='border')
@@ -313,8 +318,5 @@ class unFlowLoss(nn.modules.Module):
         pyramid_smooth_losses = [l * w for l, w in
                                  zip(pyramid_smooth_losses, self.w_sm_scales)]
 
-        warp_loss = self.weight * sum(pyramid_warp_losses)
-        smooth_loss = self.weight * self.smooth_args['weighting'] * sum(pyramid_smooth_losses)
-        total_loss = warp_loss + smooth_loss
-
-        return total_loss, warp_loss, smooth_loss, pyramid_flows[0].abs().mean()
+        return self.weight * (sum(pyramid_warp_losses) +
+            self.smooth_args['weighting'] * sum(pyramid_smooth_losses))
