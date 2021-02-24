@@ -30,7 +30,7 @@ def id_vec_generator(train_ratio, directory):
 
     return train_ids, val_ids
 
-def get_dataset(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
+def get_dataloader(dataset_config) -> Dict[str, torch.utils.data.DataLoader]:
     """
     Input configuration json for dataset
     Output dataloaders for training and validation

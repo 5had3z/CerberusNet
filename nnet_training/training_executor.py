@@ -19,7 +19,7 @@ from easydict import EasyDict
 import torch
 
 from nnet_training.nnet_models import get_model
-from nnet_training.datasets import get_dataset
+from nnet_training.datasets import get_dataloader
 from nnet_training.loss_functions import get_loss_function
 from nnet_training.utilities.model_trainer import ModelTrainer
 
@@ -28,7 +28,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
     Sets up the network and training configurations
     Returns initialised training framework class
     """
-    datasets = get_dataset(config_json.dataset)
+    dataloaders = get_dataloader(config_json.dataset)
 
     model = get_model(config_json.model)
 
@@ -50,7 +50,7 @@ def initialise_training_network(config_json: EasyDict, train_path: Path) -> Mode
 
     trainer = ModelTrainer(
         model=model, optimizer=optimiser, loss_fn=loss_fns,
-        dataloaders=datasets, lr_cfg=config_json.lr_scheduler,
+        dataloaders=dataloaders, lr_cfg=config_json.lr_scheduler,
         basepath=train_path, logger_cfg=config_json.logger_cfg)
 
     return trainer

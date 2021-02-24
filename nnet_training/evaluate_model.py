@@ -9,8 +9,6 @@ import json
 import time
 import argparse
 import hashlib
-import platform
-import multiprocessing
 
 from typing import Tuple
 from pathlib import Path
@@ -25,11 +23,10 @@ from nnet_training.nnet_models import get_model
 
 from nnet_training.utilities.visualisation import flow_to_image
 from nnet_training.utilities.visualisation import get_color_pallete
-from nnet_training.datasets.kitti_dataset import Kitti2015Dataset
-from nnet_training.datasets.cityscapes_dataset import CityScapesDataset
-from nnet_training.utilities.metrics import SegmentationMetric
-from nnet_training.utilities.metrics import DepthMetric
-from nnet_training.utilities.metrics import OpticFlowMetric
+from nnet_training.datasets import get_dataloader
+from nnet_training.statistics.semantic import SegmentationMetric
+from nnet_training.statistics.depth import DepthMetric
+from nnet_training.statistics.optical_flow import OpticFlowMetric
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MIN_DEPTH = 0.
@@ -57,35 +54,7 @@ def initialise_evaluation(config_json: EasyDict, experiment_path: Path)\
     Sets up the network and dataloader configurations
     Returns dataloader and model
     """
-    if platform.system() == 'Windows':
-        n_workers = 0
-    else:
-        n_workers = min(multiprocessing.cpu_count(), config_json.dataset.batch_size)
-
-    if config_json.dataset.type == "Kitti":
-        dataset = Kitti2015Dataset(
-            config_json.dataset.rootdir, config_json.dataset.objectives,
-            output_size=config_json.dataset.augmentations.output_size,
-            disparity_out=config_json.dataset.augmentations.disparity_out,
-            img_normalize=config_json.dataset.augmentations.img_normalize)
-    elif config_json.dataset.type == "Cityscapes":
-        validation_dirs = {}
-        for subset in config_json.dataset.val_subdirs:
-            validation_dirs[str(subset)] = config_json.dataset.rootdir +\
-                                            config_json.dataset.val_subdirs[str(subset)]
-        dataset = CityScapesDataset(
-            validation_dirs, output_size=config_json.dataset.augmentations.output_size,
-            disparity_out=config_json.dataset.augmentations.disparity_out,
-            img_normalize=config_json.dataset.augmentations.img_normalize)
-    else:
-        raise NotImplementedError(config_json.dataset.type)
-
-    dataloader = torch.utils.data.DataLoader(
-        dataset, num_workers=n_workers,
-        batch_size=config_json.dataset.batch_size,
-        drop_last=config_json.dataset.drop_last,
-        shuffle=config_json.dataset.shuffle
-    )
+    dataloader = get_dataloader(config_json.dataset)
 
     model = get_model(config_json.model).to(DEVICE)
 
